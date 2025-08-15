@@ -1,30 +1,79 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { 
-  Flame, 
-  Store, 
-  User, 
-  Package, 
-  MapPin, 
-  Phone, 
-  DollarSign, 
-  Hash, 
-  Save, 
-  Trash2, 
-  Eye, 
+import {
+  Flame,
+  Store,
+  User,
+  Package,
+  MapPin,
+  Phone,
+  DollarSign,
+  Hash,
+  Save,
+  Trash2,
+  Eye,
   TrendingUp,
   Zap,
   CheckCircle,
   Calendar,
-  BarChart3
+  BarChart3,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 /** ===== Tipado ===== */
 type SaleType = 'unidad' | 'mayor';
-type LocalOption = 'La Paz' | 'Sucre' | 'CBBA' | 'Santa Cruz';
+type LocalOption = 'La Paz' | 'El Alto' | 'Cochabamba' | 'Santa Cruz' | 'Sucre';
 
-const LOCAL_OPTIONS: LocalOption[] = ['La Paz', 'Sucre', 'CBBA', 'Santa Cruz'];
+const LOCAL_OPTIONS: LocalOption[] = ['La Paz', 'El Alto', 'Cochabamba', 'Santa Cruz', 'Sucre'];
+
+/** ===== Vendedores y mapeo a sucursal ===== */
+const SELLERS = [
+  'ELISA NOEMI ZAMBRANA MARZA',
+  'CAMILA DANIELA CHOQUE BLANCO',
+  'BEATRIZ MENACHO GARCIA',
+  'MAGALY CARRILLO BAUTISTA',
+  'JHAMIN LESLY CHURA CORTES',
+  'ALBA BELEN CHOQUE GUTIERREZ',
+  'DANIDZA CAMACHO RODRIGUEZ',
+  'JHOSELYN ESTRADA CUAQUIRA',
+  'BRITANY FILY MATTIAS',
+  'YULISA BLACUT LOPEZ',
+  'SARAH ORTIZ GONZALES',
+  'JACINTA BALCERA ROMERO',
+  'SALEM GREIZ CONDORI CHOQUE',
+  'FERNANDA ALGARAÑAZ SANDOVAL',
+  'YULISA CUELLAR ARCE',
+  'DARLYNG MARIEL AGUILAR VALENCIA',
+  'MARISOLCABRERA PAREDES',
+  'NAYELI GONZALES ORTIZ',
+  'NAYELI VARGAS MALLON',
+  'BENITA OCHOA',
+] as const;
+
+const SELLER_LOCAL: Record<typeof SELLERS[number], LocalOption> = {
+  'ELISA NOEMI ZAMBRANA MARZA': 'La Paz',
+  'CAMILA DANIELA CHOQUE BLANCO': 'La Paz',
+  'BEATRIZ MENACHO GARCIA': 'La Paz',
+  'MAGALY CARRILLO BAUTISTA': 'El Alto',
+  'JHAMIN LESLY CHURA CORTES': 'El Alto',
+  'ALBA BELEN CHOQUE GUTIERREZ': 'El Alto',
+  'DANIDZA CAMACHO RODRIGUEZ': 'Cochabamba',
+  'JHOSELYN ESTRADA CUAQUIRA': 'Cochabamba',
+  'BRITANY FILY MATTIAS': 'Cochabamba',
+  'YULISA BLACUT LOPEZ': 'Cochabamba',
+  'SARAH ORTIZ GONZALES': 'Santa Cruz',
+  'JACINTA BALCERA ROMERO': 'Santa Cruz',
+  'SALEM GREIZ CONDORI CHOQUE': 'Santa Cruz',
+  'FERNANDA ALGARAÑAZ SANDOVAL': 'Santa Cruz',
+  'YULISA CUELLAR ARCE': 'Santa Cruz',
+  'DARLYNG MARIEL AGUILAR VALENCIA': 'Santa Cruz',
+  'MARISOLCABRERA PAREDES': 'Santa Cruz',
+  'NAYELI GONZALES ORTIZ': 'Sucre',
+  'NAYELI VARGAS MALLON': 'Sucre',
+  'BENITA OCHOA': 'Sucre',
+};
 
 type FormState = {
   type: SaleType;
@@ -59,8 +108,7 @@ type SavedSale = {
 
 /** ===== Utilidades ===== */
 const money = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
-const clamp = (val: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, val));
+const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
 
 export default function FenixStoreSalesForm() {
   const [form, setForm] = useState<FormState>({
@@ -76,6 +124,7 @@ export default function FenixStoreSalesForm() {
     sistema: false,
   });
 
+  const [lockLocal, setLockLocal] = useState(true); // bloquea edición manual del Local (por defecto)
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -103,26 +152,21 @@ export default function FenixStoreSalesForm() {
     try {
       const raw = localStorage.getItem('fenix_sales_history_v2');
       if (raw) setHistory(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const persistHistory = (items: SavedSale[]) => {
     setHistory(items);
     try {
       localStorage.setItem('fenix_sales_history_v2', JSON.stringify(items));
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   };
 
   /** ===== Validación ===== */
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-
-    if (!form.local) e.local = 'Selecciona un local';
-    if (!form.seller.trim()) e.seller = 'Requerido';
+    if (!form.seller.trim()) e.seller = 'Selecciona un vendedor';
+    if (!form.local) e.local = 'Selecciona un local'; // debería venir auto por seller
     if (!form.product.trim()) e.product = 'Requerido';
     if (!form.destino.trim()) e.destino = 'Requerido';
 
@@ -187,21 +231,39 @@ export default function FenixStoreSalesForm() {
         numero: '',
         sistema: false,
       }));
-
       setTimeout(() => setMessage(null), 3000);
-    }, 800);
+    }, 400);
+  };
+
+  /** ===== Handlers específicos ===== */
+  const handleSellerChange = (name: string) => {
+    const autoLocal = (SELLER_LOCAL as Record<string, LocalOption | undefined>)[name];
+    setForm((s) => ({
+      ...s,
+      seller: name,
+      local: autoLocal ?? '',
+    }));
+    // cuando selecciona vendedor, volvemos a bloquear el local para evitar errores
+    setLockLocal(true);
+    // limpiar error de local si ya se seteó
+    setErrors((prev) => {
+      const n = { ...prev };
+      if (autoLocal) delete n.local;
+      delete n.seller;
+      return n;
+    });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Animated background */}
+      {/* Background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-500/20 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-cyan-500/10 rounded-full blur-2xl animate-ping"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-cyan-500/10 rounded-full blur-2xl animate-ping"></div>
       </div>
 
-      {/* Header con marca */}
+      {/* Header */}
       <header className="relative z-10 border-b border-white/10 bg-black/20 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
@@ -216,18 +278,18 @@ export default function FenixStoreSalesForm() {
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-400 via-red-400 to-yellow-400 bg-clip-text text-transparent">
                   FENIX STORE
                 </h1>
-                <p className="text-white/70 text-lg">Sistema de Registro de Ventas</p>
+                <p className="text-white/70 text-lg">Registro de Ventas</p>
               </div>
             </div>
             <div className="hidden md:flex items-center gap-4">
               <div className="text-right">
                 <div className="text-2xl font-bold text-white">{stats.totalSales}</div>
-                <div className="text-sm text-white/60">Ventas Today</div>
+                <div className="text-sm text-white/60">Ventas Hoy</div>
               </div>
               <div className="w-px h-12 bg-white/20"></div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-green-400">Bs {money(stats.totalAmount)}</div>
-                <div className="text-sm text-white/60">Total Revenue</div>
+                <div className="text-sm text-white/60">Revenue Total</div>
               </div>
             </div>
           </div>
@@ -236,11 +298,9 @@ export default function FenixStoreSalesForm() {
 
       <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          
-          {/* Formulario Principal */}
+          {/* Formulario */}
           <div className="xl:col-span-2">
             <div className="bg-black/40 backdrop-blur-xl rounded-3xl border border-white/10 p-8 shadow-2xl">
-              
               {/* Tipo de venta */}
               <div className="mb-8">
                 <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
@@ -284,45 +344,72 @@ export default function FenixStoreSalesForm() {
               </div>
 
               <form onSubmit={onSubmit} className="space-y-6">
-                
                 {/* Local y Vendedor */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm font-medium text-white">
-                      <Store className="w-4 h-4 text-orange-400" />
-                      Local / Sucursal
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={form.local}
-                        onChange={(e) => setForm((s) => ({ ...s, local: e.target.value as LocalOption | '' }))}
-                        className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
-                          errors.local ? 'border-red-500/50' : 'border-white/20'
-                        }`}
-                      >
-                        <option value="" disabled className="text-gray-400">Selecciona un local…</option>
-                        {LOCAL_OPTIONS.map((opt) => (
-                          <option key={opt} value={opt} className="text-white bg-gray-800">{opt}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {errors.local && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.local}</p>}
-                  </div>
-
+                  {/* Vendedor */}
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-sm font-medium text-white">
                       <User className="w-4 h-4 text-orange-400" />
                       Vendedor
                     </label>
-                    <input
+                    <select
                       value={form.seller}
-                      onChange={(e) => setForm((s) => ({ ...s, seller: e.target.value }))}
-                      placeholder="Nombre del vendedor"
-                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
+                      onChange={(e) => handleSellerChange(e.target.value)}
+                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                         errors.seller ? 'border-red-500/50' : 'border-white/20'
                       }`}
-                    />
-                    {errors.seller && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.seller}</p>}
+                    >
+                      <option value="" disabled>Selecciona un vendedor…</option>
+                      {SELLERS.map((name) => (
+                        <option key={name} value={name} className="text-white bg-gray-800">
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.seller && (
+                      <p className="text-red-400 text-xs flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {errors.seller}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Local (auto por vendedor) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm font-medium text-white">
+                        <Store className="w-4 h-4 text-orange-400" />
+                        Local / Sucursal
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setLockLocal((v) => !v)}
+                        className="text-xs text-white/70 hover:text-white flex items-center gap-1"
+                        title={lockLocal ? 'Permitir editar local' : 'Bloquear local'}
+                      >
+                        {lockLocal ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                        {lockLocal ? 'Bloqueado' : 'Editable'}
+                      </button>
+                    </div>
+                    <select
+                      value={form.local}
+                      onChange={(e) => setForm((s) => ({ ...s, local: e.target.value as LocalOption | '' }))}
+                      disabled={lockLocal}
+                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
+                        errors.local ? 'border-red-500/50' : 'border-white/20'
+                      } ${lockLocal ? 'opacity-70 cursor-not-allowed' : ''}`}
+                    >
+                      <option value="" disabled>Selecciona un local…</option>
+                      {LOCAL_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt} className="text-white bg-gray-800">
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.local && (
+                      <p className="text-red-400 text-xs flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {errors.local}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -336,11 +423,15 @@ export default function FenixStoreSalesForm() {
                     value={form.product}
                     onChange={(e) => setForm((s) => ({ ...s, product: e.target.value }))}
                     placeholder="Ej: Cinta 3M, Herramienta XYZ..."
-                    className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
+                    className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                       errors.product ? 'border-red-500/50' : 'border-white/20'
                     }`}
                   />
-                  {errors.product && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.product}</p>}
+                  {errors.product && (
+                    <p className="text-red-400 text-xs flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> {errors.product}
+                    </p>
+                  )}
                 </div>
 
                 {/* Destino y Número */}
@@ -354,11 +445,15 @@ export default function FenixStoreSalesForm() {
                       value={form.destino}
                       onChange={(e) => setForm((s) => ({ ...s, destino: e.target.value }))}
                       placeholder="Cbba, Alto, Yapacaní..."
-                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
+                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                         errors.destino ? 'border-red-500/50' : 'border-white/20'
                       }`}
                     />
-                    {errors.destino && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.destino}</p>}
+                    {errors.destino && (
+                      <p className="text-red-400 text-xs flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {errors.destino}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -370,11 +465,15 @@ export default function FenixStoreSalesForm() {
                       value={form.numero}
                       onChange={(e) => setForm((s) => ({ ...s, numero: e.target.value }))}
                       placeholder="6780xxxx"
-                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
+                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                         errors.numero ? 'border-red-500/50' : 'border-white/20'
                       }`}
                     />
-                    {errors.numero && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.numero}</p>}
+                    {errors.numero && (
+                      <p className="text-red-400 text-xs flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {errors.numero}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -396,11 +495,15 @@ export default function FenixStoreSalesForm() {
                           quantity: clamp(Number(e.target.value || 1), 1, s.type === 'unidad' ? 5 : 999999),
                         }))
                       }
-                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
+                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                         errors.quantity ? 'border-red-500/50' : 'border-white/20'
                       }`}
                     />
-                    {errors.quantity && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.quantity}</p>}
+                    {errors.quantity && (
+                      <p className="text-red-400 text-xs flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {errors.quantity}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -416,11 +519,15 @@ export default function FenixStoreSalesForm() {
                       value={form.amount}
                       onChange={(e) => setForm((s) => ({ ...s, amount: e.target.value }))}
                       placeholder="50.00"
-                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
+                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                         errors.amount ? 'border-red-500/50' : 'border-white/20'
                       }`}
                     />
-                    {errors.amount && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.amount}</p>}
+                    {errors.amount && (
+                      <p className="text-red-400 text-xs flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {errors.amount}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -437,11 +544,15 @@ export default function FenixStoreSalesForm() {
                       value={form.commission}
                       onChange={(e) => setForm((s) => ({ ...s, commission: e.target.value }))}
                       placeholder="0.50"
-                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 ${
+                      className={`w-full bg-black/60 border rounded-xl px-4 py-3 text-white placeholder-white/50 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
                         errors.commission ? 'border-red-500/50' : 'border-white/20'
                       }`}
                     />
-                    {errors.commission && <p className="text-red-400 text-xs flex items-center gap-1"><Zap className="w-3 h-3" />{errors.commission}</p>}
+                    {errors.commission && (
+                      <p className="text-red-400 text-xs flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> {errors.commission}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -449,17 +560,15 @@ export default function FenixStoreSalesForm() {
                       <DollarSign className="w-4 h-4 text-green-400" />
                       Comisión calculada
                     </label>
-                    <div className="relative">
-                      <input
-                        value={`Bs ${commissionAmount}`}
-                        readOnly
-                        className="w-full bg-green-500/20 border border-green-500/30 rounded-xl px-4 py-3 text-green-400 font-semibold"
-                      />
-                    </div>
+                    <input
+                      value={`Bs ${commissionAmount}`}
+                      readOnly
+                      className="w-full bg-green-500/20 border border-green-500/30 rounded-xl px-4 py-3 text-green-400 font-semibold"
+                    />
                   </div>
                 </div>
 
-                {/* Sistema checkbox */}
+                {/* Sistema */}
                 <div className="flex items-center gap-3 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
                   <input
                     id="sistema"
@@ -473,7 +582,7 @@ export default function FenixStoreSalesForm() {
                   </label>
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit */}
                 <button
                   type="submit"
                   disabled={saving}
@@ -494,7 +603,6 @@ export default function FenixStoreSalesForm() {
                   </div>
                 </button>
 
-                {/* Success Message */}
                 {message && (
                   <div className="flex items-center gap-3 p-4 bg-green-500/20 border border-green-500/30 rounded-xl animate-pulse">
                     <CheckCircle className="w-5 h-5 text-green-400" />
@@ -505,10 +613,9 @@ export default function FenixStoreSalesForm() {
             </div>
           </div>
 
-          {/* Panel Lateral */}
+          {/* Panel lateral: stats, preview, historial */}
           <div className="space-y-6">
-            
-            {/* Stats Cards */}
+            {/* Stats */}
             <div className="grid grid-cols-1 gap-4">
               <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/20 rounded-2xl p-6">
                 <div className="flex items-center justify-between">
@@ -541,7 +648,7 @@ export default function FenixStoreSalesForm() {
               </div>
             </div>
 
-            {/* Preview Panel */}
+            {/* Preview */}
             <div className="bg-black/40 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white flex items-center gap-2">
@@ -558,46 +665,15 @@ export default function FenixStoreSalesForm() {
 
               {showPreview && (
                 <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Tipo:</span>
-                    <span className="text-white font-medium">
-                      {form.type === 'unidad' ? 'Por unidades' : 'Por mayor'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Local:</span>
-                    <span className="text-white font-medium">{form.local || '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Vendedor:</span>
-                    <span className="text-white font-medium">{form.seller || '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Producto:</span>
-                    <span className="text-white font-medium">{form.product || '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Destino:</span>
-                    <span className="text-white font-medium">{form.destino || '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Cantidad:</span>
-                    <span className="text-white font-medium">{form.quantity}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Total:</span>
-                    <span className="text-green-400 font-bold">Bs {form.amount || '0.00'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Comisión:</span>
-                    <span className="text-orange-400 font-bold">Bs {commissionAmount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/60">Sistema:</span>
-                    <span className={`font-medium ${form.sistema ? 'text-green-400' : 'text-gray-400'}`}>
-                      {form.sistema ? '✓ Sí' : '✗ No'}
-                    </span>
-                  </div>
+                  <div className="flex justify-between"><span className="text-white/60">Tipo:</span><span className="text-white font-medium">{form.type === 'unidad' ? 'Por unidades' : 'Por mayor'}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Vendedor:</span><span className="text-white font-medium">{form.seller || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Local:</span><span className="text-white font-medium">{form.local || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Producto:</span><span className="text-white font-medium">{form.product || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Destino:</span><span className="text-white font-medium">{form.destino || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Cantidad:</span><span className="text-white font-medium">{form.quantity}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Total:</span><span className="text-green-400 font-bold">Bs {form.amount || '0.00'}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Comisión:</span><span className="text-orange-400 font-bold">Bs {commissionAmount}</span></div>
+                  <div className="flex justify-between"><span className="text-white/60">Sistema:</span><span className={`font-medium ${form.sistema ? 'text-green-400' : 'text-gray-400'}`}>{form.sistema ? '✓ Sí' : '✗ No'}</span></div>
                 </div>
               )}
             </div>
@@ -634,38 +710,21 @@ export default function FenixStoreSalesForm() {
                         </div>
                         <span className="text-green-400 font-bold text-sm">Bs {money(sale.payload.amount)}</span>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-2 text-xs text-white/70">
-                        <div>
-                          <span className="text-white/50">Local:</span> {sale.payload.local}
-                        </div>
-                        <div>
-                          <span className="text-white/50">Cant:</span> {sale.payload.quantity}
-                        </div>
-                        <div>
-                          <span className="text-white/50">Vendedor:</span> {sale.payload.seller}
-                        </div>
-                        <div>
-                          <span className="text-white/50">Destino:</span> {sale.payload.destino}
-                        </div>
+                        <div><span className="text-white/50">Local:</span> {sale.payload.local}</div>
+                        <div><span className="text-white/50">Cant:</span> {sale.payload.quantity}</div>
+                        <div><span className="text-white/50">Vendedor:</span> {sale.payload.seller}</div>
+                        <div><span className="text-white/50">Destino:</span> {sale.payload.destino}</div>
                       </div>
-                      
+
                       <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
                         <span className="text-xs text-white/50">
-                          {new Date(sale.createdAt).toLocaleString('es-BO', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {new Date(sale.createdAt).toLocaleString('es-BO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         </span>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-orange-400">
-                            Com: Bs {money(sale.payload.commission_amount)}
-                          </span>
-                          {sale.payload.sistema && (
-                            <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                          )}
+                          <span className="text-xs text-orange-400">Com: Bs {money(sale.payload.commission_amount)}</span>
+                          {sale.payload.sistema && <div className="w-2 h-2 bg-green-400 rounded-full"></div>}
                         </div>
                       </div>
                     </div>
@@ -684,12 +743,12 @@ export default function FenixStoreSalesForm() {
           </div>
         </div>
 
-        {/* Footer informativo */}
+        {/* Footer */}
         <div className="mt-12 text-center">
           <div className="inline-flex items-center gap-2 px-6 py-3 bg-black/40 backdrop-blur-xl rounded-full border border-white/10">
             <Zap className="w-4 h-4 text-orange-400" />
             <span className="text-white/70 text-sm">
-              Sistema local. Próximamente: integración con Supabase y dashboard avanzado
+              Sistema local. Próximamente: Supabase + dashboard externo.
             </span>
           </div>
         </div>
