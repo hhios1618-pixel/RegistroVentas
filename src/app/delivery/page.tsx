@@ -1,12 +1,22 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import type { Order, UserProfile } from '@/types';
+import supabase from '@/lib/supabaseClient';
+import type { OrderRow, DeliveryUser } from '@/types';
+
+// Definimos UserProfile aquí o lo agregamos al archivo types.ts
+interface UserProfile {
+  id: string;
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  is_active?: boolean;
+}
 
 export default function DeliveryPage() {
   const [me, setMe] = useState<UserProfile | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [fileMap, setFileMap] = useState<Record<string, File | null>>({});
 
@@ -25,7 +35,7 @@ export default function DeliveryPage() {
       .select('*')
       .in('status', ['assigned','out_for_delivery'] as any)
       .order('created_at', { ascending: true });
-    setOrders((data || []) as Order[]);
+    setOrders((data || []) as OrderRow[]);
   };
 
   useEffect(() => {
@@ -110,8 +120,8 @@ export default function DeliveryPage() {
           {assigned.map(o => (
             <div key={o.id} className="border rounded p-3 flex items-center justify-between">
               <div>
-                <div className="font-medium">{o.code}</div>
-                <div className="text-sm text-gray-600">Total: ${o.total.toFixed(2)}</div>
+                <div className="font-medium">{o.order_no}</div>
+                <div className="text-sm text-gray-600">Total: ${o.amount?.toFixed(2) || '0.00'}</div>
               </div>
               <button
                 onClick={() => startRoute(o.id)}
@@ -133,8 +143,8 @@ export default function DeliveryPage() {
             <div key={o.id} className="border rounded p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-medium">{o.code}</div>
-                  <div className="text-sm text-gray-600">Total: ${o.total.toFixed(2)}</div>
+                  <div className="font-medium">{o.order_no}</div>
+                  <div className="text-sm text-gray-600">Total: ${o.amount?.toFixed(2) || '0.00'}</div>
                 </div>
                 <button
                   onClick={() => markDelivered(o.id)}

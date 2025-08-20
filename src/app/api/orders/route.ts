@@ -1,6 +1,8 @@
 // src/app/api/orders/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+
+export const runtime = 'nodejs'; // Necesario para usar SERVICE_ROLE en Vercel
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE!;
@@ -28,7 +30,6 @@ type Payload = {
   customer_phone?: string | null;
   numero?: string | null;
 
-  // NUEVO
   customer_name: string;
   payment_method?: 'EFECTIVO' | 'QR' | 'TRANSFERENCIA' | null;
   address?: string | null;
@@ -41,14 +42,14 @@ type Payload = {
   items: OrderItemIn[];
 };
 
-const money = (n: number) => +((Math.round(n * 100) / 100).toFixed(2));
+const money = (n: number): number => Number(((Math.round(n * 100) / 100)).toFixed(2));
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as Payload;
-
-    // Validaciones mínimas
-    if (!body) return NextResponse.json({ error: 'Cuerpo vacío' }, { status: 400 });
+    const body = (await req.json()) as Payload | undefined;
+    if (!body) {
+      return NextResponse.json({ error: 'Cuerpo vacío' }, { status: 400 });
+    }
 
     const {
       sale_type, local, seller, seller_role = 'ASESOR',
@@ -59,18 +60,29 @@ export async function POST(req: Request) {
       items,
     } = body;
 
+    // Validaciones mínimas
     if (!seller?.trim()) return NextResponse.json({ error: 'Falta vendedor' }, { status: 400 });
     if (!local) return NextResponse.json({ error: 'Falta local' }, { status: 400 });
     if (!destino?.trim()) return NextResponse.json({ error: 'Falta destino' }, { status: 400 });
     if (!customer_id?.trim()) return NextResponse.json({ error: 'Falta ID del cliente' }, { status: 400 });
     if (!customer_name?.trim()) return NextResponse.json({ error: 'Falta nombre del cliente' }, { status: 400 });
-    if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: 'Incluye al menos 1 producto' }, { status: 400 });
-    if (items.length > 10) return NextResponse.json({ error: 'Máximo 10 productos' }, { status: 400 });
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'Incluye al menos 1 producto' }, { status: 400 });
+    }
+    if (items.length > 10) {
+      return NextResponse.json({ error: 'Máximo 10 productos' }, { status: 400 });
+    }
 
     for (const it of items) {
-      if (!it.product_name?.trim()) return NextResponse.json({ error: 'Cada item debe tener nombre' }, { status: 400 });
-      if (!(Number.isFinite(it.quantity) && it.quantity > 0)) return NextResponse.json({ error: 'Cantidad inválida' }, { status: 400 });
-      if (!(Number.isFinite(it.unit_price) && it.unit_price >= 0)) return NextResponse.json({ error: 'Precio inválido' }, { status: 400 });
+      if (!it.product_name?.trim()) {
+        return NextResponse.json({ error: 'Cada item debe tener nombre' }, { status: 400 });
+      }
+      if (!(Number.isFinite(it.quantity) && it.quantity > 0)) {
+        return NextResponse.json({ error: 'Cantidad inválida' }, { status: 400 });
+      }
+      if (!(Number.isFinite(it.unit_price) && it.unit_price >= 0)) {
+        return NextResponse.json({ error: 'Precio inválido' }, { status: 400 });
+      }
     }
 
     const is_promoter = seller_role === 'PROMOTOR';
@@ -116,13 +128,18 @@ export async function POST(req: Request) {
 
     const { error: itemsErr } = await supabase.from('order_items').insert(itemsPayload);
     if (itemsErr) {
+      // Rollback manual
       await supabase.from('order_items').delete().eq('order_id', orderId);
       await supabase.from('orders').delete().eq('id', orderId);
       return NextResponse.json({ error: itemsErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ id: orderId, order_no: orderIns.order_no, amount }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'Error inesperado' }, { status: 500 });
+    return NextResponse.json(
+      { id: orderId, order_no: orderIns.order_no, amount },
+      { status: 201 }
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Error inesperado';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
