@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import type { OrderRow, DeliveryUser, OrderStatus, LatLng, AddressSuggestion } from '@/types';
+import type { OrderRow, DeliveryUser, OrderStatus, LatLng } from '@/types';
 
 import Button from './Button';
 import { StatusBadge } from './StatusBadge';
@@ -11,7 +11,7 @@ import { Card, CardContent } from './Card';
 
 import {
   X, User, Phone, Calendar, Clock, CreditCard,
-  CheckCircle2, AlertCircle, Eye, EyeOff, Navigation, RefreshCw, Image as ImageIcon
+  CheckCircle2, AlertCircle, RefreshCw, Image as ImageIcon
 } from 'lucide-react';
 
 type Props = {
@@ -27,51 +27,29 @@ type Props = {
   onStatusChange: (orderId: string, newStatus: OrderStatus) => Promise<void>;
 };
 
-const MEDIA_BUCKET = 'orders-media';
-const MEDIA_PRIVATE = true;
-
-async function signIfNeeded(pathOrUrl?: string | null): Promise<string | null> {
-  if (!pathOrUrl) return null;
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  if (!MEDIA_PRIVATE) return pathOrUrl;
-  const res = await fetch('/api/media/sign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bucket: MEDIA_BUCKET, path: pathOrUrl, expiresIn: 3600 }),
-  });
-  if (!res.ok) return null;
-  const { url } = await res.json();
-  return url ?? null;
-}
-
 // ---------- Utiles para picker de ventana ----------
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const HORAS = Array.from({length: 24}, (_,h)=>h);            // limita aquí si quieres p.ej. 8–21
+const HORAS = Array.from({length: 24}, (_,h)=>h);
 const MINUTOS = [0, 15, 30, 45];
 
 const daysInMonth = (year:number, monthIndex:number) =>
   new Date(year, monthIndex + 1, 0).getDate();
 
-// arma "YYYY-MM-DDTHH:mm" en horario local (sin zona)
 const composeLocalISO = (y:number, m1:number, d:number, hh:number, mm:number) => {
   const pad = (n:number)=>String(n).padStart(2,'0');
   return `${y}-${pad(m1)}-${pad(d)}T${pad(hh)}:${pad(mm)}`;
 };
 
 export default function OrderDetailsModal({
-  order,
-  deliveries,
-  onClose,
-  onAssignDelivery,
-  onSaveLocation,
-  onConfirmDelivered,
-  onStatusChange,
+  order, deliveries, onClose,
+  onAssignDelivery, onSaveLocation,
+  onConfirmDelivered, onStatusChange,
 }: Props) {
   // --------- estado general ----------
   const [selectedDelivery, setSelectedDelivery] = useState<string>(order.delivery_assigned_to || '');
   const [address, setAddress] = useState(order.delivery_address || '');
   const [notes, setNotes] = useState(order.notes || '');
-  const [position, setPosition] = useState<LatLng | undefined>(() =>
+  const [position] = useState<LatLng | undefined>(() =>
     order.delivery_geo_lat != null && order.delivery_geo_lng != null
       ? { lat: Number(order.delivery_geo_lat), lng: Number(order.delivery_geo_lng) }
       : undefined
@@ -80,20 +58,25 @@ export default function OrderDetailsModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [mapVisible, setMapVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<'assign' | 'location' | 'delivery' | 'status' | 'media'>('assign');
 
-  // --------- media ----------
-  const [sellerUrl, setSellerUrl] = useState<string | null>(order.seller_photo_url ?? null);
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(order.payment_proof_url ?? null);
+  // --------- media (solo placeholders, si usas integración real, injértala aquí) ----------
+  const [sellerUrl] = useState<string | null>(order.seller_photo_url ?? null);
+  const [paymentUrl] = useState<string | null>(order.payment_proof_url ?? null);
   const [mediaLoading, setMediaLoading] = useState(false);
+
+
+const refreshMedia = () => {
+  setMediaLoading(true);
+  setTimeout(() => setMediaLoading(false), 500);
+};
 
   // --------- Ventana Delivery (Coordinación) con combos ----------
   const now = new Date();
-  const fixedYear = now.getFullYear(); // Año fijo
+  const fixedYear = now.getFullYear();
 
   const baseDate = order.delivery_date ? new Date(`${order.delivery_date}T00:00`) : now;
-  const [mes, setMes] = useState<number>(baseDate.getMonth()); // 0..11
+  const [mes, setMes] = useState<number>(baseDate.getMonth());
   const [dia, setDia] = useState<number>(baseDate.getDate());
   const [desdeH, setDesdeH] = useState<number>(now.getHours());
   const [desdeM, setDesdeM] = useState<number>(0);
@@ -103,7 +86,6 @@ export default function OrderDetailsModal({
   const [windowWarning, setWindowWarning] = useState<string | null>(null);
   const [currentWindow, setCurrentWindow] = useState<{start?: string; end?: string} | null>(null);
 
-  // Ajusta día máximo al cambiar mes
   useEffect(() => {
     const max = daysInMonth(fixedYear, mes);
     if (dia > max) setDia(max);
@@ -156,18 +138,6 @@ export default function OrderDetailsModal({
   const handleStatusSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value as OrderStatus;
     handleAction(() => onStatusChange(order.id, newStatus), `Estado cambiado a ${newStatus.replaceAll('_', ' ')}`);
-  };
-
-  const refreshMedia = async () => {
-    setMediaLoading(true);
-    try {
-      const newSeller = await signIfNeeded(order.seller_photo_url ?? null);
-      const newPayment = await signIfNeeded(order.payment_proof_url ?? null);
-      setSellerUrl(newSeller);
-      setPaymentUrl(newPayment);
-    } finally {
-      setMediaLoading(false);
-    }
   };
 
   // Cargar ventana actual (si existe) al abrir pestaña “Entrega”
@@ -223,12 +193,7 @@ export default function OrderDetailsModal({
       const res = await fetch(`/api/orders/${order.id}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deliveryUserId,
-          desde: desdeISO,
-          hasta: hastaISO,
-          createdBy: deliveryUserId,
-        }),
+        body: JSON.stringify({ deliveryUserId, desde: desdeISO, hasta: hastaISO }),
       });
 
       const json = await res.json();
@@ -263,7 +228,9 @@ export default function OrderDetailsModal({
         <header className="p-4 sm:p-6 border-b border-white/10 flex justify-between items-start">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-xl font-bold text-white">Pedido <span className="font-mono text-blue-400">#{order.order_no ?? 'S/N'}</span></h2>
+              <h2 className="text-xl font-bold text-white">
+                Pedido <span className="font-mono text-blue-400">#{order.order_no ?? 'S/N'}</span>
+              </h2>
               <StatusBadge status={order.status} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm text-white/70">
@@ -273,7 +240,9 @@ export default function OrderDetailsModal({
               <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>{formatDateTime(order.created_at)}</span></div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors"><X className="w-5 h-5 text-white/60" /></button>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-white/60" />
+          </button>
         </header>
 
         {(error || success) && (
@@ -326,7 +295,6 @@ export default function OrderDetailsModal({
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-white/90 mb-2">Dirección de Entrega</label>
-                {/* Si tienes AddressSearch/MapPicker, colócalos aquí; dejo mínimo para no romper */}
                 <input
                   value={address}
                   onChange={(e)=>setAddress(e.target.value)}
@@ -334,7 +302,6 @@ export default function OrderDetailsModal({
                   className="w-full bg-black/50 border border-white/15 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-white/90 mb-2">Instrucciones de Entrega</label>
                 <textarea
@@ -345,7 +312,6 @@ export default function OrderDetailsModal({
                   rows={4}
                 />
               </div>
-
               <div className="flex justify-end">
                 <Button onClick={handleSaveLocationClick} disabled={isProcessing} className="bg-green-600/80 hover:bg-green-600 flex items-center gap-2">
                   {isProcessing ? <LoadingSpinner /> : <CheckCircle2 className="w-4 h-4" />}

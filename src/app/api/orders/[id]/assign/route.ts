@@ -1,8 +1,8 @@
-// src/app/api/orders/[id]/assign/route.ts  (Next 15 + ventanas + warnings)
+// src/app/api/orders/[id]/assign/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export const runtime = 'nodejs'; // SERVICE_ROLE requiere Node
+export const runtime = 'nodejs';
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,7 +12,6 @@ function getSupabaseAdmin() {
   return createClient(url, srv, { auth: { persistSession: false } });
 }
 
-// Fecha local Bolivia (YYYY-MM-DD) para delivery_routes
 const getBoliviaDate = (): string => {
   const now = new Date();
   const boliviaDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/La_Paz' }));
@@ -22,26 +21,45 @@ const getBoliviaDate = (): string => {
   return `${y}-${m}-${d}`;
 };
 
-// Convierte dos ISO de La Paz a tstzrange [desde,hasta)
-function toRangeUTC(desdeISO: string, hastaISO: string) {
-  const d = new Date(new Date(desdeISO + ' America/La_Paz').toUTCString());
-  const h = new Date(new Date(hastaISO + ' America/La_Paz').toUTCString());
-  // Normaliza a ISO sin ms
-  const dIso = d.toISOString();
-  const hIso = h.toISOString();
-  return `[${dIso},${hIso})`;
+function parseLocalISO(s?: string): Date | null {
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+  return aStart < bEnd && bStart < aEnd;
 }
 
 type AssignBody = {
-  deliveryUserId: string;     // requerido
-  desde?: string;             // "2025-08-20T14:30:00" (hora local La Paz)
-  hasta?: string;             // "2025-08-20T15:30:00" (hora local La Paz)
-  createdBy?: string;         // coordinador que asigna (opcional pero recomendado)
+  deliveryUserId: string;
+  desde?: string; // "YYYY-MM-DDTHH:mm" local
+  hasta?: string; // "YYYY-MM-DDTHH:mm" local
 };
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: orderId } = await params;
+  const supabase = getSupabaseAdmin();
+  const routeDate = getBoliviaDate();
+
+  const { data, error } = await supabase
+    .from('delivery_routes')
+    .select('id, order_id, delivery_user_id, status, window_start, window_end, route_date')
+    .eq('order_id', orderId)
+    .eq('route_date', routeDate)
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ assignment: data ?? null }, { status: 200 });
+}
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> } // Next 15
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: orderId } = await params;
   if (!orderId) {
@@ -51,29 +69,59 @@ export async function POST(
   try {
     const body = (await req.json()) as AssignBody | undefined;
     const deliveryUserId = body?.deliveryUserId?.trim();
-    const desde = body?.desde?.trim();
-    const hasta = body?.hasta?.trim();
-    const createdBy = body?.createdBy?.trim() || deliveryUserId; // fallback
+    const desdeStr = body?.desde?.trim();
+    const hastaStr = body?.hasta?.trim();
 
     if (!deliveryUserId) {
       return NextResponse.json({ error: 'Falta el ID del repartidor' }, { status: 400 });
     }
 
+    let desde: Date | null = null;
+    let hasta: Date | null = null;
+
+    if (desdeStr || hastaStr) {
+      desde = parseLocalISO(desdeStr);
+      hasta = parseLocalISO(hastaStr);
+      if (!desde || !hasta) return NextResponse.json({ error: 'Invalid time value' }, { status: 400 });
+      if (!(hasta > desde)) return NextResponse.json({ error: 'El rango horario es inválido' }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdmin();
     const routeDate = getBoliviaDate();
 
-    // 1) Asegura que la orden existe y obtén location_hash para warnings
-    const { data: order, error: orderErr } = await supabase
-      .from('orders')
-      .select('id, location_hash')
-      .eq('id', orderId)
-      .single();
+    // ruta existente del día (si hay)
+    const { data: existingRoute, error: checkErr } = await supabase
+      .from('delivery_routes')
+      .select('id, delivery_user_id, window_start, window_end')
+      .eq('order_id', orderId)
+      .eq('route_date', routeDate)
+      .maybeSingle();
 
-    if (orderErr || !order) {
-      return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
+    if (checkErr) return NextResponse.json({ error: checkErr.message }, { status: 500 });
+
+    // validar solapes con otras rutas del delivery
+    if (desde && hasta) {
+      const { data: others, error: listErr } = await supabase
+        .from('delivery_routes')
+        .select('id, window_start, window_end')
+        .eq('delivery_user_id', deliveryUserId)
+        .eq('route_date', routeDate);
+
+      if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 });
+
+      const hasOverlap = (others ?? [])
+        .filter(r => r.id !== existingRoute?.id)
+        .some(r => {
+          if (!r.window_start || !r.window_end) return false;
+          const bStart = new Date(r.window_start);
+          const bEnd = new Date(r.window_end);
+          return overlaps(desde!, hasta!, bStart, bEnd);
+        });
+
+      if (hasOverlap) return NextResponse.json({ error: 'OVERLAP' }, { status: 409 });
     }
 
-    // 2) Verifica repartidor
+    // repartidor existe
     const { data: deliveryUser, error: deliveryErr } = await supabase
       .from('users_profile')
       .select('full_name')
@@ -84,96 +132,78 @@ export async function POST(
       return NextResponse.json({ error: 'Repartidor no encontrado' }, { status: 404 });
     }
 
-    // 3) Marca la orden como assigned (idempotente)
-    const { data: updatedOrder, error: updateErr } = await supabase
+    // estado actual de la orden
+    const { data: curOrder, error: curErr } = await supabase
+      .from('orders')
+      .select('status, delivery_assigned_to')
+      .eq('id', orderId)
+      .single();
+    if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
+
+    // solo promover pending -> assigned; si ya es out_for_delivery/delivered/etc, respetar
+    const nextStatus = curOrder?.status === 'pending' ? 'assigned' : curOrder?.status;
+    const nextAssignee = curOrder?.delivery_assigned_to ?? deliveryUserId;
+
+    const { error: updateErr } = await supabase
       .from('orders')
       .update({
-        status: 'assigned',
-        delivery_assigned_to: deliveryUserId,
-        seller: deliveryUser.full_name, // tu lógica original
+        status: nextStatus,
+        delivery_assigned_to: nextAssignee,
+        seller: deliveryUser.full_name,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', orderId)
-      .select()
-      .single();
+      .eq('id', orderId);
+    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
-    if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 });
-    }
-
-    // 4) Inserta/Upsertea la ruta del día para vistas operativas
-    // Recomendado tener UNIQUE (order_id, route_date) en delivery_routes
-    const { error: routeErr } = await supabase
-      .from('delivery_routes')
-      .upsert(
-        {
-          order_id: orderId,
+    // inserta/actualiza ruta del día
+    if (!existingRoute) {
+      const { error: insErr } = await supabase.from('delivery_routes').insert({
+        order_id: orderId,
+        delivery_user_id: deliveryUserId,
+        status: 'pending',
+        route_date: routeDate,
+        window_start: desde ? desde.toISOString() : null,
+        window_end:   hasta ? hasta.toISOString() : null,
+      });
+      if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    } else {
+      const { error: updErr } = await supabase
+        .from('delivery_routes')
+        .update({
           delivery_user_id: deliveryUserId,
-          status: 'pending',
-          route_date: routeDate,
-        },
-        { onConflict: 'order_id,route_date', ignoreDuplicates: false }
-      );
-
-    if (routeErr) {
-      return NextResponse.json({ error: routeErr.message }, { status: 500 });
+          window_start: desde ? desde.toISOString() : existingRoute.window_start ?? null,
+          window_end:   hasta ? hasta.toISOString() : existingRoute.window_end ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingRoute.id);
+      if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
     }
 
-    // 5) Si viene ventana, crea la asignación “fuerte” (bloquea solapes)
-    let warnings: string[] = [];
-    if (desde && hasta) {
-      const timeWindow = toRangeUTC(desde, hasta);
+    // Warning de ineficiencia: otra entrega misma dirección hoy
+    const warnings: string[] = [];
+    let currentAddress: string | null = null;
 
-      // RPC maneja el exclusion constraint y propaga 23P01 en caso de solape
-      const { data: assignment, error: assignErr } = await supabase.rpc(
-        'insert_delivery_assignment',
-        {
-          _order_id: orderId,
-          _delivery_id: deliveryUserId,
-          _time_window: timeWindow,
-          _created_by: createdBy,
-        }
-      );
+    const { data: orderAddr, error: addrErr1 } = await supabase
+      .from('orders')
+      .select('delivery_address')
+      .eq('id', orderId)
+      .single();
+    if (!addrErr1 && orderAddr) currentAddress = orderAddr.delivery_address;
 
-      if (assignErr) {
-        // 23P01 = exclusion constraint violated
-        // 23514 también podría saltar si agregas checks
-        const pgCode = (assignErr as any).code;
-        if (pgCode === '23P01') {
-          return NextResponse.json(
-            { error: 'OVERLAP', message: 'El delivery ya tiene otra entrega en ese rango.' },
-            { status: 409 }
-          );
-        }
-        return NextResponse.json(
-          { error: 'Falló la asignación con ventana', detail: assignErr.message },
-          { status: 500 }
-        );
-      }
+    if (currentAddress) {
+      const { data: sameAddr, error: addrErr2 } = await supabase
+        .from('orders')
+        .select('id, delivery_address')
+        .eq('delivery_assigned_to', deliveryUserId)
+        .in('status', ['assigned', 'out_for_delivery'])
+        .neq('id', orderId);
 
-      // 6) Warnings por ubicación duplicada en ventana cercana (±45 min)
-      const start = new Date(desde);
-      const end = new Date(hasta);
-      const nearStart = new Date(start.getTime() - 45 * 60 * 1000).toISOString();
-      const nearEnd = new Date(end.getTime() + 45 * 60 * 1000).toISOString();
-
-      const { data: near, error: nearErr } = await supabase
-        .from('delivery_assignments_view')
-        .select('assignment_id, order_id, delivery_id, window_start, window_end, location_hash, status')
-        .eq('location_hash', order.location_hash)
-        .neq('order_id', orderId)
-        .in('status', ['assigned', 'picked_up'])
-        .gte('window_end', nearStart)
-        .lte('window_start', nearEnd);
-
-      if (!nearErr && near && near.length > 0) {
-        warnings.push(
-          'Ubicación duplicada cercana: hay otra entrega a la misma dirección en una ventana próxima. Considera consolidar.'
-        );
+      if (!addrErr2 && sameAddr?.some(o => o.delivery_address === currentAddress)) {
+        warnings.push('Hay otra entrega del mismo delivery a la misma dirección hoy.');
       }
     }
 
-    return NextResponse.json({ ok: true, order: updatedOrder, warnings }, { status: 200 });
+    return NextResponse.json({ ok: true, warnings }, { status: 200 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error inesperado en el servidor';
     return NextResponse.json({ error: message }, { status: 500 });

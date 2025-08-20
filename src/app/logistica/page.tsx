@@ -13,7 +13,6 @@ import type {
   EnrichedDeliveryRoute,
 } from '@/types';
 
-// --- Componentes ---
 import { OrderTable } from '@/components/OrderTable';
 import OrderDetailsModal from '@/components/OrderDetailsModal';
 import DeliveryDetailsModal from '@/components/DeliveryDetailsModal';
@@ -23,26 +22,14 @@ import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import MapOverviewModal from '@/components/MapOverviewModal';
 
-// --- Iconos (renombramos Map -> MapIcon para no pisar el Map nativo) ---
 import {
-  PlusCircle,
-  RefreshCw,
-  Search,
-  Truck,
-  Clock,
-  CheckCircle2,
-  AlertTriangle,
-  Users,
-  Map as MapIcon,
+  PlusCircle, RefreshCw, Search, Truck, Clock,
+  CheckCircle2, AlertTriangle, Users, Map as MapIcon,
 } from 'lucide-react';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Storage config (si usas media privada, firma por /api/media/sign)
-const MEDIA_BUCKET = 'orders-media';
-const MEDIA_PRIVATE = true;
 
 const getBoliviaDateString = () => {
   const now = new Date();
@@ -52,25 +39,6 @@ const getBoliviaDateString = () => {
   const day = String(boliviaDate.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
-
-async function resolveMediaUrl(path?: string | null): Promise<string | null> {
-  if (!path) return null;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-
-  if (MEDIA_PRIVATE) {
-    const res = await fetch('/api/media/sign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bucket: MEDIA_BUCKET, path, expiresIn: 3600 }),
-    });
-    if (!res.ok) return null;
-    const { url } = await res.json();
-    return url ?? null;
-  } else {
-    const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
-    return data.publicUrl ?? null;
-  }
-}
 
 export default function LogisticaPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -99,53 +67,27 @@ export default function LogisticaPage() {
         `)
         .order('created_at', { ascending: false });
 
-      const [ordersRes, deliveriesRes, routesRes, metricsRes, mediaRes] = await Promise.all([
+      const [ordersRes, deliveriesRes, routesRes, metricsRes] = await Promise.all([
         ordersQuery,
         supabase.from('users_profile').select('*').eq('role', 'delivery').order('full_name', { ascending: true }),
         supabase.from('delivery_routes').select('*').order('created_at', { ascending: false }),
         supabase.from('delivery_metrics').select('*').order('metric_date', { ascending: false }),
-        supabase.from('order_media').select('order_id, type, file_url').order('created_at', { ascending: false }),
       ]);
 
       if (ordersRes.error) throw ordersRes.error;
       if (deliveriesRes.error) throw deliveriesRes.error;
       if (routesRes.error) throw routesRes.error;
       if (metricsRes.error) throw metricsRes.error;
-      if (mediaRes.error) throw mediaRes.error;
 
       const ordersData = (ordersRes.data ?? []) as OrderRow[];
       const routesData = (routesRes.data ?? []) as DeliveryRoute[];
-      const media = (mediaRes.data ?? []) as { order_id: string; type: string; file_url: string | null }[];
 
-      // Indexar media por order
-      const mediaByOrder = new globalThis.Map<string, { product?: string | null; payment?: string | null }>();
-      for (const m of media) {
-        const entry = mediaByOrder.get(m.order_id) ?? {};
-        if (m.type === 'product') entry.product = m.file_url;
-        if (m.type === 'payment_proof') entry.payment = m.file_url;
-        mediaByOrder.set(m.order_id, entry);
-      }
-
-      // Enriquecer órdenes con URLs firmadas/públicas
-      const enrichedOrders: OrderRow[] = await Promise.all(
-        ordersData.map(async (o) => {
-          const m = mediaByOrder.get(o.id);
-          const seller_photo_url = m?.product ? await resolveMediaUrl(m.product) : null;
-          const payment_proof_url = m?.payment ? await resolveMediaUrl(m.payment) : null;
-          return { ...o, seller_photo_url, payment_proof_url } as OrderRow & {
-            seller_photo_url?: string | null;
-            payment_proof_url?: string | null;
-          };
-        })
-      );
-
-      // Rutas con order_no
       const enrichedRoutes = routesData.map((route) => {
-        const order = enrichedOrders.find((o) => o.id === route.order_id);
+        const order = ordersData.find((o) => o.id === route.order_id);
         return { ...route, order_no: order?.order_no || null };
       });
 
-      setOrders(enrichedOrders);
+      setOrders(ordersData);
       setDeliveries((deliveriesRes.data ?? []) as DeliveryUser[]);
       setDeliveryRoutes(enrichedRoutes);
       setDeliveryMetrics((metricsRes.data ?? []) as DeliveryMetrics[]);
@@ -182,36 +124,36 @@ export default function LogisticaPage() {
     await loadData();
   };
 
+  // ✅ Mantiene UI en sync: DB + estado local (orders y selectedOrder)
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     const { error } = await supabase
       .from('orders')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('id', orderId);
     if (error) throw error;
-    await loadData();
+
+    const { data: updated, error: fetchErr } = await supabase
+      .from('orders')
+      .select(`
+        id, order_no, created_at, updated_at, customer_name, customer_phone,
+        amount, status, delivery_address, delivery_geo_lat, delivery_geo_lng,
+        notes, delivery_assigned_to, seller, payment_method, delivery_date,
+        delivery_from, delivery_to
+      `)
+      .eq('id', orderId)
+      .single();
+
+    if (fetchErr || !updated) {
+      await loadData();
+      return;
+    }
+
+    setOrders(prev => prev.map(o => (o.id === orderId ? (updated as OrderRow) : o)));
+    setSelectedOrder(prev => (prev && prev.id === orderId ? (updated as OrderRow) : prev));
   };
 
   const confirmDelivered = async (orderId: string) => {
     await handleStatusChange(orderId, 'confirmed');
-  };
-
-  // ✔ Alineado con OrderDetailsModal: guarda delivery_date/from/to (campos de venta)
-  const saveSchedule = async (
-    orderId: string,
-    patch: Partial<Pick<OrderRow, 'delivery_date' | 'delivery_from' | 'delivery_to'>>
-  ) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({
-        delivery_date: patch.delivery_date ?? null,
-        delivery_from: patch.delivery_from ?? null,
-        delivery_to: patch.delivery_to ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', orderId);
-
-    if (error) throw error;
-    await loadData();
   };
 
   const filteredOrders = useMemo(() => {
@@ -271,11 +213,7 @@ export default function LogisticaPage() {
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Actualizar
               </Button>
-              <Button
-                size="small"
-                className="bg-indigo-600 hover:bg-indigo-700"
-                onClick={() => setIsMapOpen(true)}
-              >
+              <Button size="small" className="bg-indigo-600 hover:bg-indigo-700" onClick={() => setIsMapOpen(true)}>
                 <MapIcon className="w-4 h-4 mr-2" />
                 Ver Mapa de Operaciones
               </Button>
@@ -292,36 +230,28 @@ export default function LogisticaPage() {
                 <h4 className="text-sm font-medium text-gray-400">Pendientes</h4>
                 <Clock className="w-4 h-4 text-yellow-400" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-400">{kpis.pending}</div>
-              </CardContent>
+              <CardContent><div className="text-2xl font-bold text-yellow-400">{kpis.pending}</div></CardContent>
             </Card>
             <Card className="bg-gray-800/50 border-gray-700">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <h4 className="text-sm font-medium text-gray-400">Asignados</h4>
                 <Users className="w-4 h-4 text-blue-400" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-400">{kpis.assigned}</div>
-              </CardContent>
+              <CardContent><div className="text-2xl font-bold text-blue-400">{kpis.assigned}</div></CardContent>
             </Card>
             <Card className="bg-gray-800/50 border-gray-700">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <h4 className="text-sm font-medium text-gray-400">En Ruta</h4>
                 <Truck className="w-4 h-4 text-purple-400" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-400">{kpis.inDelivery}</div>
-              </CardContent>
+              <CardContent><div className="text-2xl font-bold text-purple-400">{kpis.inDelivery}</div></CardContent>
             </Card>
             <Card className="bg-gray-800/50 border-gray-700">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <h4 className="text-sm font-medium text-gray-400">Entregados</h4>
                 <CheckCircle2 className="w-4 h-4 text-green-400" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-400">{kpis.delivered}</div>
-              </CardContent>
+              <CardContent><div className="text-2xl font-bold text-green-400">{kpis.delivered}</div></CardContent>
             </Card>
           </div>
 
@@ -329,8 +259,8 @@ export default function LogisticaPage() {
             <aside className="lg:col-span-1 space-y-6 sticky top-24">
               <h2 className="text-xl font-semibold text-white">Repartidores Activos</h2>
               <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
-                {activeDeliveries.length > 0 ? (
-                  activeDeliveries.map((delivery) => {
+                {deliveries.filter(d=>d.is_active).length ? (
+                  deliveries.filter(d=>d.is_active).map((delivery) => {
                     const today = getBoliviaDateString();
                     const todayRoutes = deliveryRoutes.filter(
                       (r) => r.delivery_user_id === delivery.id && r.route_date === today
@@ -341,11 +271,9 @@ export default function LogisticaPage() {
                     const completedToday = todayRoutes.filter((r) => r.status === 'completed').length;
                     const efficiency =
                       metrics?.efficiency ??
-                      (todayRoutes.length > 0
-                        ? Math.round((completedToday / todayRoutes.length) * 100)
-                        : 0);
+                      (todayRoutes.length > 0 ? Math.round((completedToday / todayRoutes.length) * 100) : 0);
 
-                    const deliveryStats: DeliveryStats = {
+                    const stats: DeliveryStats = {
                       totalToday: todayRoutes.length,
                       completedToday,
                       inProgressToday: todayRoutes.filter((r) => r.status === 'in_progress').length,
@@ -356,7 +284,7 @@ export default function LogisticaPage() {
                       <DeliveryCard
                         key={delivery.id}
                         delivery={delivery}
-                        stats={deliveryStats}
+                        stats={stats}
                         onViewDetails={() => setSelectedDelivery(delivery)}
                       />
                     );
@@ -403,7 +331,7 @@ export default function LogisticaPage() {
       {selectedOrder && (
         <OrderDetailsModal
           order={selectedOrder}
-          deliveries={activeDeliveries}
+          deliveries={deliveries.filter(d=>d.is_active)}
           onClose={() => setSelectedOrder(null)}
           onAssignDelivery={assignDelivery}
           onStatusChange={handleStatusChange}
@@ -418,8 +346,6 @@ export default function LogisticaPage() {
           routes={deliveryRoutes.filter((r) => r.delivery_user_id === selectedDelivery.id)}
           metrics={deliveryMetrics.find((m) => m.delivery_user_id === selectedDelivery.id)}
           onClose={() => setSelectedDelivery(null)}
-          // Si en el futuro quieres abrir la programación desde aquí,
-          // pásale onSaveSchedule con la misma firma que arriba.
         />
       )}
 
@@ -427,7 +353,7 @@ export default function LogisticaPage() {
         <MapOverviewModal
           orders={orders}
           onClose={() => setIsMapOpen(false)}
-          defaultCenter={{ lat: -17.7833, lng: -63.1821 }} // Santa Cruz
+          defaultCenter={{ lat: -17.7833, lng: -63.1821 }}
           defaultZoom={12}
         />
       )}
