@@ -1,32 +1,33 @@
-// src/app/api/orders/[id]/assign/route.ts  (Next 15 compatible + blindaje)
-
+// src/app/api/orders/[id]/assign/route.ts  (Next 15 + blindaje + lazy init)
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export const runtime = 'nodejs'; // SERVICE_ROLE requiere Node, no edge
+export const runtime = 'nodejs'; // SERVICE_ROLE requiere Node
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE!,
-  { auth: { persistSession: false } }
-);
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const srv = process.env.SUPABASE_SERVICE_ROLE;
+  if (!url) throw new Error('Missing env: NEXT_PUBLIC_SUPABASE_URL');
+  if (!srv) throw new Error('Missing env: SUPABASE_SERVICE_ROLE');
+  return createClient(url, srv, { auth: { persistSession: false } });
+}
 
 const getBoliviaDate = (): string => {
   const now = new Date();
   const boliviaDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/La_Paz' }));
-  const year = boliviaDate.getFullYear();
-  const month = String(boliviaDate.getMonth() + 1).padStart(2, '0');
-  const day = String(boliviaDate.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const y = boliviaDate.getFullYear();
+  const m = String(boliviaDate.getMonth() + 1).padStart(2, '0');
+  const d = String(boliviaDate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 type AssignBody = { deliveryUserId: string };
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> } // << clave en Next 15
+  { params }: { params: Promise<{ id: string }> } // Next 15
 ) {
-  const { id: orderId } = await params;           // << await params
+  const { id: orderId } = await params;
   if (!orderId) {
     return NextResponse.json({ error: 'Falta el ID del pedido' }, { status: 400 });
   }
@@ -38,9 +39,10 @@ export async function POST(
       return NextResponse.json({ error: 'Falta el ID del repartidor' }, { status: 400 });
     }
 
+    const supabase = getSupabaseAdmin(); // ← lazy init en runtime
     const routeDate = getBoliviaDate();
 
-    // BLINDAJE: evitar duplicados en el día
+    // Blindaje anti-duplicados en el día
     const { data: existingRoute, error: checkErr } = await supabase
       .from('delivery_routes')
       .select('id')
@@ -51,7 +53,6 @@ export async function POST(
     if (checkErr) {
       return NextResponse.json({ error: checkErr.message }, { status: 500 });
     }
-
     if (existingRoute) {
       return NextResponse.json(
         { message: 'Este pedido ya tiene una ruta asignada para hoy.' },
@@ -59,7 +60,7 @@ export async function POST(
       );
     }
 
-    // Verificar repartidor
+    // Repartidor
     const { data: deliveryUser, error: deliveryErr } = await supabase
       .from('users_profile')
       .select('full_name')
@@ -76,7 +77,7 @@ export async function POST(
       .update({
         status: 'assigned',
         delivery_assigned_to: deliveryUserId,
-        seller: deliveryUser.full_name, // mantengo tu lógica
+        seller: deliveryUser.full_name, // tu lógica
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId)
@@ -88,14 +89,12 @@ export async function POST(
     }
 
     // Insertar ruta del día
-    const { error: routeErr } = await supabase
-      .from('delivery_routes')
-      .insert({
-        order_id: orderId,
-        delivery_user_id: deliveryUserId,
-        status: 'pending',
-        route_date: routeDate,
-      });
+    const { error: routeErr } = await supabase.from('delivery_routes').insert({
+      order_id: orderId,
+      delivery_user_id: deliveryUserId,
+      status: 'pending',
+      route_date: routeDate,
+    });
 
     if (routeErr) {
       return NextResponse.json({ error: routeErr.message }, { status: 500 });
