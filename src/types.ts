@@ -1,10 +1,6 @@
 // --- Archivo Final y Definitivo: src/lib/types.ts ---
-// Contiene la estructura correcta y completa de los datos, alineada con la base de datos.
 
-/**
- * Define los posibles estados de una orden.
- */
-export type OrderStatus = 
+export type OrderStatus =
   | 'pending'
   | 'assigned'
   | 'out_for_delivery'
@@ -14,102 +10,119 @@ export type OrderStatus =
   | 'returned'
   | 'failed';
 
-/**
- * Representa la estructura de una fila en la tabla 'orders'.
- * VERSIÓN FINAL Y COMPLETA.
- */
+// --------------------- ORDERS ---------------------
+
 export interface OrderRow {
   id: string;
   created_at: string;
-  updated_at?: string | null; 
-  order_no?: string | null; 
-  customer_name?: string | null; 
-  customer_phone?: string | null; 
-  
-  // --- Columnas de ubicación que SÍ existen en la DB ---
+  updated_at?: string | null;
+
+  // En la DB es BIGINT → usar number en TS
+  order_no?: number | null;
+
+  customer_name?: string | null;
+  customer_phone?: string | null;
+
   delivery_address?: string | null;
   delivery_geo_lat?: number | null;
   delivery_geo_lng?: number | null;
-  
-  notes?: string | null; 
-  amount?: number | null; 
-  local?: string | null; 
-  payment_method?: string | null; 
-  delivery_date?: string | null; 
-  delivery_from?: string | null; 
-  delivery_to?: string | null; 
-  confirmed_at?: string | null; 
+
+  notes?: string | null;
+  amount?: number | null;
+  local?: string | null;
+  payment_method?: string | null;
+
+  // Programación de entrega
+  delivery_date?: string | null;  // 'YYYY-MM-DD'
+  delivery_from?: string | null;  // 'HH:mm'
+  delivery_to?: string | null;    // 'HH:mm'
+
+  confirmed_at?: string | null;
   status: OrderStatus;
   delivery_assigned_to?: string | null;
 
-  // ▼▼▼ LA PROPIEDAD QUE FALTABA Y CAUSABA EL ERROR ▼▼▼
-  seller?: string | null; // Esta es la columna para el nombre del repartidor/vendedor.
+  // Vendedor / repartidor mostrado en la tabla
+  seller?: string | null;
+
+  // URLs resueltas (Storage)
+  seller_photo_url?: string | null;   // imagen del producto (vendedor)
+  payment_proof_url?: string | null;  // comprobante de pago (delivery)
 }
 
-/**
- * Representa a un usuario repartidor de la tabla 'users_profile'.
- */
+// --------------------- USERS ---------------------
+
 export interface DeliveryUser {
   id: string;
   full_name: string;
   phone?: string | null;
   is_active: boolean;
   vehicle_type?: string | null;
-  current_load?: number | null; 
-  max_load?: number | null; 
-  role?: string; 
+  current_load?: number | null;
+  max_load?: number | null;
+  role?: string;
   branch_id?: string | null;
 }
 
-/**
- * Representa una ruta de entrega específica.
- */
+// --------------------- ROUTES ---------------------
+
 export interface DeliveryRoute {
   id: string;
   delivery_user_id: string;
   order_id: string;
+
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
   created_at: string;
-  completed_at?: string | null; 
-  route_date?: string | null; 
-  sequence_number?: number | null; 
-  estimated_arrival?: string | null; 
-  estimated_travel_time_seconds?: number | null; 
-  distance_meters?: number | null; 
-  route_geometry?: any; 
+  completed_at?: string | null;
+
+  route_date?: string | null;
+  sequence_number?: number | null;
+  estimated_arrival?: string | null;
+
+  estimated_travel_time_seconds?: number | null;
+  distance_meters?: number | null;
+
+  route_geometry?: any;
+
+  // Comprobante de entrega (guardado por el delivery)
+  proof_image_url?: string | null;
 }
 
-/**
- * Representa las métricas de rendimiento de un repartidor.
- */
+export interface EnrichedDeliveryRoute extends DeliveryRoute {
+  // mantener consistente con OrderRow
+  order_no: number | null;
+}
+
+// --------------------- METRICS ---------------------
+
 export interface DeliveryMetrics {
   id: string;
   delivery_user_id: string;
   metric_date: string;
-  total_distance_km: number;
-  total_delivery_time_minutes: number;
-  completed_routes: number;
-  efficiency: number;
+
+  // columnas reales que mostraste en la DB
+  total_routes?: number | null;
+  completed_routes?: number | null;
+  failed_routes?: number | null;
+
+  total_distance_km?: number | null;
+  total_delivery_time_minutes?: number | null;
+  average_delivery_time_minutes?: number | null;
+
+  efficiency_score?: number | null; // si usas esta columna
+  // derivado opcional que puedes calcular en front si lo prefieres
+  efficiency?: number | null;
 }
 
-/**
- * Coordenadas de Latitud y Longitud.
- */
-export interface LatLng {
-  lat: number;
-  lng: number;
-}
+// --------------------- MAP & UI ---------------------
 
-/**
- * Sugerencia de dirección para componentes de búsqueda.
- */
+export interface LatLng { lat: number; lng: number; }
+
 export interface AddressSuggestion {
   label: string;
   formatted_address?: string;
   pos?: LatLng;
 }
-
-// --- Props para Componentes de UI ---
 
 export interface AddressSearchProps {
   value: string;
@@ -135,16 +148,18 @@ export interface OrderCardProps {
   order: OrderRow;
   deliveries: DeliveryUser[];
   onAssign: (orderId: string, deliveryId: string) => Promise<void>;
-  onSaveLocation: (orderId: string, patch: Partial<Pick<OrderRow, 'delivery_address' | 'notes' | 'delivery_geo_lat' | 'delivery_geo_lng'>>) => Promise<void>;
+  onSaveLocation: (
+    orderId: string,
+    patch: Partial<
+      Pick<OrderRow, 'delivery_address' | 'notes' | 'delivery_geo_lat' | 'delivery_geo_lng'>
+    >
+  ) => Promise<void>;
   onConfirm: (orderId: string) => Promise<void>;
   onStatusChange: (orderId: string, newStatus: OrderStatus) => Promise<void>;
   compact?: boolean;
   showMap?: boolean;
 }
 
-/**
- * Estadísticas pre-calculadas para un repartidor.
- */
 export interface DeliveryStats {
   totalToday: number;
   completedToday: number;
@@ -153,9 +168,6 @@ export interface DeliveryStats {
   efficiency: number;
 }
 
-/**
- * Props para el componente DeliveryCard.
- */
 export interface DeliveryCardProps {
   delivery: DeliveryUser;
   stats: DeliveryStats;
@@ -163,6 +175,5 @@ export interface DeliveryCardProps {
   onReassignOrder?: (orderId: string, newDeliveryId: string) => void;
 }
 
-export interface EnrichedDeliveryRoute extends DeliveryRoute {
-  order_no: string | null;
-}
+// Si igual quieres mantener UIOrder, que sea alias:
+export type UIOrder = OrderRow;

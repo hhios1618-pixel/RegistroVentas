@@ -1,4 +1,3 @@
-// --- ARCHIVO: components/OrderTable.tsx (VERSIÓN CORREGIDA FINAL) ---
 import type { OrderRow } from '@/types';
 import { StatusBadge } from './StatusBadge';
 import { formatDistanceToNow, parseISO } from 'date-fns';
@@ -15,18 +14,22 @@ const formatTimeAgo = (dateStr: string | null | undefined) => {
   catch { return 'Fecha inválida'; }
 };
 
+const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString('es-BO') : '—');
+const fmtTime = (t?: string | null) => (t ? t.slice(0,5) : '');
+
 export function OrderTable({ orders, onRowClick }: Props) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm text-left text-white/90">
         <thead className="text-xs text-white/60 uppercase bg-black/20">
           <tr>
-            <th scope="col" className="px-6 py-3">Nº Pedido</th>
-            <th scope="col" className="px-6 py-3">Cliente</th>
-            <th scope="col" className="px-6 py-3">Repartidor</th>
-            <th scope="col" className="px-6 py-3 text-right">Monto Total</th>
-            <th scope="col" className="px-6 py-3 text-center">Estado</th>
-            <th scope="col" className="px-6 py-3">Antigüedad</th>
+            <th className="px-6 py-3">Nº Pedido</th>
+            <th className="px-6 py-3">Cliente</th>
+            <th className="px-6 py-3">Repartidor</th>
+            <th className="px-6 py-3">Entrega</th>
+            <th className="px-6 py-3 text-right">Monto</th>
+            <th className="px-6 py-3 text-center">Estado</th>
+            <th className="px-6 py-3">Antigüedad</th>
           </tr>
         </thead>
         <tbody>
@@ -42,9 +45,15 @@ export function OrderTable({ orders, onRowClick }: Props) {
                   <div className="font-medium">{order.customer_name || 'N/A'}</div>
                   <div className="text-gray-400 text-xs">{order.customer_phone}</div>
                 </td>
-                {/* ▼▼▼ CORRECCIÓN 1: USA 'seller' PARA EL NOMBRE DEL REPARTIDOR ▼▼▼ */}
                 <td className="px-6 py-4 text-gray-300">{order.seller || <span className="text-gray-500">Sin asignar</span>}</td>
-                {/* ▼▼▼ CORRECCIÓN 2: USA 'amount' PARA EL MONTO ▼▼▼ */}
+                <td className="px-6 py-4 text-gray-300">
+                  {fmtDate(order.delivery_date)}
+                  {(order.delivery_from || order.delivery_to) && (
+                    <div className="text-xs text-gray-400">
+                      {fmtTime(order.delivery_from)}{order.delivery_to ? ` – ${fmtTime(order.delivery_to)}` : ''}
+                    </div>
+                  )}
+                </td>
                 <td className="px-6 py-4 text-right font-semibold">Bs {order.amount?.toFixed(2) || '0.00'}</td>
                 <td className="px-6 py-4 text-center"><StatusBadge status={order.status} /></td>
                 <td className="px-6 py-4 text-gray-400">{formatTimeAgo(order.created_at)}</td>
@@ -52,7 +61,7 @@ export function OrderTable({ orders, onRowClick }: Props) {
             ))
           ) : (
             <tr>
-              <td colSpan={6} className="text-center py-12 text-white/50">
+              <td colSpan={7} className="text-center py-12 text-white/50">
                 No se encontraron pedidos.
               </td>
             </tr>

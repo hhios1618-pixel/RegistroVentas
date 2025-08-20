@@ -1,3 +1,55 @@
+/* -------------------------------- */
+/* Tailwind base setup              */
+/* -------------------------------- */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* -------------------------------- */
+/* Leaflet styles                   */
+/* -------------------------------- */
+@import "leaflet/dist/leaflet.css";
+
+/* 🔧 Parche crítico: evitar que los tiles se estiren o se corten */
+.leaflet-container img,
+.leaflet-container .leaflet-tile {
+  max-width: none !important;
+}
+
+/* Fuerza tamaño correcto de los tiles */
+.leaflet-container .leaflet-tile {
+  width: 256px !important;
+  height: 256px !important;
+  image-rendering: auto; /* mejora nitidez */
+  filter: none;          /* evita que un reset global meta blur o grayscale */
+}
+
+/* -------------------------------- */
+/* Estilos globales opcionales      */
+/* -------------------------------- */
+
+/* Scrollbars oscuros (opcional, más limpio con tu UI) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #1f2937; /* gris oscuro */
+}
+::-webkit-scrollbar-thumb {
+  background-color: #4b5563; /* gris medio */
+  border-radius: 4px;
+}
+
+/* Para asegurar que el body herede tu esquema oscuro */
+html, body {
+  @apply bg-gray-900 text-gray-200;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Fix de modal full height con mapa */
+.leaflet-container {
+  background: #111; /* color de fondo por si los tiles tardan en cargar */
+}

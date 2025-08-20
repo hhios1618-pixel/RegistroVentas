@@ -1,6 +1,7 @@
 // src/app/api/orders/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { geocodeFirstOSM, normalizeAddressForSantaCruz } from '@/lib/geocode';
 
 export const runtime = 'nodejs'; // Necesario para usar SERVICE_ROLE en Vercel
 
@@ -32,7 +33,7 @@ type Payload = {
 
   customer_name: string;
   payment_method?: 'EFECTIVO' | 'QR' | 'TRANSFERENCIA' | null;
-  address?: string | null;
+  address?: string | null;           // dirección libre opcional
   notes?: string | null;
   delivery_date?: string | null;     // 'YYYY-MM-DD'
   delivery_from?: string | null;     // 'HH:mm'
@@ -42,7 +43,8 @@ type Payload = {
   items: OrderItemIn[];
 };
 
-const money = (n: number): number => Number(((Math.round(n * 100) / 100)).toFixed(2));
+const money = (n: number): number =>
+  Number(((Math.round(n * 100) / 100)).toFixed(2));
 
 export async function POST(req: NextRequest) {
   try {
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest) {
         // nuevos
         customer_name,
         payment_method,
-        address,
+        address,           // guardas lo que te llega
         notes,
         delivery_date: delivery_date ? delivery_date : null,
         delivery_from: delivery_from ? delivery_from : null,
@@ -132,6 +134,28 @@ export async function POST(req: NextRequest) {
       await supabase.from('order_items').delete().eq('order_id', orderId);
       await supabase.from('orders').delete().eq('id', orderId);
       return NextResponse.json({ error: itemsErr.message }, { status: 500 });
+    }
+
+    // 3) GEO-CODIFICACIÓN AUTOMÁTICA (no bloqueante del flujo de creación)
+    // Usa address si llega, o destino como fallback. Normaliza a Santa Cruz.
+    try {
+      const text = normalizeAddressForSantaCruz(address?.trim() || destino?.trim() || null);
+      if (text) {
+        const hit = await geocodeFirstOSM(text);
+        if (hit) {
+          await supabase
+            .from('orders')
+            .update({
+              delivery_address: address?.trim() || destino?.trim() || hit.label || null,
+              delivery_geo_lat: hit.lat,
+              delivery_geo_lng: hit.lng,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', orderId);
+        }
+      }
+    } catch {
+      // no rompas la creación si Nominatim falla
     }
 
     return NextResponse.json(
