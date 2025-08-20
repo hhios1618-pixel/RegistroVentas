@@ -1,7 +1,7 @@
+// src/components/OrderDetailsModal.tsx
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useMemo, useState, useEffect } from 'react';
 import type { OrderRow, DeliveryUser, OrderStatus, LatLng, AddressSuggestion } from '@/types';
 
 import Button from './Button';
@@ -9,12 +9,9 @@ import { StatusBadge } from './StatusBadge';
 import LoadingSpinner from './LoadingSpinner';
 import { Card, CardContent } from './Card';
 
-const AddressSearch = dynamic(() => import('./AddressSearch'), { ssr: false, loading: () => <div className="w-full h-[42px] bg-black/50 border border-white/15 rounded-lg animate-pulse" /> });
-const MapPicker = dynamic(() => import('./MapPicker'), { ssr: false, loading: () => <div className="h-60 bg-black/20 rounded-lg animate-pulse flex items-center justify-center"><div className="text-white/40">Cargando mapa...</div></div> });
-
 import {
-  X, User, Phone, MapPin, Calendar, Clock, CreditCard,
-  Package, Save, CheckCircle2, AlertCircle, Eye, EyeOff, Navigation, RefreshCw, Image as ImageIcon
+  X, User, Phone, Calendar, Clock, CreditCard,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Navigation, RefreshCw, Image as ImageIcon
 } from 'lucide-react';
 
 type Props = {
@@ -22,7 +19,10 @@ type Props = {
   deliveries: DeliveryUser[];
   onClose: () => void;
   onAssignDelivery: (orderId: string, deliveryId: string) => Promise<void>;
-  onSaveLocation: (orderId: string, patch: Partial<Pick<OrderRow,'delivery_address'|'notes'|'delivery_geo_lat'|'delivery_geo_lng'>>) => Promise<void>;
+  onSaveLocation: (
+    orderId: string,
+    patch: Partial<Pick<OrderRow,'delivery_address'|'notes'|'delivery_geo_lat'|'delivery_geo_lng'>>
+  ) => Promise<void>;
   onConfirmDelivered: (orderId: string) => Promise<void>;
   onStatusChange: (orderId: string, newStatus: OrderStatus) => Promise<void>;
 };
@@ -34,7 +34,6 @@ async function signIfNeeded(pathOrUrl?: string | null): Promise<string | null> {
   if (!pathOrUrl) return null;
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
   if (!MEDIA_PRIVATE) return pathOrUrl;
-
   const res = await fetch('/api/media/sign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -45,13 +44,21 @@ async function signIfNeeded(pathOrUrl?: string | null): Promise<string | null> {
   return url ?? null;
 }
 
-// util para datetime-local
-function toLocalInputValue(dt: Date) {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-}
+// ---------- Utiles para picker de ventana ----------
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const HORAS = Array.from({length: 24}, (_,h)=>h);            // limita aquí si quieres p.ej. 8–21
+const MINUTOS = [0, 15, 30, 45];
 
-export function OrderDetailsModal({
+const daysInMonth = (year:number, monthIndex:number) =>
+  new Date(year, monthIndex + 1, 0).getDate();
+
+// arma "YYYY-MM-DDTHH:mm" en horario local (sin zona)
+const composeLocalISO = (y:number, m1:number, d:number, hh:number, mm:number) => {
+  const pad = (n:number)=>String(n).padStart(2,'0');
+  return `${y}-${pad(m1)}-${pad(d)}T${pad(hh)}:${pad(mm)}`;
+};
+
+export default function OrderDetailsModal({
   order,
   deliveries,
   onClose,
@@ -60,6 +67,7 @@ export function OrderDetailsModal({
   onConfirmDelivered,
   onStatusChange,
 }: Props) {
+  // --------- estado general ----------
   const [selectedDelivery, setSelectedDelivery] = useState<string>(order.delivery_assigned_to || '');
   const [address, setAddress] = useState(order.delivery_address || '');
   const [notes, setNotes] = useState(order.notes || '');
@@ -75,17 +83,32 @@ export function OrderDetailsModal({
   const [mapVisible, setMapVisible] = useState(true);
   const [activeTab, setActiveTab] = useState<'assign' | 'location' | 'delivery' | 'status' | 'media'>('assign');
 
-  // MEDIA
+  // --------- media ----------
   const [sellerUrl, setSellerUrl] = useState<string | null>(order.seller_photo_url ?? null);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(order.payment_proof_url ?? null);
   const [mediaLoading, setMediaLoading] = useState(false);
 
-  // --- Ventana Delivery (coordinación) ---
-  const [winDesde, setWinDesde] = useState<string>(''); // datetime-local
-  const [winHasta, setWinHasta] = useState<string>(''); // datetime-local
+  // --------- Ventana Delivery (Coordinación) con combos ----------
+  const now = new Date();
+  const fixedYear = now.getFullYear(); // Año fijo
+
+  const baseDate = order.delivery_date ? new Date(`${order.delivery_date}T00:00`) : now;
+  const [mes, setMes] = useState<number>(baseDate.getMonth()); // 0..11
+  const [dia, setDia] = useState<number>(baseDate.getDate());
+  const [desdeH, setDesdeH] = useState<number>(now.getHours());
+  const [desdeM, setDesdeM] = useState<number>(0);
+  const [hastaH, setHastaH] = useState<number>(Math.min(now.getHours() + 1, 23));
+  const [hastaM, setHastaM] = useState<number>(0);
   const [savingWindow, setSavingWindow] = useState(false);
   const [windowWarning, setWindowWarning] = useState<string | null>(null);
-  const [currentWindow, setCurrentWindow] = useState<{start?: string; end?: string; delivery_id?: string} | null>(null);
+  const [currentWindow, setCurrentWindow] = useState<{start?: string; end?: string} | null>(null);
+
+  // Ajusta día máximo al cambiar mes
+  useEffect(() => {
+    const max = daysInMonth(fixedYear, mes);
+    if (dia > max) setDia(max);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mes]);
 
   const assignedDelivery = useMemo(
     () => deliveries.find(d => d.id === (order.delivery_assigned_to || selectedDelivery)),
@@ -135,13 +158,6 @@ export function OrderDetailsModal({
     handleAction(() => onStatusChange(order.id, newStatus), `Estado cambiado a ${newStatus.replaceAll('_', ' ')}`);
   };
 
-  const handleConfirmDelivery = () => handleAction(() => onConfirmDelivered(order.id), '¡Entrega confirmada!');
-
-  const handleAddressPick = (s: AddressSuggestion) => {
-    setAddress(s.label);
-    if (s.pos) setPosition(s.pos);
-  };
-
   const refreshMedia = async () => {
     setMediaLoading(true);
     try {
@@ -154,62 +170,64 @@ export function OrderDetailsModal({
     }
   };
 
-  const canAutoloadMedia = activeTab === 'media' && (!sellerUrl || !/^https?:\/\//.test(sellerUrl) || !paymentUrl || !/^https?:\/\//.test(paymentUrl));
-  React.useEffect(() => {
-    if (canAutoloadMedia && !mediaLoading) { void refreshMedia(); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
-
-  // Cargar ventana existente cuando entro a "delivery"
-  React.useEffect(() => {
+  // Cargar ventana actual (si existe) al abrir pestaña “Entrega”
+  useEffect(() => {
     if (activeTab !== 'delivery') return;
     (async () => {
       try {
         const res = await fetch(`/api/orders/${order.id}/assign`, { method: 'GET' });
-        if (!res.ok) return;
         const json = await res.json();
         if (json?.assignment) {
           setCurrentWindow({
             start: json.assignment.window_start,
             end: json.assignment.window_end,
-            delivery_id: json.assignment.delivery_id,
           });
-          // prefill inputs
           const s = new Date(json.assignment.window_start);
           const e = new Date(json.assignment.window_end);
-          setWinDesde(toLocalInputValue(s));
-          setWinHasta(toLocalInputValue(e));
+          setMes(s.getMonth());
+          setDia(s.getDate());
+          setDesdeH(s.getHours());
+          setDesdeM(s.getMinutes());
+          setHastaH(e.getHours());
+          setHastaM(e.getMinutes());
         }
-      } catch { /* silent */ }
+      } catch { /* noop */ }
     })();
   }, [activeTab, order.id]);
 
-  const canSaveWindow = React.useMemo(() => {
-    if (!winDesde || !winHasta) return false;
-    const d = new Date(winDesde); const h = new Date(winHasta);
-    return h > d;
-  }, [winDesde, winHasta]);
+  const canSaveWindow = useMemo(() => {
+    const dISO = composeLocalISO(fixedYear, mes+1, dia, desdeH, desdeM);
+    const hISO = composeLocalISO(fixedYear, mes+1, dia, hastaH, hastaM);
+    return new Date(hISO) > new Date(dISO);
+  }, [fixedYear, mes, dia, desdeH, desdeM, hastaH, hastaM]);
 
   async function saveWindow() {
     setWindowWarning(null);
-    if (!canSaveWindow) return;
+    setError(null);
+
+    if (!selectedDelivery && !order.delivery_assigned_to) {
+      setError('Selecciona un repartidor en la pestaña “Asignación”.');
+      return;
+    }
+    if (!canSaveWindow) {
+      setError('El rango de horario es inválido.');
+      return;
+    }
+
     setSavingWindow(true);
     try {
-      const deliveryUserId = selectedDelivery || order.delivery_assigned_to || '';
-      if (!deliveryUserId) {
-        setSavingWindow(false);
-        setError('Selecciona primero un repartidor en la pestaña “Asignación”.');
-        return;
-      }
+      const deliveryUserId = selectedDelivery || order.delivery_assigned_to!;
+      const desdeISO = composeLocalISO(fixedYear, mes+1, dia, desdeH, desdeM);
+      const hastaISO = composeLocalISO(fixedYear, mes+1, dia, hastaH, hastaM);
 
       const res = await fetch(`/api/orders/${order.id}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           deliveryUserId,
-          desde: winDesde, // datetime-local (La Paz)
-          hasta: winHasta,
-          createdBy: deliveryUserId, // si tienes coordinador, reemplaza aquí
+          desde: desdeISO,
+          hasta: hastaISO,
+          createdBy: deliveryUserId,
         }),
       });
 
@@ -226,22 +244,18 @@ export function OrderDetailsModal({
         return;
       }
 
-      if (json.warnings && json.warnings.length) {
-        setWindowWarning(json.warnings[0]);
-      } else {
-        setWindowWarning(null);
-      }
-
-      setCurrentWindow({ start: new Date(winDesde).toISOString(), end: new Date(winHasta).toISOString(), delivery_id: deliveryUserId });
+      if (json.warnings?.length) setWindowWarning(json.warnings[0]);
+      setCurrentWindow({ start: new Date(desdeISO).toISOString(), end: new Date(hastaISO).toISOString() });
       setSuccess('Ventana de entrega guardada');
       setTimeout(() => setSuccess(null), 2500);
-    } catch (e: any) {
+    } catch (e:any) {
       setError(e?.message || 'Error al guardar ventana');
     } finally {
       setSavingWindow(false);
     }
   }
 
+  // -------- UI --------
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-gray-900 border border-white/20 rounded-lg shadow-xl w-full max-w-5xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -312,33 +326,15 @@ export function OrderDetailsModal({
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-white/90 mb-2">Dirección de Entrega</label>
-                <AddressSearch value={address} onChange={setAddress} onPick={handleAddressPick} placeholder="Buscar dirección o referencia..." />
+                {/* Si tienes AddressSearch/MapPicker, colócalos aquí; dejo mínimo para no romper */}
+                <input
+                  value={address}
+                  onChange={(e)=>setAddress(e.target.value)}
+                  placeholder="Dirección o referencia…"
+                  className="w-full bg-black/50 border border-white/15 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                />
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-sm font-medium text-white/90">Ubicación en Mapa</label>
-                  <Button variant="ghost" size="small" onClick={() => setMapVisible(!mapVisible)} className="flex items-center gap-1.5">
-                    {mapVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    {mapVisible ? 'Ocultar' : 'Mostrar'}
-                  </Button>
-                </div>
-                {mapVisible && (
-                  <div className="space-y-3">
-                    <MapPicker
-                      value={position}
-                      defaultCenter={{ lat: -17.7833, lng: -63.1821 }}
-                      zoom={13}
-                      onChange={setPosition}
-                      height={320}
-                    />
-                    <div className="flex items-center justify-between text-xs">
-                      {position
-                        ? <div className="flex items-center gap-2 text-white/60"><Navigation className="w-4 h-4" /><span>Lat: {position.lat.toFixed(6)} • Lng: {position.lng.toFixed(6)}</span></div>
-                        : <span className="text-white/60">Haz clic en el mapa para establecer coordenadas</span>}
-                    </div>
-                  </div>
-                )}
-              </div>
+
               <div>
                 <label className="block text-sm font-medium text-white/90 mb-2">Instrucciones de Entrega</label>
                 <textarea
@@ -349,16 +345,17 @@ export function OrderDetailsModal({
                   rows={4}
                 />
               </div>
+
               <div className="flex justify-end">
                 <Button onClick={handleSaveLocationClick} disabled={isProcessing} className="bg-green-600/80 hover:bg-green-600 flex items-center gap-2">
-                  {isProcessing ? <LoadingSpinner /> : <Save className="w-4 h-4" />}
+                  {isProcessing ? <LoadingSpinner /> : <CheckCircle2 className="w-4 h-4" />}
                   Guardar Ubicación
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Programación de Entrega */}
+          {/* Entrega */}
           {activeTab === 'delivery' && (
             <div className="space-y-4">
               {/* Disponibilidad del cliente (venta) — solo lectura */}
@@ -371,43 +368,66 @@ export function OrderDetailsModal({
                   </div>
                 </CardContent>
               </Card>
-              <p className="text-white/60 text-sm">* La coordinadora puede editar estos campos desde la creación/edición del pedido (si así lo definimos).</p>
+              <p className="text-white/60 text-sm">* La coordinadora puede editar estos campos desde la creación/edición del pedido.</p>
 
-              {/* Ventana Delivery (Coordinación) — editable */}
+              {/* Ventana Delivery (Coordinación) — combos */}
               <Card>
                 <CardContent className="p-4">
                   <h3 className="text-white font-semibold mb-3">Ventana Delivery (Coordinación)</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                    {/* DESDE */}
                     <div>
                       <label className="block text-xs text-white/60 mb-1">Desde</label>
-                      <input
-                        type="datetime-local"
-                        value={winDesde}
-                        onChange={(e) => setWinDesde(e.target.value)}
-                        className="w-full bg-gray-800 border border-white/20 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="grid grid-cols-4 gap-2">
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={mes} onChange={(e)=>setMes(Number(e.target.value))}>
+                          {MESES.map((m,idx)=><option key={m} value={idx}>{m}</option>)}
+                        </select>
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={dia} onChange={(e)=>setDia(Number(e.target.value))}>
+                          {Array.from({length: daysInMonth(fixedYear, mes)},(_,i)=>i+1).map(d=><option key={d} value={d}>{d}</option>)}
+                        </select>
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={desdeH} onChange={(e)=>setDesdeH(Number(e.target.value))}>
+                          {HORAS.map(h=><option key={h} value={h}>{String(h).padStart(2,'0')}</option>)}
+                        </select>
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={desdeM} onChange={(e)=>setDesdeM(Number(e.target.value))}>
+                          {MINUTOS.map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}</option>)}
+                        </select>
+                      </div>
                     </div>
+
+                    {/* HASTA */}
                     <div>
                       <label className="block text-xs text-white/60 mb-1">Hasta</label>
-                      <input
-                        type="datetime-local"
-                        value={winHasta}
-                        onChange={(e) => setWinHasta(e.target.value)}
-                        className="w-full bg-gray-800 border border-white/20 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="grid grid-cols-4 gap-2">
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={mes} onChange={(e)=>setMes(Number(e.target.value))}>
+                          {MESES.map((m,idx)=><option key={m} value={idx}>{m}</option>)}
+                        </select>
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={dia} onChange={(e)=>setDia(Number(e.target.value))}>
+                          {Array.from({length: daysInMonth(fixedYear, mes)},(_,i)=>i+1).map(d=><option key={d} value={d}>{d}</option>)}
+                        </select>
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={hastaH} onChange={(e)=>setHastaH(Number(e.target.value))}>
+                          {HORAS.map(h=><option key={h} value={h}>{String(h).padStart(2,'0')}</option>)}
+                        </select>
+                        <select className="bg-gray-800 border border-white/20 rounded-md px-2 py-2 text-white" value={hastaM} onChange={(e)=>setHastaM(Number(e.target.value))}>
+                          {MINUTOS.map(m=><option key={m} value={m}>{String(m).padStart(2,'0')}</option>)}
+                        </select>
+                      </div>
                     </div>
                   </div>
+
                   <div className="flex items-center justify-between">
                     <div className="text-xs text-white/60">
+                      Año: <b>{fixedYear}</b>{' '}
                       {currentWindow?.start && (
-                        <>Ventana actual: <b>{new Date(currentWindow.start).toLocaleString('es-BO')}</b> → <b>{new Date(currentWindow.end!).toLocaleString('es-BO')}</b></>
+                        <>• Actual: <b>{new Date(currentWindow.start).toLocaleString('es-BO')}</b> → <b>{new Date(currentWindow.end!).toLocaleString('es-BO')}</b></>
                       )}
                     </div>
                     <Button onClick={saveWindow} disabled={!canSaveWindow || savingWindow} className="flex items-center gap-2">
-                      {savingWindow ? <LoadingSpinner /> : <Save className="w-4 h-4" />}
+                      {savingWindow ? <LoadingSpinner /> : <Clock className="w-4 h-4" />}
                       Guardar Ventana
                     </Button>
                   </div>
+
                   {windowWarning && (
                     <div className="mt-3 text-xs text-amber-300 bg-amber-500/10 border border-amber-400/40 px-3 py-2 rounded-md flex items-center gap-2">
                       <AlertCircle className="w-4 h-4" />
@@ -419,7 +439,7 @@ export function OrderDetailsModal({
             </div>
           )}
 
-          {/* Media (fotos) */}
+          {/* Media */}
           {activeTab === 'media' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -455,10 +475,6 @@ export function OrderDetailsModal({
                   )}
                 </div>
               </div>
-
-              <p className="text-xs text-white/50">
-                Las imágenes se leen desde <code>order_media</code> (tipos: <code>product</code> y <code>payment_proof</code>) y se sirven del bucket <code>{MEDIA_BUCKET}</code>.
-              </p>
             </div>
           )}
 
@@ -498,8 +514,16 @@ export function OrderDetailsModal({
                     <option value="returned">Devuelto</option>
                     <option value="failed">Fallido</option>
                   </select>
+
                   {order.status === 'delivered' && (
-                    <Button onClick={handleConfirmDelivery} disabled={isProcessing} className="bg-emerald-600/80 hover:bg-emerald-600 flex items-center justify-center gap-2">
+                    <Button
+                      onClick={() => handleAction(
+                        () => onConfirmDelivered(order.id),
+                        '¡Entrega confirmada!'
+                      )}
+                      disabled={isProcessing}
+                      className="bg-emerald-600/80 hover:bg-emerald-600 flex items-center justify-center gap-2"
+                    >
                       {isProcessing ? <LoadingSpinner /> : <CheckCircle2 className="w-4 h-4" />}
                       Confirmar Entrega
                     </Button>
@@ -521,5 +545,3 @@ export function OrderDetailsModal({
     </div>
   );
 }
-
-export default OrderDetailsModal;
