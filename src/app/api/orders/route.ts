@@ -24,8 +24,15 @@ type OrderItemIn = {
 type Payload = {
   sale_type: 'unidad' | 'mayor';
   local: LocalOption;
+
+  // IMPORTANTE: hoy este suele ser el delivery (nombre). Lo mantenemos por compat.
   seller: string;
-  seller_role?: 'ASESOR' | 'PROMOTOR' | null;
+  seller_role?: 'ASESOR' | 'PROMOTOR' | 'delivery' | 'repartidor' | null;
+
+  // NUEVO: comercial explícito
+  sales_user_id?: string | null;
+  sales_role?: 'ASESOR' | 'PROMOTOR' | null;
+
   destino: string;
   customer_id: string;               // CI/NIT
   customer_phone?: string | null;
@@ -46,6 +53,70 @@ type Payload = {
 const money = (n: number): number =>
   Number(((Math.round(n * 100) / 100)).toFixed(2));
 
+function isOperativeRole(r?: string | null) {
+  if (!r) return false;
+  const s = r.trim().toLowerCase();
+  return s === 'delivery' || s === 'repartidor';
+}
+
+async function resolveSalesRole(
+  sales_user_id: string | null | undefined,
+  seller_role: string | null | undefined,
+  seller_name: string | null | undefined
+): Promise<string | null> {
+  // 1) Si viene sales_role explícito en body y NO es operativo, úsalo.
+  // (lo validamos afuera, para mantener la prioridad aquí simple)
+  // 2) Buscar por sales_user_id en people/users_profile
+  if (sales_user_id) {
+    // people
+    const p1 = await supabase
+      .from('people')
+      .select('role')
+      .eq('id', sales_user_id)
+      .maybeSingle();
+    if (!p1.error && p1.data?.role && !isOperativeRole(p1.data.role)) {
+      return p1.data.role;
+    }
+    // users_profile
+    const p2 = await supabase
+      .from('users_profile')
+      .select('role')
+      .eq('id', sales_user_id)
+      .maybeSingle();
+    if (!p2.error && p2.data?.role && !isOperativeRole(p2.data.role)) {
+      return p2.data.role;
+    }
+  }
+
+  // 3) Usar seller_role del body si vino y no es operativo
+  if (seller_role && !isOperativeRole(seller_role)) {
+    return seller_role;
+  }
+
+  // 4) Buscar por nombre de seller en people/users_profile (si vino)
+  const name = seller_name?.trim();
+  if (name) {
+    const n1 = await supabase
+      .from('people')
+      .select('role')
+      .eq('full_name', name)
+      .maybeSingle();
+    if (!n1.error && n1.data?.role && !isOperativeRole(n1.data.role)) {
+      return n1.data.role;
+    }
+    const n2 = await supabase
+      .from('users_profile')
+      .select('role')
+      .eq('full_name', name)
+      .maybeSingle();
+    if (!n2.error && n2.data?.role && !isOperativeRole(n2.data.role)) {
+      return n2.data.role;
+    }
+  }
+
+  return null; // comercial desconocido => se mostrará “Sin Rol” en el dashboard
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Payload | undefined;
@@ -54,7 +125,10 @@ export async function POST(req: NextRequest) {
     }
 
     const {
-      sale_type, local, seller, seller_role = 'ASESOR',
+      sale_type, local, seller,
+      seller_role = null,
+      sales_user_id = null,
+      sales_role = null, // opcional explícito
       destino, customer_id, customer_phone = null, numero = null,
       customer_name, payment_method = null, address = null, notes = null,
       delivery_date = null, delivery_from = null, delivery_to = null,
@@ -63,7 +137,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     // Validaciones mínimas
-    if (!seller?.trim()) return NextResponse.json({ error: 'Falta vendedor' }, { status: 400 });
+    if (!seller?.trim()) return NextResponse.json({ error: 'Falta vendedor (seller)' }, { status: 400 });
     if (!local) return NextResponse.json({ error: 'Falta local' }, { status: 400 });
     if (!destino?.trim()) return NextResponse.json({ error: 'Falta destino' }, { status: 400 });
     if (!customer_id?.trim()) return NextResponse.json({ error: 'Falta ID del cliente' }, { status: 400 });
@@ -87,17 +161,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const is_promoter = seller_role === 'PROMOTOR';
     const amount = money(items.reduce((s, it) => s + it.quantity * it.unit_price, 0));
     const items_summary = items.map(it => `${it.quantity} ${it.product_name}`).join('\n');
+
+    // --- Resolver rol comercial final ---
+    // Si vino sales_role y NO es operativo, úsalo; si no, trata de resolver.
+    const sales_role_final =
+      (sales_role && !isOperativeRole(sales_role) ? sales_role : null) ||
+      (await resolveSalesRole(sales_user_id, seller_role, seller));
+
+    // Mantener is_promoter por compat (derivado de seller_role del body, NO del comercial)
+    const is_promoter = (seller_role ?? '').toUpperCase() === 'PROMOTOR';
 
     // 1) ORDER
     const { data: orderIns, error: orderErr } = await supabase
       .from('orders')
       .insert([{
-        sale_type, local, seller, seller_role, is_promoter,
-        destino, customer_id, customer_phone, numero,
-        amount, sistema: !!sistema,
+        sale_type,
+        local,
+
+        // Compat (operativo):
+        seller: seller.trim(),
+        seller_role: seller_role ?? null,
+        is_promoter,
+
+        // NUEVO (comercial):
+        sales_user_id: sales_user_id ?? null,
+        sales_role: sales_role_final ?? null,
+
+        destino,
+        customer_id,
+        customer_phone,
+        numero,
+        amount,
+        sistema: !!sistema,
 
         // nuevos
         customer_name,
@@ -136,8 +233,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: itemsErr.message }, { status: 500 });
     }
 
-    // 3) GEO-CODIFICACIÓN AUTOMÁTICA (no bloqueante del flujo de creación)
-    // Usa address si llega, o destino como fallback. Normaliza a Santa Cruz.
+    // 3) GEO-CODIFICACIÓN AUTOMÁTICA (no bloqueante)
     try {
       const text = normalizeAddressForSantaCruz(address?.trim() || destino?.trim() || null);
       if (text) {
