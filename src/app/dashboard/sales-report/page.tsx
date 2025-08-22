@@ -746,12 +746,10 @@ export default function SalesReportPageRedesigned() {
           </ResponsiveContainer>
         </ChartContainer>
 
-    
-
-        
+  
 
 <ChartContainer title="Top 5 Vendedores">
-  <div className="space-y-2">
+  <div className="space-y-4">
     {topPerformers.map((performer, index) => {
       // --- Lógica para corregir el nombre y evitar mostrar el UUID ---
       const isUuid = /^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(performer.name);
@@ -762,30 +760,52 @@ export default function SalesReportPageRedesigned() {
       return (
         <motion.div
           key={`${performer.name}-${index}`}
-          className="relative w-full h-16 bg-gray-100 rounded-lg overflow-hidden group"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          className="bg-white rounded-xl shadow-md hover:shadow-xl border border-gray-200/80 transition-all duration-300 group overflow-hidden"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: index * 0.1 }}
         >
-          {/* Barra de rendimiento */}
-          <motion.div
-            className={`absolute top-0 left-0 h-full ${
-              index === 0 ? 'bg-gradient-to-r from-blue-400 to-indigo-500' : 'bg-gradient-to-r from-gray-300 to-gray-400'
-            } group-hover:from-blue-500 group-hover:to-indigo-600 transition-all duration-300`}
-            initial={{ width: 0 }}
-            animate={{ width: `${performanceRatio}%` }}
-            transition={{ duration: 1, ease: 'easeOut', delay: index * 0.1 + 0.2 }}
-          />
-
-          {/* Contenido superpuesto */}
-          <div className="absolute inset-0 px-4 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="text-sm font-bold text-white w-4 text-center">{index + 1}</span>
-              <p className="font-semibold text-white truncate">{displayName}</p>
+          <div className="flex items-center">
+            {/* --- Parte Izquierda: Barra y Nombre --- */}
+            <div className="relative flex-grow h-20 bg-gray-100 group-hover:bg-gray-200 transition-colors duration-300">
+              {/* Barra de rendimiento */}
+              <motion.div
+                className={`absolute top-0 left-0 h-full ${
+                  index === 0 ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 
+                  'bg-gradient-to-r from-gray-300 to-gray-400'
+                } group-hover:opacity-90 transition-opacity`}
+                initial={{ width: 0 }}
+                animate={{ width: `${performanceRatio}%` }}
+                transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+              />
+              
+              {/* Contenido superpuesto (nombre y ranking) */}
+              <div className="absolute inset-0 px-4 flex items-center">
+                <div className="flex items-center space-x-4">
+                  <span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold border-2 ${
+                    index === 0 ? 'bg-blue-600 border-white text-white' : 'bg-white border-gray-300 text-gray-600'
+                  }`}>
+                    {index + 1}
+                  </span>
+                  <p className="font-bold text-lg text-white text-shadow-md truncate">{displayName}</p>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-xs text-white/80 hidden md:inline">{performer.orders} órdenes</span>
-              <span className="text-lg font-bold text-white">${performer.revenue.toLocaleString()}</span>
+
+            {/* --- Parte Derecha: Panel de Estadísticas --- */}
+            <div className="flex-shrink-0 w-64 px-4 grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-xs text-gray-500">Órdenes</p>
+                <p className="text-md font-semibold text-gray-800">{performer.orders}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Promedio</p>
+                <p className="text-md font-semibold text-gray-800">${performer.avgOrderValue.toFixed(0)}</p>
+              </div>
+              <div className="border-l border-gray-200 pl-2">
+                <p className="text-xs text-gray-500">Total</p>
+                <p className="text-xl font-bold text-blue-700">${performer.revenue.toLocaleString()}</p>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -793,6 +813,13 @@ export default function SalesReportPageRedesigned() {
     })}
   </div>
 </ChartContainer>
+
+{/* Añade esta pequeña regla de CSS a tu archivo global de estilos o en un bloque <style jsx> si usas Next.js de esa forma */}
+<style jsx global>{`
+  .text-shadow-md {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+`}</style>
 
         <motion.div 
           className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
