@@ -26,32 +26,42 @@ interface QuickLinkCardProps {
   accentColor: string;
 }
 
-// Datos simulados para el mini-gráfico de ventas
 const salesData = [
   { h: 0, v: 5 }, { h: 2, v: 8 }, { h: 4, v: 10 }, { h: 6, v: 15 },
   { h: 8, v: 12 }, { h: 10, v: 20 }, { h: 12, v: 35 }, { h: 14, v: 40 },
   { h: 16, v: 55 }, { h: 18, v: 60 }, { h: 20, v: 75 }, { h: 22, v: 80 },
 ];
 
-// --- HOOK PERSONALIZADO PARA LA HORA ---
+// --- HOOK PERSONALIZADO PARA LA HORA (CORREGIDO PARA EVITAR ERROR DE HIDRATACIÓN) ---
 
 const useCurrentTime = () => {
-  const [currentTime, setCurrentTime] = useState(new Date());
+  // Inicializar en null para que el render del servidor y el cliente coincidan al principio
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
+    // Cuando el componente se monta en el cliente, establecemos la hora real
+    setCurrentTime(new Date());
+    // Y luego iniciamos el intervalo para que siga actualizándose
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, []); // El array vacío asegura que esto solo se ejecute una vez en el cliente
 
-  const formattedTime = useMemo(() => currentTime.toLocaleTimeString('es-BO', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  }), [currentTime]);
+  const formattedTime = useMemo(() => {
+    if (!currentTime) return '00:00:00'; // Placeholder mientras carga
+    return currentTime.toLocaleTimeString('es-BO', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  }, [currentTime]);
 
-  const formattedDate = useMemo(() => currentTime.toLocaleDateString('es-BO', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  }), [currentTime]);
+  const formattedDate = useMemo(() => {
+    if (!currentTime) return 'Cargando fecha...';
+    return currentTime.toLocaleDateString('es-BO', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+  }, [currentTime]);
 
   const greeting = useMemo(() => {
+    if (!currentTime) return 'Buenas';
     const hour = currentTime.getHours();
     if (hour < 12) return 'Buenos días';
     if (hour < 19) return 'Buenas tardes';
@@ -99,20 +109,24 @@ const StatCard: FC<StatCardProps> = ({ icon, title, value, description, chartDat
   </motion.div>
 );
 
+// --- COMPONENTE QUICKLINKCARD (CORREGIDO PARA CONSISTENCIA VISUAL) ---
 const QuickLinkCard: FC<QuickLinkCardProps> = ({ href, icon, title, description, shortcut, accentColor }) => (
-  <Link href={href} className="group block">
+  <Link href={href} className="group block h-full">
     <motion.div
-      className={`bg-slate-800/60 backdrop-blur-xl rounded-2xl p-8 border border-slate-700/80 transition-colors duration-300 hover:border-${accentColor}-500/80`}
+      className={`bg-slate-800/60 backdrop-blur-xl rounded-2xl p-8 border border-slate-700/80 transition-colors duration-300 hover:border-${accentColor}-500/80 flex flex-col h-full`}
       variants={{ hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } }}
       whileHover={{ y: -8, transition: { duration: 0.3 } }}
     >
       <div className="flex items-center justify-between mb-4">
+        {/* El ícono ahora hereda el color de su contenedor, asegurando consistencia */}
         <div className={`text-${accentColor}-400 group-hover:scale-110 transition-transform duration-300`}>{icon}</div>
         <kbd className="bg-slate-700/50 px-3 py-1 rounded-md text-sm font-mono text-slate-300">{shortcut}</kbd>
       </div>
-      <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
-      <p className="text-slate-400 leading-relaxed mb-6">{description}</p>
-      <div className={`flex items-center text-${accentColor}-400 group-hover:translate-x-1 transition-transform duration-300 font-medium`}>
+      <div className="flex-grow">
+        <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
+        <p className="text-slate-400 leading-relaxed">{description}</p>
+      </div>
+      <div className={`flex items-center text-${accentColor}-400 group-hover:translate-x-1 transition-transform duration-300 font-medium mt-6`}>
         <span>Acceder al panel</span>
         <ArrowRightIcon className="w-5 h-5 ml-2" />
       </div>
@@ -136,9 +150,11 @@ export default function FenixHomePage() {
   });
 
   const [todayStats, setTodayStats] = useState({
-    sales: 124,
-    orders: 38,
-    revenue: 12540
+    sales: 0,
+    orders: 0,
+    revenue: 0,
+    returns: 0,
+    returnsAmount: 0,
   });
 
   useEffect(() => {
@@ -156,19 +172,38 @@ export default function FenixHomePage() {
       }
     };
     
+    const fetchTodayReturns = async () => {
+        try {
+            const res = await fetch('/api/stats/today-returns');
+            if (!res.ok) return;
+            const data = await res.json();
+            setTodayStats(prev => ({ ...prev, returns: data.count, returnsAmount: data.amount }));
+        } catch (error) {
+            console.error("Error fetching today's returns:", error);
+        }
+    };
+
     fetchRate();
+    fetchTodayReturns(); 
+
     const rateInterval = setInterval(fetchRate, 60000);
+    const returnsInterval = setInterval(fetchTodayReturns, 30000);
 
     const statsInterval = setInterval(() => {
-      setTodayStats({
+      setTodayStats(prev => ({
+        ...prev,
         sales: Math.floor(Math.random() * 150) + 80,
         orders: Math.floor(Math.random() * 45) + 25,
         revenue: Math.floor(Math.random() * 15000) + 8000
-      });
+      }));
     }, 15000);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const shortcuts: Record<string, string> = { '1': '/logistica', '2': '/dashboard/sales-report' };
+      const shortcuts: Record<string, string> = { 
+        '1': '/logistica', 
+        '2': '/dashboard/sales-report',
+        '3': '/returns-dashboard'
+      };
       if (shortcuts[e.key]) window.location.href = shortcuts[e.key];
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -176,6 +211,7 @@ export default function FenixHomePage() {
     return () => {
       clearInterval(rateInterval);
       clearInterval(statsInterval);
+      clearInterval(returnsInterval);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -222,11 +258,11 @@ export default function FenixHomePage() {
         </motion.header>
 
         <motion.div 
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6"
           variants={containerVariants}
         >
           <motion.div
-            className="bg-slate-800/50 backdrop-blur-lg rounded-xl p-5 border border-slate-700/80"
+            className="bg-slate-800/50 backdrop-blur-lg rounded-xl p-5 border border-slate-700/80 lg:col-span-1"
             variants={{ hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } }}
           >
              <div className="flex items-center justify-between mb-3">
@@ -253,6 +289,12 @@ export default function FenixHomePage() {
             description="En proceso de entrega"
           />
           <StatCard 
+            icon={<ReturnIcon className="w-6 h-6"/>} 
+            title="Devoluciones de Hoy" 
+            value={todayStats.returns} 
+            description={`${todayStats.returnsAmount.toLocaleString('es-BO')} Bs devueltos`}
+          />
+          <StatCard 
             icon={<WalletIcon className="w-6 h-6"/>} 
             title="Ingresos (Bs)" 
             value={todayStats.revenue.toLocaleString('es-BO')} 
@@ -261,7 +303,7 @@ export default function FenixHomePage() {
         </motion.div>
 
         <motion.div 
-            className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6"
+            className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-6"
             variants={containerVariants}
         >
           <QuickLinkCard 
@@ -280,12 +322,22 @@ export default function FenixHomePage() {
             shortcut="2"
             accentColor="emerald"
           />
+          <QuickLinkCard 
+            href="/returns-dashboard"
+            icon={<ReturnIcon className="w-10 h-10"/>}
+            title="Dashboard de Devoluciones"
+            description="Analiza motivos, productos y montos de las devoluciones."
+            shortcut="3"
+            accentColor="rose"
+          />
         </motion.div>
 
         <motion.footer className="text-center pt-8" variants={itemVariants}>
-          <p className="text-slate-500 text-sm">
-            Atajos: <kbd className="bg-slate-700/50 px-2 py-1 rounded-md text-xs mx-1">1</kbd> Logística
-            <kbd className="bg-slate-700/50 px-2 py-1 rounded-md text-xs mx-1">2</kbd> Dashboard
+          <p className="text-slate-500 text-sm space-x-2">
+            <span>Atajos:</span>
+            <kbd className="bg-slate-700/50 px-2 py-1 rounded-md text-xs">1</kbd><span>Logística</span>
+            <kbd className="bg-slate-700/50 px-2 py-1 rounded-md text-xs">2</kbd><span>Dashboard Ventas</span>
+            <kbd className="bg-slate-700/50 px-2 py-1 rounded-md text-xs">3</kbd><span>Dashboard Devoluciones</span>
           </p>
           <p className="text-slate-600 text-xs mt-4">
             Fenix Store © 2025 - Sistema de Gestión Integral
@@ -296,11 +348,12 @@ export default function FenixHomePage() {
   );
 }
 
-// --- COLECCIÓN COMPLETA DE ICONOS SVG ---
-const TruckIcon = (props: IconProps) => <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.125-.504 1.125-1.125V14.25m-17.25 4.5v-1.875a3.375 3.375 0 013.375-3.375h9.75a3.375 3.375 0 013.375 3.375v1.875M16.5 12.75v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H3.75m12.75 15l-3.75-3.75M16.5 12.75L12.75 9" /></svg>;
-const ChartIcon = (props: IconProps) => <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 1.5m-5-11.25h15.25l-1.5 2.25-3-4.5-3 4.5-3-4.5-1.5 2.25v9.75" /></svg>;
-const DollarIcon = (props: IconProps) => <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.825-1.106-2.156 0-2.981.54-.403 1.22-.627 1.94-.627.65 0 1.25.204 1.77.552m-3.996 5.641l-.879.659c-1.171.879-3.07.879-4.242 0-1.172-.879-1.172-2.303 0-3.182C4.464 9.219 5.232 9 6 9c.725 0 1.45.22 2.003.659 1.106.825 1.106 2.156 0 2.981l-.879.659m7.992-1.228l.879-.659c1.171-.879 3.07-.879 4.242 0 1.172.879 1.172-2.303 0-3.182C19.536 9.219 18.768 9 18 9c-.725 0-1.45.22-2.003.659-1.106-.825-1.106-2.156 0-2.981l.879-.659" /></svg>;
-const TrendingUpIcon = (props: IconProps) => <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-3.75-.625m3.75.625V3.375" /></svg>;
-const PackageIcon = (props: IconProps) => <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>;
-const WalletIcon = (props: IconProps) => <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" /></svg>;
-const ArrowRightIcon = (props: IconProps) => <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>;
+// --- COLECCIÓN DE ICONOS SVG ESTANDARIZADOS Y COMPLETOS ---
+const TruckIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.125-.504 1.125-1.125V14.25m-17.25 4.5v-1.875a3.375 3.375 0 0 1 3.375-3.375h9.75a3.375 3.375 0 0 1 3.375 3.375v1.875M16.5 12.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H3.75m12.75 15-3.75-3.75M16.5 12.75 12.75 9" /></svg>);
+const ChartIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 1.5m-5-11.25h15.25l-1.5 2.25-3-4.5-3 4.5-3-4.5-1.5 2.25v9.75" /></svg>);
+const ReturnIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M9 15 3 9m0 0 6-6m-3 9h12a6 6 0 0 1 0 12h-3" /></svg>);
+const DollarIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.825-1.106-2.156 0-2.981.54-.403 1.22-.627 1.94-.627.65 0 1.25.204 1.77.552m-3.996 5.641-.879.659c-1.171.879-3.07.879-4.242 0-1.172-.879-1.172-2.303 0-3.182C4.464 9.219 5.232 9 6 9c.725 0 1.45.22 2.003.659 1.106.825 1.106 2.156 0 2.981l-.879.659m7.992-1.228.879-.659c1.171-.879 3.07-.879 4.242 0 1.172.879 1.172-2.303 0-3.182C19.536 9.219 18.768 9 18 9c-.725 0-1.45.22-2.003-.659-1.106-.825-1.106-2.156 0-2.981l.879-.659" /></svg>);
+const TrendingUpIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18 9 11.25l4.306 4.307a11.95 11.95 0 0 1 5.814-5.519l2.74-1.22m0 0-3.75-.625m3.75.625V3.375" /></svg>);
+const PackageIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>);
+const WalletIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9m18 0V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v3" /></svg>);
+const ArrowRightIcon = (props: IconProps) => (<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>);
