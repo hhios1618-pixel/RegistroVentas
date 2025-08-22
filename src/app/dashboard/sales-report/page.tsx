@@ -16,7 +16,7 @@ import {
   ImageIcon, CreditCard, X as XIcon
 } from 'lucide-react';
 
-// --- NUEVO: Componente Modal para visualizar imágenes ---
+// --- Componente Modal para visualizar imágenes ---
 const ImageModal = ({ src, onClose }: { src: string | null; onClose: () => void }) => {
   if (!src) return null;
   return (
@@ -46,9 +46,8 @@ const ImageModal = ({ src, onClose }: { src: string | null; onClose: () => void 
   );
 };
 
-// --- MODIFICADO: Definición de Tipos con los nuevos campos ---
+// --- Definición de Tipos ---
 interface SaleRecord {
-  // Campos existentes
   order_id: string;
   order_date: string;
   branch: string | null;
@@ -57,8 +56,6 @@ interface SaleRecord {
   product_name: string;
   quantity: number;
   subtotal: number;
-  
-  // Nuevos campos que debe enviar tu API
   delivery_date: string | null;
   product_image_url: string | null;
   payment_proof_url: string | null;
@@ -81,6 +78,7 @@ interface ChartContainerProps {
   children: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
+  fixedHeight?: boolean;
 }
 
 interface KPICardProps {
@@ -91,7 +89,7 @@ interface KPICardProps {
   color: string;
 }
 
-// Paleta de colores moderna tipo PowerBI
+// Paleta de colores
 const COLORS = {
   primary: '#0078D4',
   secondary: '#107C10',
@@ -114,7 +112,7 @@ const COLORS = {
 
 const CHART_COLORS = ['#0078D4', '#107C10', '#FF8C00', '#8764B8', '#00B7C3', '#F7630C', '#D13438'];
 
-// --- Componentes de UI Modernos ---
+// --- Componentes de UI ---
 const StatCard: React.FC<StatCardProps> = ({ title, value, icon, gradient, trend, subtitle, sparklineData }) => (
   <motion.div
     className="relative overflow-hidden bg-white rounded-2xl shadow-xl border border-gray-100 hover:shadow-2xl transition-all duration-300"
@@ -192,7 +190,7 @@ const KPICard: React.FC<KPICardProps> = ({ title, value, target, percentage, col
   </motion.div>
 );
 
-const ChartContainer: React.FC<ChartContainerProps> = ({ title, children, actions, className = '' }) => (
+const ChartContainer: React.FC<ChartContainerProps> = ({ title, children, actions, className = '', fixedHeight = true }) => (
   <motion.div 
     className={`bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden ${className}`}
     initial={{ opacity: 0, y: 30 }}
@@ -209,14 +207,13 @@ const ChartContainer: React.FC<ChartContainerProps> = ({ title, children, action
       </div>
     </div>
     <div className="p-6">
-      <div className="w-full h-[400px]">
+      <div className={`w-full ${fixedHeight ? 'h-[400px]' : ''}`}>
         {children}
       </div>
     </div>
   </motion.div>
 );
 
-// Componente de filtros avanzados
 const AdvancedFilters: React.FC<{
   filters: any;
   onFilterChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
@@ -291,7 +288,7 @@ const AdvancedFilters: React.FC<{
   </motion.div>
 );
 
-// --- Componente Principal del Dashboard Rediseñado ---
+// --- Componente Principal ---
 export default function SalesReportPageRedesigned() {
   const [allSales, setAllSales] = useState<SaleRecord[]>([]);
   const [filteredSales, setFilteredSales] = useState<SaleRecord[]>([]);
@@ -359,7 +356,6 @@ export default function SalesReportPageRedesigned() {
     averageOrderValue,
     salesByBranch,
     salesByProduct,
-    salesTrend,
     topPerformers,
     salesByRole,
     monthlyTrend,
@@ -378,27 +374,21 @@ export default function SalesReportPageRedesigned() {
     filteredSales.forEach(sale => {
       if (sale.branch) branches.add(sale.branch);
       if (sale.seller_role) roles.add(sale.seller_role);
-      
       branchSales[sale.branch || 'Sin Sucursal'] = (branchSales[sale.branch || 'Sin Sucursal'] || 0) + sale.subtotal;
-      
       if (!productSales[sale.product_name]) {
         productSales[sale.product_name] = { quantity: 0, revenue: 0 };
       }
       productSales[sale.product_name].quantity += sale.quantity;
       productSales[sale.product_name].revenue += sale.subtotal;
-      
       roleSales[sale.seller_role || 'Sin Rol'] = (roleSales[sale.seller_role || 'Sin Rol'] || 0) + sale.subtotal;
-      
       const sellerKey = sale.seller_full_name || 'Sin Vendedor';
       if (!sellerPerformance[sellerKey]) {
         sellerPerformance[sellerKey] = { revenue: 0, orders: 0 };
       }
       sellerPerformance[sellerKey].revenue += sale.subtotal;
       sellerPerformance[sellerKey].orders += 1;
-      
       const date = new Date(sale.order_date).toISOString().split('T')[0];
       dailySales[date] = (dailySales[date] || 0) + sale.subtotal;
-      
       const hour = new Date(sale.order_date).getHours();
       hourlySales[hour] = (hourlySales[hour] || 0) + sale.subtotal;
     });
@@ -418,34 +408,18 @@ export default function SalesReportPageRedesigned() {
         .map(([name, total]) => ({ name, total, percentage: (total / totalRev) * 100 }))
         .sort((a, b) => b.total - a.total),
       salesByProduct: Object.entries(productSales)
-        .map(([name, data]) => ({ 
-          name, 
-          quantity: data.quantity, 
-          revenue: data.revenue,
-          avgPrice: data.revenue / data.quantity 
-        }))
+        .map(([name, data]) => ({ name, quantity: data.quantity, revenue: data.revenue, avgPrice: data.revenue / data.quantity }))
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 8),
-      salesTrend: Object.entries(dailySales)
-        .map(([date, revenue]) => ({ date, revenue }))
-        .sort((a, b) => a.date.localeCompare(b.date)),
       topPerformers: Object.entries(sellerPerformance)
-        .map(([name, data]) => ({ 
-          name, 
-          revenue: data.revenue, 
-          orders: data.orders,
-          avgOrderValue: data.revenue / data.orders
-        }))
+        .map(([name, data]) => ({ name, revenue: data.revenue, orders: data.orders, avgOrderValue: data.revenue / data.orders }))
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5),
       salesByRole: Object.entries(roleSales)
         .map(([role, revenue]) => ({ role, revenue, percentage: (revenue / totalRev) * 100 }))
         .sort((a, b) => b.revenue - a.revenue),
       monthlyTrend: Object.entries(dailySales)
-        .map(([date, revenue]) => ({ 
-          date: new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }), 
-          revenue 
-        }))
+        .map(([date, revenue]) => ({ date: new Date(date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' }), revenue }))
         .slice(-30),
       conversionMetrics: {
         avgItemsPerOrder: totalOrd > 0 ? totalItems / totalOrd : 0,
@@ -517,7 +491,7 @@ export default function SalesReportPageRedesigned() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Zap className="text-red-600" size={32} />
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Error en el Dashboard</h2>
@@ -528,438 +502,413 @@ export default function SalesReportPageRedesigned() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <AnimatePresence>
-        {modalImageSrc && <ImageModal src={modalImageSrc} onClose={() => setModalImageSrc(null)} />}
-      </AnimatePresence>
-      
-      <motion.header 
-        className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl">
-                <Activity className="text-white" size={28} />
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <AnimatePresence>
+          {modalImageSrc && <ImageModal src={modalImageSrc} onClose={() => setModalImageSrc(null)} />}
+        </AnimatePresence>
+        
+        <motion.header 
+          className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl">
+                  <Activity className="text-white" size={28} />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+                    Dashboard Inteligente de Ventas
+                  </h1>
+                  <p className="text-gray-600 mt-1">Análisis avanzado y métricas en tiempo real</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
-                  Dashboard Inteligente de Ventas
-                </h1>
-                <p className="text-gray-600 mt-1">Análisis avanzado y métricas en tiempo real</p>
+              <div className="flex items-center space-x-4">
+                <motion.button
+                  onClick={exportToExcel}
+                  disabled={filteredSales.length === 0}
+                  className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Download size={20} />
+                  <span>Exportar Datos</span>
+                </motion.button>
               </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <motion.button
-                onClick={exportToExcel}
-                disabled={filteredSales.length === 0}
-                className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Download size={20} />
-                <span>Exportar Datos</span>
-              </motion.button>
             </div>
           </div>
-        </div>
-      </motion.header>
+        </motion.header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        <AdvancedFilters
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          uniqueBranches={uniqueBranches}
-          uniqueRoles={uniqueRoles}
-          onClearFilters={clearFilters}
-        />
+        <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+          <AdvancedFilters
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            uniqueBranches={uniqueBranches}
+            uniqueRoles={uniqueRoles}
+            onClearFilters={clearFilters}
+          />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard
-            title="Ingresos Totales"
-            value={`$${totalRevenue.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`}
-            icon={<DollarSign size={24} />}
-            gradient={COLORS.gradients.blue}
-            trend={12.5}
-            subtitle="vs. período anterior"
-          />
-          <StatCard
-            title="Órdenes Procesadas"
-            value={totalOrders.toLocaleString()}
-            icon={<ShoppingCart size={24} />}
-            gradient={COLORS.gradients.green}
-            trend={8.3}
-            subtitle={`${totalItemsSold} items vendidos`}
-          />
-          <StatCard
-            title="Valor Promedio/Orden"
-            value={`$${averageOrderValue.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`}
-            icon={<Target size={24} />}
-            gradient={COLORS.gradients.orange}
-            trend={-2.1}
-            subtitle="Ticket promedio"
-          />
-          <StatCard
-            title="Eficiencia de Ventas"
-            value={`${conversionMetrics.avgItemsPerOrder.toFixed(1)}`}
-            icon={<Award size={24} />}
-            gradient={COLORS.gradients.purple}
-            trend={15.7}
-            subtitle="items por orden"
-          />
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard
+              title="Ingresos Totales"
+              value={`$${totalRevenue.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`}
+              icon={<DollarSign size={24} />}
+              gradient={COLORS.gradients.blue}
+              trend={12.5}
+              subtitle="vs. período anterior"
+            />
+            <StatCard
+              title="Órdenes Procesadas"
+              value={totalOrders.toLocaleString()}
+              icon={<ShoppingCart size={24} />}
+              gradient={COLORS.gradients.green}
+              trend={8.3}
+              subtitle={`${totalItemsSold} items vendidos`}
+            />
+            <StatCard
+              title="Valor Promedio/Orden"
+              value={`$${averageOrderValue.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`}
+              icon={<Target size={24} />}
+              gradient={COLORS.gradients.orange}
+              trend={-2.1}
+              subtitle="Ticket promedio"
+            />
+            <StatCard
+              title="Eficiencia de Ventas"
+              value={`${conversionMetrics.avgItemsPerOrder.toFixed(1)}`}
+              icon={<Award size={24} />}
+              gradient={COLORS.gradients.purple}
+              trend={15.7}
+              subtitle="items por orden"
+            />
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <KPICard
-            title="Meta Mensual"
-            value={`$${totalRevenue.toLocaleString()}`}
-            target="$500,000"
-            percentage={(totalRevenue / 500000) * 100}
-            color={COLORS.primary}
-          />
-          <KPICard
-            title="Órdenes Objetivo"
-            value={totalOrders.toString()}
-            target="1,200"
-            percentage={(totalOrders / 1200) * 100}
-            color={COLORS.secondary}
-          />
-          <KPICard
-            title="Productos Vendidos"
-            value={totalItemsSold.toString()}
-            target="5,000"
-            percentage={(totalItemsSold / 5000) * 100}
-            color={COLORS.accent}
-          />
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <KPICard
+              title="Meta Mensual"
+              value={`$${totalRevenue.toLocaleString()}`}
+              target="$500,000"
+              percentage={(totalRevenue / 500000) * 100}
+              color={COLORS.primary}
+            />
+            <KPICard
+              title="Órdenes Objetivo"
+              value={totalOrders.toString()}
+              target="1,200"
+              percentage={(totalOrders / 1200) * 100}
+              color={COLORS.secondary}
+            />
+            <KPICard
+              title="Productos Vendidos"
+              value={totalItemsSold.toString()}
+              target="5,000"
+              percentage={(totalItemsSold / 5000) * 100}
+              color={COLORS.accent}
+            />
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <ChartContainer title="Tendencia de Ingresos" className="lg:col-span-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <ChartContainer title="Tendencia de Ingresos" className="lg:col-span-2">
+              <ResponsiveContainer>
+                <AreaChart data={monthlyTrend}>
+                  <defs>
+                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="date" fontSize={12} stroke="#666" />
+                  <YAxis fontSize={12} stroke="#666" tickFormatter={(value) => `$${(value/1000).toFixed(0)}K`} />
+                  <Tooltip 
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ingresos']}
+                    labelStyle={{ color: '#333' }}
+                    contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="revenue" 
+                    stroke={COLORS.primary} 
+                    fillOpacity={1} 
+                    fill="url(#revenueGradient)"
+                    strokeWidth={3}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+
+            <ChartContainer title="Ventas por Rol">
+              <ResponsiveContainer>
+                <RadialBarChart cx="50%" cy="50%" innerRadius="30%" outerRadius="90%" data={salesByRole}>
+                  <RadialBar 
+                    dataKey="percentage" 
+                    cornerRadius={10} 
+                    fill={COLORS.primary}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [`${value.toFixed(1)}%`, 'Participación']}
+                    contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
+                  />
+                  <Legend />
+                </RadialBarChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <ChartContainer title="Mapa de Productos por Ingresos">
+              <ResponsiveContainer>
+                <Treemap
+                  data={salesByProduct}
+                  dataKey="revenue"
+                  stroke="#fff"
+                  fill={COLORS.secondary}
+                >
+                  <Tooltip 
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ingresos']}
+                    contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
+                  />
+                </Treemap>
+              </ResponsiveContainer>
+            </ChartContainer>
+
+            <ChartContainer title="Ventas por Hora del Día">
+              <ResponsiveContainer>
+                <LineChart data={performanceByHour}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="hour" fontSize={12} stroke="#666" />
+                  <YAxis fontSize={12} stroke="#666" tickFormatter={(value) => `$${(value/1000).toFixed(0)}K`} />
+                  <Tooltip 
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ingresos']}
+                    contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="revenue" 
+                    stroke={COLORS.accent} 
+                    strokeWidth={3}
+                    dot={{ fill: COLORS.accent, strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6, stroke: COLORS.accent, strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+          </div>
+
+          <ChartContainer title="Análisis Comparativo por Sucursal">
             <ResponsiveContainer>
-              <AreaChart data={monthlyTrend}>
-                <defs>
-                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1}/>
-                  </linearGradient>
-                </defs>
+              <ComposedChart data={salesByBranch}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" fontSize={12} stroke="#666" />
-                <YAxis fontSize={12} stroke="#666" tickFormatter={(value) => `$${(value/1000).toFixed(0)}K`} />
+                <XAxis dataKey="name" fontSize={12} stroke="#666" />
+                <YAxis yAxisId="left" fontSize={12} stroke="#666" tickFormatter={(value) => `$${(value/1000).toFixed(0)}K`} />
+                <YAxis yAxisId="right" orientation="right" fontSize={12} stroke="#666" tickFormatter={(value) => `${value.toFixed(0)}%`} />
                 <Tooltip 
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ingresos']}
-                  labelStyle={{ color: '#333' }}
-                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke={COLORS.primary} 
-                  fillOpacity={1} 
-                  fill="url(#revenueGradient)"
-                  strokeWidth={3}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-
-          <ChartContainer title="Ventas por Rol">
-            <ResponsiveContainer>
-              <RadialBarChart cx="50%" cy="50%" innerRadius="30%" outerRadius="90%" data={salesByRole}>
-                <RadialBar 
-                  dataKey="percentage" 
-                  cornerRadius={10} 
-                  fill={COLORS.primary}
-                />
-                <Tooltip 
-                  formatter={(value: number) => [`${value.toFixed(1)}%`, 'Participación']}
+                  formatter={(value: number, name: string) => [
+                    name === 'total' ? `$${value.toLocaleString()}` : `${value.toFixed(1)}%`,
+                    name === 'total' ? 'Ingresos' : 'Participación'
+                  ]}
                   contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
                 />
                 <Legend />
-              </RadialBarChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <ChartContainer title="Mapa de Productos por Ingresos">
-            <ResponsiveContainer>
-              <Treemap
-                data={salesByProduct}
-                dataKey="revenue"
-                
-                stroke="#fff"
-                fill={COLORS.secondary}
-              >
-                <Tooltip 
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ingresos']}
-                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
-                />
-              </Treemap>
+                <Bar yAxisId="left" dataKey="total" name="Ingresos" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="percentage" name="% Participación" stroke={COLORS.accent} strokeWidth={3} />
+              </ComposedChart>
             </ResponsiveContainer>
           </ChartContainer>
 
-          <ChartContainer title="Ventas por Hora del Día">
-            <ResponsiveContainer>
-              <LineChart data={performanceByHour}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="hour" fontSize={12} stroke="#666" />
-                <YAxis fontSize={12} stroke="#666" tickFormatter={(value) => `$${(value/1000).toFixed(0)}K`} />
-                <Tooltip 
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ingresos']}
-                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke={COLORS.accent} 
-                  strokeWidth={3}
-                  dot={{ fill: COLORS.accent, strokeWidth: 2, r: 4 }}
-                  activeDot={{ r: 6, stroke: COLORS.accent, strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <ChartContainer title="Top 5 Vendedores" fixedHeight={false}>
+            <div className="space-y-2">
+              {topPerformers.map((performer, index) => {
+                const isUuid = /^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(performer.name);
+                const displayName = isUuid ? 'Vendedor Desconocido' : performer.name;
+
+                return (
+                  <motion.div
+                    key={`${performer.name}-${index}`}
+                    className="bg-white rounded-xl p-3 transition-all duration-300 shadow-sm hover:shadow-lg border border-gray-200/80"
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.05 }}
+                  >
+                    <div className="flex items-center justify-between space-x-3">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
+                        <span className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-white font-bold text-xs ${
+                          index === 0 ? 'bg-gradient-to-br from-yellow-400 to-amber-500' :
+                          index === 1 ? 'bg-gradient-to-br from-gray-400 to-gray-500' :
+                          index === 2 ? 'bg-gradient-to-br from-orange-400 to-amber-600' :
+                          'bg-gradient-to-br from-blue-500 to-indigo-600'
+                        }`}>
+                          {index + 1}
+                        </span>
+                        <p className="text-sm font-semibold text-gray-800 truncate" title={displayName}>
+                          {displayName}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-4 text-right">
+                        <div className="hidden sm:block">
+                          <p className="text-xs text-gray-500">Órdenes</p>
+                          <p className="text-sm font-medium text-gray-800">{performer.orders}</p>
+                        </div>
+                        <div className="hidden md:block">
+                          <p className="text-xs text-gray-500">Promedio</p>
+                          <p className="text-sm font-medium text-gray-800">${performer.avgOrderValue.toFixed(0)}</p>
+                        </div>
+                        <div className="w-24">
+                          <p className="text-xs text-gray-500">Total Ingresos</p>
+                          <p className="text-base font-bold text-blue-700">${performer.revenue.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
           </ChartContainer>
-        </div>
 
-        <ChartContainer title="Análisis Comparativo por Sucursal">
-          <ResponsiveContainer>
-            <ComposedChart data={salesByBranch}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" fontSize={12} stroke="#666" />
-              <YAxis yAxisId="left" fontSize={12} stroke="#666" tickFormatter={(value) => `$${(value/1000).toFixed(0)}K`} />
-              <YAxis yAxisId="right" orientation="right" fontSize={12} stroke="#666" tickFormatter={(value) => `${value.toFixed(0)}%`} />
-              <Tooltip 
-                formatter={(value: number, name: string) => [
-                  name === 'total' ? `$${value.toLocaleString()}` : `${value.toFixed(1)}%`,
-                  name === 'total' ? 'Ingresos' : 'Participación'
-                ]}
-                contentStyle={{ backgroundColor: 'white', border: '1px solid #e0e0e0', borderRadius: '8px' }}
-              />
-              <Legend />
-              <Bar yAxisId="left" dataKey="total" name="Ingresos" fill={COLORS.primary} radius={[4, 4, 0, 0]} />
-              <Line yAxisId="right" type="monotone" dataKey="percentage" name="% Participación" stroke={COLORS.accent} strokeWidth={3} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-
-  
-
-<ChartContainer title="Top 5 Vendedores">
-  <div className="space-y-4">
-    {topPerformers.map((performer, index) => {
-      // --- Lógica para corregir el nombre y evitar mostrar el UUID ---
-      const isUuid = /^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(performer.name);
-      const displayName = isUuid ? 'Vendedor Desconocido' : performer.name;
-      const topPerformerRevenue = topPerformers[0]?.revenue || 1;
-      const performanceRatio = (performer.revenue / topPerformerRevenue) * 100;
-
-      return (
-        <motion.div
-          key={`${performer.name}-${index}`}
-          className="bg-white rounded-xl shadow-md hover:shadow-xl border border-gray-200/80 transition-all duration-300 group overflow-hidden"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: index * 0.1 }}
-        >
-          <div className="flex items-center">
-            {/* --- Parte Izquierda: Barra y Nombre --- */}
-            <div className="relative flex-grow h-20 bg-gray-100 group-hover:bg-gray-200 transition-colors duration-300">
-              {/* Barra de rendimiento */}
-              <motion.div
-                className={`absolute top-0 left-0 h-full ${
-                  index === 0 ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : 
-                  'bg-gradient-to-r from-gray-300 to-gray-400'
-                } group-hover:opacity-90 transition-opacity`}
-                initial={{ width: 0 }}
-                animate={{ width: `${performanceRatio}%` }}
-                transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
-              />
-              
-              {/* Contenido superpuesto (nombre y ranking) */}
-              <div className="absolute inset-0 px-4 flex items-center">
-                <div className="flex items-center space-x-4">
-                  <span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold border-2 ${
-                    index === 0 ? 'bg-blue-600 border-white text-white' : 'bg-white border-gray-300 text-gray-600'
-                  }`}>
-                    {index + 1}
-                  </span>
-                  <p className="font-bold text-lg text-white text-shadow-md truncate">{displayName}</p>
+          <motion.div 
+            className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Eye className="text-blue-600" size={24} />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-800">Detalle de Transacciones</h3>
+                    <p className="text-sm text-gray-600">
+                      Mostrando {Math.min(filteredSales.length, 50)} de {filteredSales.length} transacciones
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-
-            {/* --- Parte Derecha: Panel de Estadísticas --- */}
-            <div className="flex-shrink-0 w-64 px-4 grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-xs text-gray-500">Órdenes</p>
-                <p className="text-md font-semibold text-gray-800">{performer.orders}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Promedio</p>
-                <p className="text-md font-semibold text-gray-800">${performer.avgOrderValue.toFixed(0)}</p>
-              </div>
-              <div className="border-l border-gray-200 pl-2">
-                <p className="text-xs text-gray-500">Total</p>
-                <p className="text-xl font-bold text-blue-700">${performer.revenue.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      );
-    })}
-  </div>
-</ChartContainer>
-
-{/* Añade esta pequeña regla de CSS a tu archivo global de estilos o en un bloque <style jsx> si usas Next.js de esa forma */}
-<style jsx global>{`
-  .text-shadow-md {
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
-`}</style>
-
-        <motion.div 
-          className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-        >
-          <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Eye className="text-blue-600" size={24} />
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800">Detalle de Transacciones</h3>
-                  <p className="text-sm text-gray-600">
-                    Mostrando {Math.min(filteredSales.length, 50)} de {filteredSales.length} transacciones
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                <tr>
-                  {['Venta', 'Entrega', 'Vendedor', 'Producto', 'Tipo', 'Detalles', 'Subtotal'].map(header => (
-                    <th key={header} className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                <AnimatePresence>
-                  {filteredSales.slice(0, 50).map((sale, index) => (
-                    <motion.tr
-                      key={`${sale.order_id}-${sale.product_name}-${index}`}
-                      className="hover:bg-blue-50/50 transition-colors"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.3, delay: index * 0.02 }}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {new Date(sale.order_date).toLocaleDateString('es-ES')}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(sale.order_date).toLocaleTimeString('es-ES', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {sale.delivery_date ? (
-                          <div className="text-sm font-medium text-gray-700">
-                            {new Date(sale.delivery_date).toLocaleDateString('es-ES')}
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+                  <tr>
+                    {['Venta', 'Entrega', 'Vendedor', 'Producto', 'Tipo', 'Detalles', 'Subtotal'].map(header => (
+                      <th key={header} className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  <AnimatePresence>
+                    {filteredSales.slice(0, 50).map((sale, index) => (
+                      <motion.tr
+                        key={`${sale.order_id}-${sale.product_name}-${index}`}
+                        className="hover:bg-blue-50/50 transition-colors"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.3, delay: index * 0.02 }}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {new Date(sale.order_date).toLocaleDateString('es-ES')}
                           </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">Pendiente</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                            <span className="text-white text-xs font-bold">
-                              {(sale.seller_full_name || 'N/A').charAt(0)}
-                            </span>
+                          <div className="text-xs text-gray-500">
+                            {new Date(sale.order_date).toLocaleTimeString('es-ES', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
                           </div>
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {sale.seller_full_name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {sale.delivery_date ? (
+                            <div className="text-sm font-medium text-gray-700">
+                              {new Date(sale.delivery_date).toLocaleDateString('es-ES')}
                             </div>
-                            <div className="text-xs text-gray-500">{sale.seller_role || 'Sin rol'}</div>
+                          ) : (
+                            <span className="text-xs text-gray-400">Pendiente</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">
+                                {(sale.seller_full_name || 'N/A').charAt(0)}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {sale.seller_full_name || 'N/A'}
+                              </div>
+                              <div className="text-xs text-gray-500">{sale.seller_role || 'Sin rol'}</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900 font-medium">{sale.product_name}</div>
-                        <div className="text-xs text-gray-500">{sale.branch || 'Sin sucursal'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap space-y-1">
-                        {sale.sale_type && (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            sale.sale_type === 'Por Mayor' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
-                          }`}>
-                            {sale.sale_type}
-                          </span>
-                        )}
-                        {sale.order_type && (
-                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            sale.order_type === 'Encomienda' ? 'bg-orange-100 text-orange-800' : 'bg-sky-100 text-sky-800'
-                          }`}>
-                            {sale.order_type}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center space-x-3">
-                           <span className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-700">
-                            {sale.quantity}
-                          </span>
-                          <button 
-                            onClick={() => setModalImageSrc(sale.product_image_url)} 
-                            disabled={!sale.product_image_url} 
-                            className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            title="Ver foto del producto"
-                           >
-                            <ImageIcon className="w-5 h-5 text-gray-600" />
-                          </button>
-                          <button 
-                            onClick={() => setModalImageSrc(sale.payment_proof_url)} 
-                            disabled={!sale.payment_proof_url}
-                            className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            title="Ver comprobante de pago"
-                          >
-                            <CreditCard className="w-5 h-5 text-gray-600" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="text-lg font-bold text-gray-900">
-                          ${sale.subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
-              </tbody>
-            </table>
-          </div>
-          {filteredSales.length > 50 && (
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
-              <p className="text-sm text-gray-600 text-center">
-                Mostrando las primeras 50 transacciones. Usa los filtros para refinar los resultados.
-              </p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900 font-medium">{sale.product_name}</div>
+                          <div className="text-xs text-gray-500">{sale.branch || 'Sin sucursal'}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap space-y-1">
+                          {sale.sale_type && (
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              sale.sale_type === 'Por Mayor' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
+                            }`}>
+                              {sale.sale_type}
+                            </span>
+                          )}
+                          {sale.order_type && (
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              sale.order_type === 'Encomienda' ? 'bg-orange-100 text-orange-800' : 'bg-sky-100 text-sky-800'
+                            }`}>
+                              {sale.order_type}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-3">
+                            <span className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-700">
+                              {sale.quantity}
+                            </span>
+                            <button 
+                              onClick={() => setModalImageSrc(sale.product_image_url)} 
+                              disabled={!sale.product_image_url} 
+                              className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                              title="Ver foto del producto"
+                            >
+                              <ImageIcon className="w-5 h-5 text-gray-600" />
+                            </button>
+                            <button 
+                              onClick={() => setModalImageSrc(sale.payment_proof_url)} 
+                              disabled={!sale.payment_proof_url}
+                              className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                              title="Ver comprobante de pago"
+                            >
+                              <CreditCard className="w-5 h-5 text-gray-600" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="text-lg font-bold text-gray-900">
+                            ${sale.subtotal.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </tbody>
+              </table>
             </div>
-          )}
-        </motion.div>
+            {filteredSales.length > 50 && (
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+                <p className="text-sm text-gray-600 text-center">
+                  Mostrando las primeras 50 transacciones. Usa los filtros para refinar los resultados.
+                </p>
+              </div>
+            )}
+          </motion.div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
