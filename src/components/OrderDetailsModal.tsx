@@ -1,4 +1,4 @@
-// src/components/OrderDetailsModal.tsx
+// RUTA: src/components/OrderDetailsModal.tsx
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -26,6 +26,20 @@ type Props = {
   ) => Promise<void>;
   onConfirmDelivered: (orderId: string) => Promise<void>;
   onStatusChange: (orderId: string, newStatus: OrderStatus) => Promise<void>;
+  error: string | null;
+  onClearError: () => void;
+};
+
+// Mapeo centralizado de estados para homologar nombres
+const STATUS_MAP: Record<OrderStatus, string> = {
+  pending: 'Pendiente',
+  assigned: 'Asignado',
+  out_for_delivery: 'En Ruta',
+  delivered: 'Entregado',
+  confirmed: 'Confirmado',
+  cancelled: 'Cancelado',
+  returned: 'Devuelto',
+  failed: 'Fallido',
 };
 
 // ---------- Utiles para picker de ventana ----------
@@ -45,6 +59,8 @@ export default function OrderDetailsModal({
   order, deliveries, onClose,
   onAssignDelivery, onSaveLocation,
   onConfirmDelivered, onStatusChange,
+  error: externalError,
+  onClearError,
 }: Props) {
   // --------- estado general ----------
   const [selectedDelivery, setSelectedDelivery] = useState<string>(order.delivery_assigned_to || '');
@@ -61,15 +77,22 @@ export default function OrderDetailsModal({
   const [success, setSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'assign' | 'location' | 'delivery' | 'status' | 'media'>('media');
   
+  // --------- Lógica para manejar errores externos ----------
+  useEffect(() => {
+    if (externalError) {
+      setError(externalError);
+      onClearError();
+    }
+  }, [externalError, onClearError]);
+  
   // --------- Lógica mejorada para Media ----------
   const [mediaLoading, setMediaLoading] = useState(false);
 
-  // Extraemos las URLs únicas de las imágenes de los productos
   const productImages = useMemo(() => {
     const images = (order.order_items ?? [])
       .map(item => item.image_url)
       .filter((url): url is string => !!url);
-    return [...new Set(images)]; // Usamos Set para evitar duplicados
+    return [...new Set(images)];
   }, [order.order_items]);
   
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -78,7 +101,6 @@ export default function OrderDetailsModal({
   const handleNextImage = () => setCurrentImageIndex(prev => (prev + 1) % productImages.length);
   const handlePrevImage = () => setCurrentImageIndex(prev => (prev - 1 + productImages.length) % productImages.length);
   
-  // Si la lista de imágenes cambia (ej. por un refresh), reseteamos el índice
   useEffect(() => {
       setCurrentImageIndex(0);
   }, [productImages]);
@@ -149,7 +171,8 @@ export default function OrderDetailsModal({
 
   const handleStatusSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value as OrderStatus;
-    handleAction(() => onStatusChange(order.id, newStatus), `Estado cambiado a ${newStatus.replaceAll('_', ' ')}`);
+    const successMessage = `Estado cambiado a "${STATUS_MAP[newStatus]}"`;
+    handleAction(() => onStatusChange(order.id, newStatus), successMessage);
   };
 
   useEffect(() => {
@@ -475,14 +498,15 @@ export default function OrderDetailsModal({
                     className="w-full bg-gray-800 border border-white/20 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={isProcessing}
                   >
-                    <option value="pending">Pendiente</option>
-                    <option value="assigned">Asignado</option>
-                    <option value="out_for_delivery">En Ruta</option>
-                    <option value="delivered">Entregado</option>
-                    <option value="confirmed">Confirmado</option>
-                    <option value="cancelled">Cancelado</option>
-                    <option value="returned">Devuelto</option>
-                    <option value="failed">Fallido</option>
+                    {Object.entries(STATUS_MAP).map(([statusKey, statusLabel]) => (
+                      <option
+                        key={statusKey}
+                        value={statusKey}
+                        disabled={order.status === statusKey}
+                      >
+                        {statusLabel}
+                      </option>
+                    ))}
                   </select>
 
                   {order.status === 'delivered' && (

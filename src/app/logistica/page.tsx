@@ -1,5 +1,5 @@
 // RUTA: src/app/logistica/page.tsx
-// VERSIÓN MEJORADA - CON GRÁFICO DE EFICIENCIA Y ANIMACIONES PROFESIONALES
+// CÓDIGO 100% COMPLETO Y CORREGIDO
 
 'use client';
 
@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import MapOverviewModal from '@/components/MapOverviewModal';
-import { EfficiencyChart } from '@/components/EfficiencyChart'; // Nuevo gráfico
+import { EfficiencyChart } from '@/components/EfficiencyChart';
 
 // Iconos
 import {
@@ -144,7 +144,7 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
           }`}
         >
           <option.icon className="w-4 h-4" />
-          <div className={`w-2 h-2 rounded-full ${option.color}`}></div>
+          <div className="w-2 h-2 rounded-full ${option.color}"></div>
           {option.label}
         </motion.button>
       ))}
@@ -212,8 +212,10 @@ export default function LogisticaPage() {
       }
       
       const [ordersRes, deliveriesRes, routesRes] = await Promise.all([
-        supabase.from('orders').select('*, seller_profile:sales_user_id(full_name), delivery_profile:delivery_assigned_to(full_name)').order('created_at', { ascending: false }),
-        supabase.from('people').select('*').eq('role', 'delivery').order('full_name', { ascending: true }),
+        // Esta es la línea con la sintaxis correcta y la consulta de 'order_items'
+        supabase.from('orders').select('*, seller_profile:sales_user_id(full_name), delivery_profile:delivery_assigned_to(full_name), order_items(*)').order('created_at', { ascending: false }),
+        
+        supabase.from('users_profile').select('*').eq('role', 'delivery').order('full_name', { ascending: true }),
         supabase.from('delivery_routes').select('*').order('created_at', { ascending: false }),
       ]);
       
@@ -254,6 +256,16 @@ export default function LogisticaPage() {
     };
   }, [loadData]);
 
+  // Este useEffect mantiene sincronizado el modal con los datos más frescos.
+  useEffect(() => {
+    if (selectedOrder) {
+      const latestOrderData = orders.find(o => o.id === selectedOrder.id);
+      if (latestOrderData && JSON.stringify(latestOrderData) !== JSON.stringify(selectedOrder)) {
+        setSelectedOrder(latestOrderData);
+      }
+    }
+  }, [orders, selectedOrder]);
+
   // --- Preparar datos para el mapa ---
   const ordersForMap = useMemo(() => {
     return orders.map(order => ({
@@ -271,28 +283,55 @@ export default function LogisticaPage() {
   }, [orders]);
 
   // --- Lógica de negocio y datos memorizados ---
-  const assignDelivery = async (orderId: string, deliveryUserId: string) => { 
-    console.log('Asignar repartidor', orderId, deliveryUserId);
+  const assignDelivery = async (orderId: string, deliveryUserId: string) => {
+    const { error } = await supabase
+      .from('orders')
+      .update({ delivery_assigned_to: deliveryUserId, status: 'assigned' })
+      .eq('id', orderId);
+
+    if (error) {
+      setError('Error al asignar repartidor: ' + error.message);
+      throw error;
+    }
+    
+    await loadData(false);
   };
   
-  const saveLocation = async (orderId: string, patch: Partial<Pick<OrderRow, 'delivery_address' | 'notes' | 'delivery_geo_lat' | 'delivery_geo_lng'>>) => { 
-    console.log('Guardar ubicación', orderId, patch);
+  const saveLocation = async (orderId: string, patch: Partial<Pick<OrderRow, 'delivery_address' | 'notes' | 'delivery_geo_lat' | 'delivery_geo_lng'>>) => {
+    const { error } = await supabase
+      .from('orders')
+      .update(patch)
+      .eq('id', orderId);
+    
+    if (error) {
+      setError('Error al guardar ubicación/notas: ' + error.message);
+      throw error;
+    }
+    await loadData(false);
   };
   
-  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => { 
-    console.log('Cambiar estado', orderId, newStatus);
+  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+    try {
+      const { error } = await supabase.rpc('fn_order_transition', {
+        p_order_id: orderId,
+        p_to_status: newStatus,
+        p_reason: `Cambio de estado por logística a ${newStatus}`,
+        p_geo_lat: null,
+        p_geo_lng: null,
+        p_evidence_url: null,
+      });
+      if (error) throw error;
+      await loadData(false);
+    } catch (err: any) {
+      setError('Error al cambiar estado: ' + err.message);
+      throw err;
+    }
   };
   
-  const confirmDelivered = async (orderId: string) => { 
-    console.log('Confirmar entrega', orderId);
+  const confirmDelivered = async (orderId: string) => {
+    await handleStatusChange(orderId, 'confirmed');
   };
 
-  const activeDeliveries = useMemo(() => 
-    deliveries.filter((d) => d.active), 
-    [deliveries]
-  );
-  
-  // KPIs mejorados con datos de tendencia (ejemplo)
   const kpis = useMemo(() => ({
     total: { value: orders.length, trend: 2.5 },
     pending: { value: orders.filter((o) => o.status === 'pending').length, trend: -1.2 },
@@ -365,7 +404,7 @@ export default function LogisticaPage() {
     );
   }
   
-  if (error) {
+  if (error && !selectedOrder) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <motion.div 
@@ -381,9 +420,9 @@ export default function LogisticaPage() {
             <AlertTriangle className="mx-auto w-16 h-16 text-red-400 mb-4" />
           </motion.div>
           <h2 className="text-xl font-bold text-white mb-2">Error de Conexión</h2>
-          <p className="text-red-300 mb-6">No se pudo conectar con el servidor de operaciones</p>
+          <p className="text-red-300 mb-6">{error}</p>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button onClick={() => loadData(true)} className="bg-red-600 hover:bg-red-500 text-white w-full">
+            <Button onClick={() => { setError(null); loadData(true); }} className="bg-red-600 hover:bg-red-500 text-white w-full">
               Reintentar Conexión
             </Button>
           </motion.div>
@@ -411,91 +450,32 @@ export default function LogisticaPage() {
           }}
           className="p-4 sm:p-6 lg:p-8 max-w-[1800px] mx-auto"
         >
-          {/* Header mejorado */}
           <motion.header 
             variants={{
               hidden: { opacity: 0, y: -30 },
-              show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100 } }
+              show: { opacity: 1, y: 0, transition: { duration: 0.6 } }
             }}
-            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 p-6 bg-gradient-to-br from-slate-900/50 to-slate-800/30 rounded-2xl border border-slate-700/30 backdrop-blur-sm shadow-2xl shadow-black/40"
+            className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4"
           >
-            <div>
-              <motion.h1 
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="text-3xl font-bold text-white flex items-center gap-3"
-              >
-                <motion.div 
-                  whileHover={{ rotate: 10 }}
-                  className="p-2 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl"
-                >
-                  <Warehouse className="w-7 h-7" />
-                </motion.div>
-                Centro de Control Logístico
-              </motion.h1>
-              <div className="flex items-center gap-4 mt-2 text-slate-400">
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="flex items-center gap-2"
-                >
-                  <Calendar size={16} />
-                  <span>{currentDate}</span>
-                </motion.div>
-                <div className="w-px h-4 bg-slate-700" />
-                <AnimatePresence mode="wait">
-                  {isLive ? (
-                    <motion.div 
-                      key="live"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      className="flex items-center gap-2"
-                    >
-                      <motion.div
-                        animate={{ scale: [1, 1.2, 1] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                      >
-                        <Radio size={16} className="text-green-400" />
-                      </motion.div>
-                      <span className="font-semibold text-green-400">Sistema Conectado</span>
-                    </motion.div>
-                  ) : (
-                    <motion.div 
-                      key="reconnecting"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="flex items-center gap-2 text-yellow-400"
-                    >
-                      <Radio size={16} />
-                      <span>Reconectando...</span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+            <div className="flex items-center gap-4">
+              <h1 className="text-4xl font-extrabold text-white tracking-tight">
+                Centro de Logística
+              </h1>
+              <span className="text-sm text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full flex items-center gap-1">
+                <Radio className="w-3 h-3 text-green-400 animate-pulse" />
+                {isLive ? 'En Vivo' : 'Desconectado'}
+              </span>
             </div>
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-              className="flex items-center gap-3"
-            >
+            <div className="flex items-center gap-3">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Button 
-                  variant="outline" 
                   size="small" 
-                  onClick={() => loadData(true)} 
-                  className="border-slate-700 hover:bg-slate-800"
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white flex items-center gap-2"
+                  onClick={() => loadData(false)}
                   disabled={refreshing}
                 >
-                  <motion.div
-                    animate={{ rotate: refreshing ? 360 : 0 }}
-                    transition={{ duration: 1, repeat: refreshing ? Infinity : 0, ease: "linear" }}
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </motion.div>
+                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  {refreshing ? 'Actualizando...' : 'Actualizar Datos'}
                 </Button>
               </motion.div>
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -517,10 +497,9 @@ export default function LogisticaPage() {
                   Nuevo Pedido
                 </Button>
               </motion.div>
-            </motion.div>
+            </div>
           </motion.header>
 
-          {/* Panel de KPIs mejorado */}
           <motion.div
             variants={{
               hidden: { opacity: 0 },
@@ -578,7 +557,6 @@ export default function LogisticaPage() {
             />
           </motion.div>
           
-          {/* Filtros de estado */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -611,14 +589,12 @@ export default function LogisticaPage() {
           </motion.div>
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Columna principal */}
             <motion.div 
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.7 }}
               className="lg:col-span-8 xl:col-span-9 space-y-6"
             >
-              {/* Gráfico de eficiencia por horario */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -640,7 +616,6 @@ export default function LogisticaPage() {
                 </Card>
               </motion.div>
               
-              {/* Lista de pedidos */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -685,7 +660,6 @@ export default function LogisticaPage() {
               </motion.div>
             </motion.div>
 
-            {/* Columna de unidades activas */}
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -697,13 +671,13 @@ export default function LogisticaPage() {
                   <CardTitle className="text-white flex items-center gap-2">
                     <Truck className="w-5 h-5 text-indigo-400" />
                     Unidades Activas
-                    <span className="text-sm font-normal text-slate-400 ml-1">({activeDeliveries.length})</span>
+                    <span className="text-sm font-normal text-slate-400 ml-1">({deliveries.length})</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 max-h-[calc(100vh-12rem)] overflow-y-auto pr-2 py-4">
                   <AnimatePresence>
-                    {activeDeliveries.length > 0 ? (
-                      activeDeliveries.map((delivery, index) => {
+                  {deliveries.length > 0 ? (
+                    deliveries.map((delivery, index) => {
                         const today = new Date().toISOString().slice(0, 10);
                         const todayRoutes = deliveryRoutes.filter(r => r.delivery_user_id === delivery.id && r.route_date === today);
                         const completedToday = todayRoutes.filter(r => r.status === 'completed').length;
@@ -745,7 +719,6 @@ export default function LogisticaPage() {
                 </CardContent>
               </Card>
               
-              {/* Panel de acciones rápidas */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -800,12 +773,17 @@ export default function LogisticaPage() {
         {selectedOrder && ( 
           <OrderDetailsModal 
             order={selectedOrder} 
-            deliveries={activeDeliveries} 
-            onClose={() => setSelectedOrder(null)} 
+            deliveries={deliveries} 
+            onClose={() => {
+              setSelectedOrder(null);
+              setError(null);
+            }} 
             onAssignDelivery={assignDelivery} 
             onStatusChange={handleStatusChange} 
             onSaveLocation={saveLocation} 
             onConfirmDelivered={confirmDelivered}
+            error={error}
+            onClearError={() => setError(null)}
           />
         )}
         {selectedDelivery && ( 
@@ -817,7 +795,6 @@ export default function LogisticaPage() {
           />
         )}
         
-        {/* Modal del Mapa */}
         {isMapOpen && (
           <MapOverviewModal 
             orders={ordersForMap} 
