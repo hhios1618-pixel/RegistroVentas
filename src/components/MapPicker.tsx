@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useRef, useCallback } from 'react';
-import type { MapPickerProps } from '@/types';
+import type { MapPickerProps } from '@/lib/types';
 import 'leaflet/dist/leaflet.css';
 
 export const MapPicker: React.FC<MapPickerProps> = ({

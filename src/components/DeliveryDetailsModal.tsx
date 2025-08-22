@@ -7,7 +7,7 @@ import type {
   DeliveryRoute,
   DeliveryMetrics,
   EnrichedDeliveryRoute
-} from '@/types';
+} from '@/lib/types';
 import Button from './Button';
 import { Card, CardContent, CardHeader } from './Card';
 import { X, MapPin, CheckCircle2, Clock } from 'lucide-react';

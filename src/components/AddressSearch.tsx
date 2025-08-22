@@ -4,7 +4,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Search, MapPin, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import type { AddressSearchProps, AddressSuggestion } from '@/types';
+import type { AddressSearchProps, AddressSuggestion } from '@/lib/types';
 
 export const AddressSearch: React.FC<AddressSearchProps> = ({
   value,

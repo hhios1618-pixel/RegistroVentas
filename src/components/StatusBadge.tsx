@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils/cn';
-import { OrderStatus } from '@/types';
+import { OrderStatus } from '@/lib/types';
 
 interface StatusBadgeProps {
   status: OrderStatus | string;

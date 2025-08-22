@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import type { OrderRow, DeliveryUser, OrderStatus, LatLng } from '@/types';
+import type { OrderRow, DeliveryUser, OrderStatus, LatLng, OrderItem } from '@/lib/types';
 
 import Button from './Button';
 import { StatusBadge } from './StatusBadge';
@@ -11,7 +11,8 @@ import { Card, CardContent } from './Card';
 
 import {
   X, User, Phone, Calendar, Clock, CreditCard,
-  CheckCircle2, AlertCircle, RefreshCw, Image as ImageIcon
+  CheckCircle2, AlertCircle, RefreshCw, Image as ImageIcon,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 type Props = {
@@ -58,23 +59,39 @@ export default function OrderDetailsModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'assign' | 'location' | 'delivery' | 'status' | 'media'>('assign');
-
-  // --------- media (solo placeholders, si usas integración real, injértala aquí) ----------
-  const [sellerUrl] = useState<string | null>(order.seller_photo_url ?? null);
-  const [paymentUrl] = useState<string | null>(order.payment_proof_url ?? null);
+  const [activeTab, setActiveTab] = useState<'assign' | 'location' | 'delivery' | 'status' | 'media'>('media');
+  
+  // --------- Lógica mejorada para Media ----------
   const [mediaLoading, setMediaLoading] = useState(false);
 
+  // Extraemos las URLs únicas de las imágenes de los productos
+  const productImages = useMemo(() => {
+    const images = (order.order_items ?? [])
+      .map(item => item.image_url)
+      .filter((url): url is string => !!url);
+    return [...new Set(images)]; // Usamos Set para evitar duplicados
+  }, [order.order_items]);
+  
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const paymentUrl = useMemo(() => order.payment_proof_url ?? null, [order.payment_proof_url]);
 
-const refreshMedia = () => {
-  setMediaLoading(true);
-  setTimeout(() => setMediaLoading(false), 500);
-};
+  const handleNextImage = () => setCurrentImageIndex(prev => (prev + 1) % productImages.length);
+  const handlePrevImage = () => setCurrentImageIndex(prev => (prev - 1 + productImages.length) % productImages.length);
+  
+  // Si la lista de imágenes cambia (ej. por un refresh), reseteamos el índice
+  useEffect(() => {
+      setCurrentImageIndex(0);
+  }, [productImages]);
+
+  const refreshMedia = () => {
+    setMediaLoading(true);
+    alert("Aquí iría la lógica para refrescar los datos del pedido desde el servidor.");
+    setTimeout(() => setMediaLoading(false), 500);
+  };
 
   // --------- Ventana Delivery (Coordinación) con combos ----------
   const now = new Date();
   const fixedYear = now.getFullYear();
-
   const baseDate = order.delivery_date ? new Date(`${order.delivery_date}T00:00`) : now;
   const [mes, setMes] = useState<number>(baseDate.getMonth());
   const [dia, setDia] = useState<number>(baseDate.getDate());
@@ -89,8 +106,7 @@ const refreshMedia = () => {
   useEffect(() => {
     const max = daysInMonth(fixedYear, mes);
     if (dia > max) setDia(max);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mes]);
+  }, [dia, mes, fixedYear]);
 
   const assignedDelivery = useMemo(
     () => deliveries.find(d => d.id === (order.delivery_assigned_to || selectedDelivery)),
@@ -102,9 +118,7 @@ const refreshMedia = () => {
     try {
       const d = new Date(dateStr);
       return d.toLocaleString('es-BO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return dateStr ?? '';
-    }
+    } catch { return dateStr ?? ''; }
   };
 
   const handleAction = async (action: () => Promise<void>, okMsg: string) => {
@@ -115,9 +129,7 @@ const refreshMedia = () => {
       setTimeout(() => setSuccess(null), 2500);
     } catch (e: any) {
       setError(e?.message || 'Ocurrió un error.');
-    } finally {
-      setIsProcessing(false);
-    }
+    } finally { setIsProcessing(false); }
   };
 
   const handleAssign = () => {
@@ -140,7 +152,6 @@ const refreshMedia = () => {
     handleAction(() => onStatusChange(order.id, newStatus), `Estado cambiado a ${newStatus.replaceAll('_', ' ')}`);
   };
 
-  // Cargar ventana actual (si existe) al abrir pestaña “Entrega”
   useEffect(() => {
     if (activeTab !== 'delivery') return;
     (async () => {
@@ -148,18 +159,12 @@ const refreshMedia = () => {
         const res = await fetch(`/api/orders/${order.id}/assign`, { method: 'GET' });
         const json = await res.json();
         if (json?.assignment) {
-          setCurrentWindow({
-            start: json.assignment.window_start,
-            end: json.assignment.window_end,
-          });
+          setCurrentWindow({ start: json.assignment.window_start, end: json.assignment.window_end });
           const s = new Date(json.assignment.window_start);
           const e = new Date(json.assignment.window_end);
-          setMes(s.getMonth());
-          setDia(s.getDate());
-          setDesdeH(s.getHours());
-          setDesdeM(s.getMinutes());
-          setHastaH(e.getHours());
-          setHastaM(e.getMinutes());
+          setMes(s.getMonth()); setDia(s.getDate());
+          setDesdeH(s.getHours()); setDesdeM(s.getMinutes());
+          setHastaH(e.getHours()); setHastaM(e.getMinutes());
         }
       } catch { /* noop */ }
     })();
@@ -172,43 +177,30 @@ const refreshMedia = () => {
   }, [fixedYear, mes, dia, desdeH, desdeM, hastaH, hastaM]);
 
   async function saveWindow() {
-    setWindowWarning(null);
-    setError(null);
-
+    setWindowWarning(null); setError(null);
     if (!selectedDelivery && !order.delivery_assigned_to) {
-      setError('Selecciona un repartidor en la pestaña “Asignación”.');
-      return;
+      setError('Selecciona un repartidor en la pestaña “Asignación”.'); return;
     }
     if (!canSaveWindow) {
-      setError('El rango de horario es inválido.');
-      return;
+      setError('El rango de horario es inválido.'); return;
     }
-
     setSavingWindow(true);
     try {
       const deliveryUserId = selectedDelivery || order.delivery_assigned_to!;
       const desdeISO = composeLocalISO(fixedYear, mes+1, dia, desdeH, desdeM);
       const hastaISO = composeLocalISO(fixedYear, mes+1, dia, hastaH, hastaM);
-
       const res = await fetch(`/api/orders/${order.id}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deliveryUserId, desde: desdeISO, hasta: hastaISO }),
       });
-
       const json = await res.json();
-
       if (res.status === 409 && json?.error === 'OVERLAP') {
-        setError('El delivery ya tiene otra entrega en ese rango.');
-        setSavingWindow(false);
-        return;
+        setError('El delivery ya tiene otra entrega en ese rango.'); setSavingWindow(false); return;
       }
       if (!res.ok) {
-        setError(json?.detail || json?.error || 'Error al guardar ventana');
-        setSavingWindow(false);
-        return;
+        setError(json?.detail || json?.error || 'Error al guardar ventana'); setSavingWindow(false); return;
       }
-
       if (json.warnings?.length) setWindowWarning(json.warnings[0]);
       setCurrentWindow({ start: new Date(desdeISO).toISOString(), end: new Date(hastaISO).toISOString() });
       setSuccess('Ventana de entrega guardada');
@@ -220,11 +212,9 @@ const refreshMedia = () => {
     }
   }
 
-  // -------- UI --------
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-gray-900 border border-white/20 rounded-lg shadow-xl w-full max-w-5xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <header className="p-4 sm:p-6 border-b border-white/10 flex justify-between items-start">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
@@ -252,7 +242,6 @@ const refreshMedia = () => {
           </div>
         )}
 
-        {/* Tabs */}
         <div className="px-4 sm:px-6 pt-4">
           <div className="flex flex-wrap gap-1 bg-black/20 p-1 rounded-lg">
             <button onClick={() => setActiveTab('assign')}   className={`flex-1 py-2 px-3 rounded-md text-sm ${activeTab==='assign'?'bg-blue-600 text-white':'text-white/60 hover:text-white hover:bg-white/10'}`}>Asignación</button>
@@ -263,9 +252,7 @@ const refreshMedia = () => {
           </div>
         </div>
 
-        {/* Body */}
         <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
-          {/* Asignación */}
           {activeTab === 'assign' && (
             <div className="space-y-4">
               <div className="bg-black/20 p-4 rounded-md">
@@ -290,7 +277,6 @@ const refreshMedia = () => {
             </div>
           )}
 
-          {/* Ubicación */}
           {activeTab === 'location' && (
             <div className="space-y-6">
               <div>
@@ -321,10 +307,8 @@ const refreshMedia = () => {
             </div>
           )}
 
-          {/* Entrega */}
           {activeTab === 'delivery' && (
             <div className="space-y-4">
-              {/* Disponibilidad del cliente (venta) — solo lectura */}
               <Card>
                 <CardContent className="p-4 text-sm text-white/80">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -335,14 +319,10 @@ const refreshMedia = () => {
                 </CardContent>
               </Card>
               <p className="text-white/60 text-sm">* La coordinadora puede editar estos campos desde la creación/edición del pedido.</p>
-
-              {/* Ventana Delivery (Coordinación) — combos */}
               <Card>
                 <CardContent className="p-4">
                   <h3 className="text-white font-semibold mb-3">Ventana Delivery (Coordinación)</h3>
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                    {/* DESDE */}
                     <div>
                       <label className="block text-xs text-white/60 mb-1">Desde</label>
                       <div className="grid grid-cols-4 gap-2">
@@ -360,8 +340,6 @@ const refreshMedia = () => {
                         </select>
                       </div>
                     </div>
-
-                    {/* HASTA */}
                     <div>
                       <label className="block text-xs text-white/60 mb-1">Hasta</label>
                       <div className="grid grid-cols-4 gap-2">
@@ -380,20 +358,16 @@ const refreshMedia = () => {
                       </div>
                     </div>
                   </div>
-
                   <div className="flex items-center justify-between">
                     <div className="text-xs text-white/60">
                       Año: <b>{fixedYear}</b>{' '}
-                      {currentWindow?.start && (
-                        <>• Actual: <b>{new Date(currentWindow.start).toLocaleString('es-BO')}</b> → <b>{new Date(currentWindow.end!).toLocaleString('es-BO')}</b></>
-                      )}
+                      {currentWindow?.start && ( <>• Actual: <b>{new Date(currentWindow.start).toLocaleString('es-BO')}</b> → <b>{new Date(currentWindow.end!).toLocaleString('es-BO')}</b></> )}
                     </div>
                     <Button onClick={saveWindow} disabled={!canSaveWindow || savingWindow} className="flex items-center gap-2">
                       {savingWindow ? <LoadingSpinner /> : <Clock className="w-4 h-4" />}
                       Guardar Ventana
                     </Button>
                   </div>
-
                   {windowWarning && (
                     <div className="mt-3 text-xs text-amber-300 bg-amber-500/10 border border-amber-400/40 px-3 py-2 rounded-md flex items-center gap-2">
                       <AlertCircle className="w-4 h-4" />
@@ -405,35 +379,66 @@ const refreshMedia = () => {
             </div>
           )}
 
-          {/* Media */}
           {activeTab === 'media' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-semibold flex items-center gap-2"><ImageIcon className="w-4 h-4" /> Fotografías</h3>
                 <Button variant="outline" size="small" onClick={refreshMedia} disabled={mediaLoading} className="flex items-center gap-1.5">
                   <RefreshCw className={`w-4 h-4 ${mediaLoading ? 'animate-spin' : ''}`} />
-                  Reintentar
+                  Refrescar
                 </Button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="bg-black/20 rounded-md p-3 border border-white/10">
-                  <div className="text-white/80 font-medium mb-2">Foto de producto (vendedor)</div>
-                  {sellerUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={sellerUrl} alt="Foto de producto" className="w-full h-72 object-contain rounded-md bg-black/30" />
+                <div className="bg-black/20 rounded-md p-3 border border-white/10 space-y-3">
+                  <div className="text-white/80 font-medium">Fotos de producto (vendedor)</div>
+                  {productImages.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="relative group">
+                        <a href={productImages[currentImageIndex]} target="_blank" rel="noopener noreferrer" title="Ver imagen completa">
+                          <img 
+                            src={productImages[currentImageIndex]} 
+                            alt={`Foto de producto ${currentImageIndex + 1}`} 
+                            className="w-full h-60 object-contain rounded-md bg-black/30 transition-transform duration-300 group-hover:scale-105" 
+                          />
+                        </a>
+                        {productImages.length > 1 && (
+                          <>
+                            <div className="absolute top-2 right-2 bg-black/60 text-white text-xs rounded-full px-2 py-1 transition-opacity opacity-0 group-hover:opacity-100">
+                              {currentImageIndex + 1} / {productImages.length}
+                            </div>
+                            <button onClick={handlePrevImage} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 p-2 rounded-full text-white hover:bg-black/80 transition-opacity opacity-0 group-hover:opacity-100"><ChevronLeft size={20}/></button>
+                            <button onClick={handleNextImage} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 p-2 rounded-full text-white hover:bg-black/80 transition-opacity opacity-0 group-hover:opacity-100"><ChevronRight size={20}/></button>
+                          </>
+                        )}
+                      </div>
+                      {productImages.length > 1 && (
+                        <div className="flex gap-2 justify-center flex-wrap">
+                          {productImages.map((url, index) => (
+                            <img
+                              key={index}
+                              src={url}
+                              alt={`Thumbnail ${index + 1}`}
+                              onClick={() => setCurrentImageIndex(index)}
+                              className={`w-12 h-12 object-cover rounded-md cursor-pointer border-2 ${currentImageIndex === index ? 'border-blue-500' : 'border-transparent hover:border-white/50'}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="w-full h-72 rounded-md bg-black/20 border border-dashed border-white/15 flex items-center justify-center text-white/50 text-sm">
-                      Sin imagen disponible
+                      Sin imágenes de producto
                     </div>
                   )}
                 </div>
 
                 <div className="bg-black/20 rounded-md p-3 border border-white/10">
-                  <div className="text-white/80 font-medium mb-2">Comprobante de pago (delivery)</div>
+                  <div className="text-white/80 font-medium mb-2">Comprobante de pago</div>
                   {paymentUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={paymentUrl} alt="Comprobante de pago" className="w-full h-72 object-contain rounded-md bg-black/30" />
+                    <a href={paymentUrl} target="_blank" rel="noopener noreferrer" title="Ver imagen completa">
+                      <img src={paymentUrl} alt="Comprobante de pago" className="w-full h-72 object-contain rounded-md bg-black/30 transition-transform duration-300 hover:scale-105" />
+                    </a>
                   ) : (
                     <div className="w-full h-72 rounded-md bg-black/20 border border-dashed border-white/15 flex items-center justify-center text-white/50 text-sm">
                       Sin imagen disponible
@@ -444,9 +449,8 @@ const refreshMedia = () => {
             </div>
           )}
 
-          {/* Estado */}
           {activeTab === 'status' && (
-            <div className="space-y-6">
+             <div className="space-y-6">
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
@@ -500,7 +504,6 @@ const refreshMedia = () => {
           )}
         </div>
 
-        {/* Footer */}
         <footer className="p-4 bg-black/20 border-t border-white/10 flex justify-between items-center">
           <div className="text-sm text-white/60">
             ID: <span className="font-mono">{order.id}</span>
