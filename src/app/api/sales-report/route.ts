@@ -1,4 +1,3 @@
-// src/app/api/sales-report/route.ts
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
@@ -17,6 +16,7 @@ type OrderItemRow = {
 
 type OrderRow = {
   id: string;
+  order_no?: number | null; // <-- 1. (Opcional pero recomendado) Añadido para mejor tipado
   created_at?: string | null;
   seller?: string | null;
   seller_role?: string | null;
@@ -113,16 +113,12 @@ export async function GET() {
     const sellerNames = Array.from(new Set(orders.map(o => clean(o.seller)).filter(Boolean))) as string[];
     const rByName = await rolesByName(sb, sellerNames);
 
-    // --- MODIFICADO: Se añade un .filter(Boolean) al final para limpiar registros nulos ---
     const rows = items.map(it => {
       const o = byId.get(it.order_id) || ({} as OrderRow);
       
-      // --- NUEVA LÓGICA DE VALIDACIÓN PRIORITARIA ---
       const sellerName = clean(o.seller);
       const officialRoleFromName = sellerName ? rByName.get(sellerName.trim()) : null;
 
-      // Si el nombre en el campo 'seller' pertenece a alguien cuyo rol oficial es operativo,
-      // ignoramos esta transacción por completo devolviendo null.
       if (isOpRole(officialRoleFromName)) {
         return null; 
       }
@@ -130,7 +126,6 @@ export async function GET() {
       const branch =
         branchKey && Object.prototype.hasOwnProperty.call(o, branchKey) ? (o as any)[branchKey] ?? null : null;
 
-      // Lógica de roles original (ahora actúa como fallback)
       let role = clean(o.sales_role);
       if (!role && o.sales_user_id) role = clean(rById.get(o.sales_user_id) ?? null);
       if (!role && !isOpRole(o.seller_role)) role = clean(o.seller_role);
@@ -138,6 +133,7 @@ export async function GET() {
       
       return {
         order_id: it.order_id,
+        order_no: o.order_no ?? null, // <-- 2. CAMBIO PRINCIPAL: Añadimos el campo a la respuesta
         order_date: o.created_at ?? null,
         branch,
         seller_full_name: clean(o.seller),
@@ -151,7 +147,7 @@ export async function GET() {
         sale_type: o.sale_type ?? null,
         order_type: o.is_encomienda === true ? 'Encomienda' : 'Pedido',
       };
-    }).filter(Boolean); // <-- Este filtro elimina todas las entradas nulas que marcamos para descarte.
+    }).filter(Boolean);
 
     (rows as any[]).sort((a, b) => {
       const ta = a.order_date ? new Date(a.order_date).getTime() : 0;

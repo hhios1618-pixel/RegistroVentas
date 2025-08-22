@@ -1,6 +1,3 @@
-// RUTA: src/app/logistica/page.tsx
-// CÓDIGO 100% COMPLETO Y CORREGIDO
-
 'use client';
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
@@ -144,7 +141,6 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
           }`}
         >
           <option.icon className="w-4 h-4" />
-          <div className="w-2 h-2 rounded-full ${option.color}"></div>
           {option.label}
         </motion.button>
       ))}
@@ -199,7 +195,6 @@ export default function LogisticaPage() {
   const [filters, setFilters] = useState({ status: 'all' as OrderStatus | 'all', search: '' });
   const [isMapOpen, setIsMapOpen] = useState(false);
   const [isLive, setIsLive] = useState(false);
-  const [currentDate, setCurrentDate] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   // --- Lógica de carga y efectos ---
@@ -212,9 +207,7 @@ export default function LogisticaPage() {
       }
       
       const [ordersRes, deliveriesRes, routesRes] = await Promise.all([
-        // Esta es la línea con la sintaxis correcta y la consulta de 'order_items'
         supabase.from('orders').select('*, seller_profile:sales_user_id(full_name), delivery_profile:delivery_assigned_to(full_name), order_items(*)').order('created_at', { ascending: false }),
-        
         supabase.from('users_profile').select('*').eq('role', 'delivery').order('full_name', { ascending: true }),
         supabase.from('delivery_routes').select('*').order('created_at', { ascending: false }),
       ]);
@@ -243,7 +236,6 @@ export default function LogisticaPage() {
   }, []);
 
   useEffect(() => {
-    setCurrentDate(new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
     loadData(true);
     
     const channel = supabase
@@ -284,53 +276,26 @@ export default function LogisticaPage() {
 
   // --- Lógica de negocio y datos memorizados ---
   const assignDelivery = async (orderId: string, deliveryUserId: string) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({ delivery_assigned_to: deliveryUserId, status: 'assigned' })
-      .eq('id', orderId);
-
-    if (error) {
-      setError('Error al asignar repartidor: ' + error.message);
-      throw error;
-    }
-    
+    const { error } = await supabase.from('orders').update({ delivery_assigned_to: deliveryUserId, status: 'assigned' }).eq('id', orderId);
+    if (error) { setError('Error al asignar repartidor: ' + error.message); throw error; }
     await loadData(false);
   };
   
   const saveLocation = async (orderId: string, patch: Partial<Pick<OrderRow, 'delivery_address' | 'notes' | 'delivery_geo_lat' | 'delivery_geo_lng'>>) => {
-    const { error } = await supabase
-      .from('orders')
-      .update(patch)
-      .eq('id', orderId);
-    
-    if (error) {
-      setError('Error al guardar ubicación/notas: ' + error.message);
-      throw error;
-    }
+    const { error } = await supabase.from('orders').update(patch).eq('id', orderId);
+    if (error) { setError('Error al guardar ubicación/notas: ' + error.message); throw error; }
     await loadData(false);
   };
   
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     try {
-      const { error } = await supabase.rpc('fn_order_transition', {
-        p_order_id: orderId,
-        p_to_status: newStatus,
-        p_reason: `Cambio de estado por logística a ${newStatus}`,
-        p_geo_lat: null,
-        p_geo_lng: null,
-        p_evidence_url: null,
-      });
+      const { error } = await supabase.rpc('fn_order_transition', { p_order_id: orderId, p_to_status: newStatus, p_reason: `Cambio de estado por logística a ${newStatus}`, p_geo_lat: null, p_geo_lng: null, p_evidence_url: null });
       if (error) throw error;
       await loadData(false);
-    } catch (err: any) {
-      setError('Error al cambiar estado: ' + err.message);
-      throw err;
-    }
+    } catch (err: any) { setError('Error al cambiar estado: ' + err.message); throw err; }
   };
   
-  const confirmDelivered = async (orderId: string) => {
-    await handleStatusChange(orderId, 'confirmed');
-  };
+  const confirmDelivered = async (orderId: string) => { await handleStatusChange(orderId, 'confirmed'); };
 
   const kpis = useMemo(() => ({
     total: { value: orders.length, trend: 2.5 },
@@ -345,31 +310,14 @@ export default function LogisticaPage() {
       if (filters.status !== 'all' && order.status !== filters.status) return false;
       if (filters.search) {
         const search = filters.search.toLowerCase();
-        const sellerName = Array.isArray(order.seller_profile) ? 
-          order.seller_profile[0]?.full_name : 
-          order.seller_profile?.full_name;
-        const deliveryName = Array.isArray(order.delivery_profile) ? 
-          order.delivery_profile[0]?.full_name : 
-          order.delivery_profile?.full_name;
-        
-        return [
-          order.order_no, 
-          order.customer_name, 
-          order.customer_phone, 
-          order.delivery_address, 
-          sellerName || order.seller, 
-          deliveryName
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(search);
+        const sellerName = Array.isArray(order.seller_profile) ? order.seller_profile[0]?.full_name : order.seller_profile?.full_name;
+        const deliveryName = Array.isArray(order.delivery_profile) ? order.delivery_profile[0]?.full_name : order.delivery_profile?.full_name;
+        return [ order.order_no, order.customer_name, order.customer_phone, order.delivery_address, sellerName || order.seller, deliveryName ].filter(Boolean).join(' ').toLowerCase().includes(search);
       }
       return true;
     });
   }, [orders, filters]);
 
-  // --- Renderizado condicional ---
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
@@ -431,161 +379,39 @@ export default function LogisticaPage() {
     );
   }
 
-  // --- RENDERIZADO PRINCIPAL MEJORADO ---
+  // --- RENDERIZADO PRINCIPAL ---
   return (
     <>
-      <div className="min-h-screen w-full bg-slate-950 text-slate-300 overflow-hidden">
+      <div className="min-h-screen w-full bg-slate-950 text-slate-300">
         <ParticlesBackground />
         <div className="absolute inset-0 -z-10 h-full w-full bg-slate-950 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:32px_32px]"></div>
-
-        <motion.div 
-          initial="hidden"
-          animate="show"
-          variants={{
-            hidden: { opacity: 0 },
-            show: { 
-              opacity: 1,
-              transition: { staggerChildren: 0.1 }
-            }
-          }}
-          className="p-4 sm:p-6 lg:p-8 max-w-[1800px] mx-auto"
-        >
-          <motion.header 
-            variants={{
-              hidden: { opacity: 0, y: -30 },
-              show: { opacity: 1, y: 0, transition: { duration: 0.6 } }
-            }}
-            className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4"
-          >
+        <motion.div initial="hidden" animate="show" variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } }} className="p-4 sm:p-6 lg:p-8 max-w-[1800px] mx-auto" >
+          <motion.header variants={{ hidden: { opacity: 0, y: -30 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }} className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
             <div className="flex items-center gap-4">
-              <h1 className="text-4xl font-extrabold text-white tracking-tight">
-                Centro de Logística
-              </h1>
-              <span className="text-sm text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full flex items-center gap-1">
-                <Radio className="w-3 h-3 text-green-400 animate-pulse" />
-                {isLive ? 'En Vivo' : 'Desconectado'}
-              </span>
+              <h1 className="text-4xl font-extrabold text-white tracking-tight">Centro de Logística</h1>
+              <span className="text-sm text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full flex items-center gap-1"><Radio className="w-3 h-3 text-green-400 animate-pulse" />{isLive ? 'En Vivo' : 'Desconectado'}</span>
             </div>
             <div className="flex items-center gap-3">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button 
-                  size="small" 
-                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white flex items-center gap-2"
-                  onClick={() => loadData(false)}
-                  disabled={refreshing}
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  {refreshing ? 'Actualizando...' : 'Actualizar Datos'}
-                </Button>
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button 
-                  size="small" 
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white flex items-center gap-2"
-                  onClick={() => setIsMapOpen(true)}
-                >
-                  <MapIcon className="w-4 h-4" />
-                  Vista de Mapa
-                </Button>
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button 
-                  size="small" 
-                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white flex items-center gap-2"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  Nuevo Pedido
-                </Button>
-              </motion.div>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><Button size="small" className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white flex items-center gap-2" onClick={() => loadData(false)} disabled={refreshing}><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />{refreshing ? 'Actualizando...' : 'Actualizar Datos'}</Button></motion.div>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><Button size="small" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white flex items-center gap-2" onClick={() => setIsMapOpen(true)}><MapIcon className="w-4 h-4" />Vista de Mapa</Button></motion.div>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><Button size="small" className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white flex items-center gap-2"><PlusCircle className="w-4 h-4" />Nuevo Pedido</Button></motion.div>
             </div>
           </motion.header>
 
-          <motion.div
-            variants={{
-              hidden: { opacity: 0 },
-              show: { 
-                opacity: 1,
-                transition: { staggerChildren: 0.1 }
-              }
-            }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8"
-          >
-            <KpiCard 
-              title="Pedidos Totales" 
-              value={kpis.total.value} 
-              icon={Package} 
-              color="#38bdf8" 
-              description="Todos los estados" 
-              trend={{ value: kpis.total.trend, isPositive: kpis.total.trend > 0 }}
-              delay={0.1}
-            />
-            <KpiCard 
-              title="Pendientes" 
-              value={kpis.pending.value} 
-              icon={Clock} 
-              color="#facc15" 
-              description="Listos para asignar" 
-              trend={{ value: kpis.pending.trend, isPositive: kpis.pending.trend > 0 }}
-              delay={0.2}
-            />
-            <KpiCard 
-              title="En Ruta" 
-              value={kpis.inDelivery.value} 
-              icon={Truck} 
-              color="#a78bfa" 
-              description="Entregas en curso" 
-              trend={{ value: kpis.inDelivery.trend, isPositive: kpis.inDelivery.trend > 0 }}
-              delay={0.3}
-            />
-            <KpiCard 
-              title="Completados" 
-              value={kpis.delivered.value} 
-              icon={CheckCircle2} 
-              color="#4ade80" 
-              description="Entregas exitosas" 
-              trend={{ value: kpis.delivered.trend, isPositive: kpis.delivered.trend > 0 }}
-              delay={0.4}
-            />
-            <KpiCard 
-              title="Eficiencia" 
-              value={`${kpis.efficiency.value}%`} 
-              icon={Target} 
-              color="#f472b6" 
-              description="Tasa de éxito" 
-              trend={{ value: kpis.efficiency.trend, isPositive: kpis.efficiency.trend > 0 }}
-              delay={0.5}
-            />
+          <motion.div variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+            <KpiCard title="Pedidos Totales" value={kpis.total.value} icon={Package} color="#38bdf8" description="Todos los estados" trend={{ value: kpis.total.trend, isPositive: kpis.total.trend > 0 }} delay={0.1}/>
+            <KpiCard title="Pendientes" value={kpis.pending.value} icon={Clock} color="#facc15" description="Listos para asignar" trend={{ value: kpis.pending.trend, isPositive: kpis.pending.trend > 0 }} delay={0.2}/>
+            <KpiCard title="En Ruta" value={kpis.inDelivery.value} icon={Truck} color="#a78bfa" description="Entregas en curso" trend={{ value: kpis.inDelivery.trend, isPositive: kpis.inDelivery.trend > 0 }} delay={0.3}/>
+            <KpiCard title="Completados" value={kpis.delivered.value} icon={CheckCircle2} color="#4ade80" description="Entregas exitosas" trend={{ value: kpis.delivered.trend, isPositive: kpis.delivered.trend > 0 }} delay={0.4}/>
+            <KpiCard title="Eficiencia" value={`${kpis.efficiency.value}%`} icon={Target} color="#f472b6" description="Tasa de éxito" trend={{ value: kpis.efficiency.trend, isPositive: kpis.efficiency.trend > 0 }} delay={0.5}/>
           </motion.div>
           
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="mb-6 bg-gradient-to-br from-slate-900/40 to-slate-800/30 p-5 rounded-2xl border border-slate-700/30 backdrop-blur-sm shadow-lg"
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="mb-6 bg-gradient-to-br from-slate-900/40 to-slate-800/30 p-5 rounded-2xl border border-slate-700/30 backdrop-blur-sm shadow-lg">
             <div className="flex items-center justify-between mb-4">
-              <motion.h3 
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.7 }}
-                className="font-semibold text-slate-300 flex items-center gap-2"
-              >
-                <Filter className="w-5 h-5 text-indigo-400" />
-                Filtrar por Estado
-              </motion.h3>
-              <motion.span 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.8 }}
-                className="text-sm text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full"
-              >
-                {filteredOrders.length} pedidos coinciden
-              </motion.span>
+              <motion.h3 initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.7 }} className="font-semibold text-slate-300 flex items-center gap-2"><Filter className="w-5 h-5 text-indigo-400" />Filtrar por Estado</motion.h3>
+              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-sm text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full">{filteredOrders.length} pedidos coinciden</motion.span>
             </div>
-            <StatusFilter 
-              currentStatus={filters.status} 
-              onStatusChange={(status) => setFilters({...filters, status})} 
-            />
+            <StatusFilter currentStatus={filters.status} onStatusChange={(status) => setFilters({...filters, status})} />
           </motion.div>
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

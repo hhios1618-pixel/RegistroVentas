@@ -13,7 +13,7 @@ import {
   BarChart3, Download, Calendar, Filter, Users, Target, 
   ArrowUpRight, ArrowDownRight, Eye, Zap, Award, Clock,
   PieChart as PieChartIcon, Activity, Briefcase, Star,
-  ImageIcon, CreditCard, X as XIcon
+  ImageIcon, CreditCard, X as XIcon, Search
 } from 'lucide-react';
 
 // --- Componente Modal para visualizar imágenes ---
@@ -49,6 +49,7 @@ const ImageModal = ({ src, onClose }: { src: string | null; onClose: () => void 
 // --- Definición de Tipos ---
 interface SaleRecord {
   order_id: string;
+  order_no: number | null; // Añadido para el número de pedido
   order_date: string;
   branch: string | null;
   seller_full_name: string | null;
@@ -301,6 +302,7 @@ export default function SalesReportPageRedesigned() {
     sellerRole: '',
   });
   const [modalImageSrc, setModalImageSrc] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const fetchAllSales = async () => {
@@ -324,7 +326,7 @@ export default function SalesReportPageRedesigned() {
     fetchAllSales();
   }, []);
 
-  const applyFilters = useCallback(() => {
+  useEffect(() => {
     let salesData = [...allSales];
     if (filters.startDate) {
       salesData = salesData.filter(s => new Date(s.order_date) >= new Date(filters.startDate));
@@ -340,12 +342,17 @@ export default function SalesReportPageRedesigned() {
     if (filters.sellerRole) {
       salesData = salesData.filter(s => s.seller_role === filters.sellerRole);
     }
+    if (searchTerm) {
+        const lowercasedTerm = searchTerm.toLowerCase();
+        salesData = salesData.filter(sale => 
+            (sale.order_no?.toString().includes(lowercasedTerm)) ||
+            (sale.seller_full_name?.toLowerCase().includes(lowercasedTerm)) ||
+            (sale.product_name.toLowerCase().includes(lowercasedTerm)) ||
+            (sale.branch?.toLowerCase().includes(lowercasedTerm))
+        );
+    }
     setFilteredSales(salesData);
-  }, [allSales, filters]);
-
-  useEffect(() => {
-    applyFilters();
-  }, [filters, allSales, applyFilters]);
+  }, [allSales, filters, searchTerm]);
 
   const {
     uniqueBranches,
@@ -437,6 +444,7 @@ export default function SalesReportPageRedesigned() {
 
   const clearFilters = () => {
     setFilters({ startDate: '', endDate: '', branch: '', sellerRole: '' });
+    setSearchTerm('');
   };
 
   const exportToExcel = () => {
@@ -450,6 +458,7 @@ export default function SalesReportPageRedesigned() {
     
     const summaryWorksheet = XLSX.utils.json_to_sheet(summaryData);
     const transactionsWorksheet = XLSX.utils.json_to_sheet(filteredSales.map(sale => ({
+      'Nº Pedido': sale.order_no,
       'Fecha': new Date(sale.order_date).toLocaleString(),
       'Sucursal': sale.branch,
       'Vendedor': sale.seller_full_name,
@@ -776,15 +785,25 @@ export default function SalesReportPageRedesigned() {
             transition={{ duration: 0.6, delay: 0.3 }}
           >
             <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center space-x-3">
                   <Eye className="text-blue-600" size={24} />
                   <div>
                     <h3 className="text-xl font-bold text-gray-800">Detalle de Transacciones</h3>
                     <p className="text-sm text-gray-600">
-                      Mostrando {Math.min(filteredSales.length, 50)} de {filteredSales.length} transacciones
+                      Mostrando {filteredSales.length} de {allSales.length} transacciones
                     </p>
                   </div>
+                </div>
+                <div className="relative w-full max-w-xs">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Buscar por Nº Pedido, producto..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all"
+                    />
                 </div>
               </div>
             </div>
@@ -792,7 +811,7 @@ export default function SalesReportPageRedesigned() {
               <table className="min-w-full">
                 <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                   <tr>
-                    {['Venta', 'Entrega', 'Vendedor', 'Producto', 'Tipo', 'Detalles', 'Subtotal'].map(header => (
+                    {['Nº Pedido', 'Venta', 'Entrega', 'Vendedor', 'Producto', 'Tipo', 'Detalles', 'Subtotal'].map(header => (
                       <th key={header} className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                         {header}
                       </th>
@@ -801,7 +820,7 @@ export default function SalesReportPageRedesigned() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   <AnimatePresence>
-                    {filteredSales.slice(0, 50).map((sale, index) => (
+                    {filteredSales.slice(0, 100).map((sale, index) => (
                       <motion.tr
                         key={`${sale.order_id}-${sale.product_name}-${index}`}
                         className="hover:bg-blue-50/50 transition-colors"
@@ -810,6 +829,11 @@ export default function SalesReportPageRedesigned() {
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3, delay: index * 0.02 }}
                       >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-bold text-blue-600">
+                            #{sale.order_no || 'N/A'}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
                             {new Date(sale.order_date).toLocaleDateString('es-ES')}
@@ -834,7 +858,7 @@ export default function SalesReportPageRedesigned() {
                           <div className="flex items-center space-x-3">
                             <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
                               <span className="text-white text-xs font-bold">
-                                {(sale.seller_full_name || 'N/A').charAt(0)}
+                                {((sale.seller_full_name || 'N/A').split(' ').map(n => n[0])).join('')}
                               </span>
                             </div>
                             <div>
@@ -899,10 +923,10 @@ export default function SalesReportPageRedesigned() {
                 </tbody>
               </table>
             </div>
-            {filteredSales.length > 50 && (
+            {filteredSales.length > 100 && (
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
                 <p className="text-sm text-gray-600 text-center">
-                  Mostrando las primeras 50 transacciones. Usa los filtros para refinar los resultados.
+                  Mostrando las primeras 100 transacciones. Usa los filtros para refinar los resultados.
                 </p>
               </div>
             )}

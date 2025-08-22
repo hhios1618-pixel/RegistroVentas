@@ -1,124 +1,116 @@
-// src/components/OrderTable.tsx
-// (Este archivo es el mismo que te pasé en el mensaje anterior, pero lo incluyo para que tengas todo junto)
 'use client';
 
 import type { OrderRow, OrderStatus } from '@/lib/types';
-import { StatusBadge } from './StatusBadge';
-import { formatDistanceToNow, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { User } from 'lucide-react';
 
-// --- Interfaces y Helpers ---
-interface UserCellProps {
-  profile: OrderRow['seller_profile'];
-  fallbackText?: string | null;
-}
+// --- Sub-componentes para el nuevo diseño ---
 
-const getInitials = (name: string | null | undefined = ''): string => {
-  if (!name) return '?';
-  const words = name.split(' ').filter(Boolean);
-  if (words.length === 0) return '?';
-  if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
-  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
-};
+const StatusBadge = ({ status }: { status: OrderStatus | string | null }) => {
+  let colorClasses = 'bg-slate-700 text-slate-300 border-slate-600';
+  let text = status;
 
-const getFullName = (profile: OrderRow['seller_profile']): string | null => {
-  if (!profile) return null;
-  if (Array.isArray(profile)) {
-    return profile[0]?.full_name || null;
+  switch (status) {
+    case 'pending': colorClasses = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'; text = 'Pendiente'; break;
+    case 'assigned': colorClasses = 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'; text = 'Asignado'; break;
+    case 'confirmed': colorClasses = 'bg-blue-500/20 text-blue-400 border-blue-500/30'; text = 'Confirmado'; break;
+    case 'out_for_delivery': colorClasses = 'bg-purple-500/20 text-purple-400 border-purple-500/30'; text = 'En Ruta'; break;
+    case 'delivered': colorClasses = 'bg-green-500/20 text-green-400 border-green-500/30'; text = 'Entregado'; break;
+    case 'cancelled': colorClasses = 'bg-red-500/20 text-red-400 border-red-500/30'; text = 'Cancelado'; break;
+    default: text = String(status).charAt(0).toUpperCase() + String(status).slice(1); break;
   }
-  return profile.full_name;
-};
-
-const formatTimeAgo = (dateStr: string | null | undefined) => {
-  if (!dateStr) return 'N/A';
-  try { return formatDistanceToNow(parseISO(dateStr), { addSuffix: true, locale: es }); } 
-  catch { return 'Fecha inválida'; }
-};
-
-const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString('es-BO') : '—');
-const fmtTime = (t?: string | null) => (t ? t.slice(0,5) : '');
-
-// --- Componente de Celda de Usuario con Avatar ---
-const UserCell: React.FC<UserCellProps> = ({ profile, fallbackText }) => {
-  const name = getFullName(profile);
-  const displayText = name || fallbackText;
-
-  if (!displayText) {
-    return (
-      <div className="flex items-center gap-3">
-        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-600 text-gray-400">
-          <User size={16} />
-        </div>
-        <span className="text-gray-500">Sin asignar</span>
-      </div>
-    );
-  }
-
-  const isFallbackUuid = /^[0-9a-f]{8}-/i.test(fallbackText || '');
-  const initials = isFallbackUuid ? <User size={16} /> : getInitials(displayText);
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900/50 text-indigo-300 font-semibold text-xs">
-        {initials}
-      </div>
-      <span className="truncate font-medium">{displayText}</span>
+    <span className={`px-3 py-1 text-xs font-medium rounded-full border whitespace-nowrap ${colorClasses}`}>
+      {text}
+    </span>
+  );
+};
+
+const UserCell = ({ profile, fallbackText, label }: { profile: any, fallbackText?: string | null, label: string }) => {
+  const getFullName = (p: any): string | null => !p ? null : (Array.isArray(p) ? p[0]?.full_name : p.full_name) || null;
+  const getInitials = (name: string = ''): string => !name ? '?' : name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  
+  const name = getFullName(profile) || fallbackText;
+
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-slate-400">{label}:</span>
+      {!name ? (
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-600 text-slate-400">
+            <User size={12} />
+          </div>
+          <span className="text-slate-500">Sin asignar</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-indigo-900/50 text-indigo-300 font-semibold text-xs">
+            {getInitials(name)}
+          </div>
+          <span className="truncate font-medium">{name}</span>
+        </div>
+      )}
     </div>
   );
 };
 
-// --- Componente Principal de la Tabla Rediseñada ---
+// --- Componente Principal Rediseñado ---
 export function OrderTable({ orders, onRowClick }: { orders: OrderRow[], onRowClick: (order: OrderRow) => void }) {
+  
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-16 text-slate-500">
+        <p className="font-semibold text-lg">No se encontraron pedidos</p>
+        <p className="text-sm">Intenta ajustar los filtros de búsqueda.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto bg-gray-800/30 rounded-lg border border-gray-700">
-      <table className="min-w-full text-sm text-left text-gray-300">
-        <thead className="text-xs text-gray-400 uppercase bg-gray-900/50">
-          <tr>
-            <th className="px-5 py-3 font-semibold tracking-wider">Nº Pedido</th>
-            <th className="px-5 py-3 font-semibold tracking-wider">Cliente</th>
-            <th className="px-5 py-3 font-semibold tracking-wider">Vendedor</th>
-            <th className="px-5 py-3 font-semibold tracking-wider">Repartidor</th>
-            <th className="px-5 py-3 font-semibold tracking-wider">Entrega</th>
-            <th className="px-5 py-3 font-semibold tracking-wider text-right">Monto</th>
-            <th className="px-5 py-3 font-semibold tracking-wider text-center">Estado</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-700/50">
-          {orders.length > 0 ? (
-            orders.map((order, index) => (
-              <tr
-                key={order.id}
-                className={`transition-colors duration-150 ${index % 2 === 0 ? 'bg-black/10' : 'bg-black/20'} hover:bg-indigo-900/20 cursor-pointer`}
-                onClick={() => onRowClick(order)}
-              >
-                <td className="px-5 py-4 font-mono text-blue-400 font-bold">#{order.order_no || 'S/N'}</td>
-                <td className="px-5 py-4">
-                  <div className="font-medium text-white truncate">{order.customer_name || 'N/A'}</div>
-                  <div className="text-gray-400 text-xs">{order.customer_phone}</div>
-                </td>
-                <td className="px-5 py-4"><UserCell profile={order.seller_profile} fallbackText={order.seller} /></td>
-                <td className="px-5 py-4"><UserCell profile={order.delivery_profile} /></td>
-                <td className="px-5 py-4 whitespace-nowrap">
-                  <div className="font-medium text-white">{fmtDate(order.delivery_date)}</div>
-                  {(order.delivery_from || order.delivery_to) && (
-                    <div className="text-gray-400 text-xs">{fmtTime(order.delivery_from)}{order.delivery_to ? ` – ${fmtTime(order.delivery_to)}` : ''}</div>
-                  )}
-                </td>
-                <td className="px-5 py-4 text-right font-semibold text-white">Bs {order.amount?.toFixed(2) || '0.00'}</td>
-                <td className="px-5 py-4 text-center"><StatusBadge status={order.status} /></td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={7} className="text-center py-16 text-gray-500">
-                <p className="font-semibold text-lg">No se encontraron pedidos</p>
-                <p className="text-sm">Intenta ajustar los filtros de búsqueda.</p>
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+    <div className="space-y-1">
+      {/* Header (visible solo en pantallas grandes) */}
+      <div className="hidden lg:grid grid-cols-[auto,1fr,1.5fr,1fr] gap-4 px-4 py-2 text-xs text-slate-400 uppercase font-semibold tracking-wider">
+        <div className="pl-2">Pedido</div>
+        <div>Cliente</div>
+        <div>Asignaciones</div>
+        <div className="text-right">Detalles</div>
+      </div>
+
+      {/* Lista de Pedidos (diseño de Grid) */}
+      <div className="space-y-3">
+        {orders.map((order) => (
+          <div 
+            key={order.id} 
+            onClick={() => onRowClick(order)}
+            className="grid grid-cols-1 lg:grid-cols-[auto,1fr,1.5fr,1fr] gap-x-4 gap-y-2 items-center bg-slate-800/20 hover:bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 cursor-pointer transition-colors duration-200"
+          >
+            {/* Columna 1: Nº Pedido */}
+            <div className="font-mono text-blue-400 font-bold text-lg lg:pl-2">
+              #{order.order_no || 'S/N'}
+            </div>
+
+            {/* Columna 2: Cliente */}
+            <div className="text-sm">
+              <div className="font-medium text-white">{order.customer_name || 'N/A'}</div>
+              <div className="text-slate-400 text-xs">{order.customer_phone}</div>
+            </div>
+
+            {/* Columna 3: Vendedor y Repartidor */}
+            <div className="flex flex-col gap-2 border-t border-slate-700 lg:border-none pt-2 lg:pt-0">
+               <UserCell label="Vendedor" profile={order.seller_profile} fallbackText={order.seller} />
+               <UserCell label="Repartidor" profile={order.delivery_profile} />
+            </div>
+
+            {/* Columna 4: Monto y Estado */}
+            <div className="flex flex-col items-start gap-2 border-t border-slate-700 lg:border-none pt-2 lg:pt-0 lg:items-end">
+              <div className="font-semibold text-white text-base">
+                Bs {order.amount?.toFixed(2) || '0.00'}
+              </div>
+              <StatusBadge status={order.status} />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
