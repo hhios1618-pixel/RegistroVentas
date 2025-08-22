@@ -7,22 +7,29 @@ export const dynamic = 'force-dynamic';
 
 type SB = SupabaseClient<any, any, any>;
 
+// MODIFICADO: Se usa el nombre de columna correcto 'image_url'
 type OrderItemRow = {
   order_id: string;
   product_name: string;
   quantity: number;
   subtotal: number;
+  image_url?: string | null; // << CORREGIDO
 };
 
 type OrderRow = {
   id: string;
   created_at?: string | null;
-  // operativo (delivery):
   seller?: string | null;
   seller_role?: string | null;
-  // comercial:
   sales_user_id?: string | null;
   sales_role?: string | null;
+  
+  // Nombres de columna confirmados de tu schema
+  delivery_date?: string | null;
+  payment_proof_url?: string | null;
+  sale_type?: string | null; // El frontend lo interpretará como 'Por Mayor' | 'Al Detalle'
+  is_encomienda?: boolean | null; // << Usaremos este para determinar el tipo de orden
+
   [k: string]: any;
 };
 
@@ -34,23 +41,20 @@ function sbAdmin(): SB {
   return createClient(url, key, { auth: { persistSession: false } }) as unknown as SB;
 }
 
+// ... (El resto de las funciones de ayuda como clean, isOpRole, etc. se mantienen igual) ...
 function clean(r?: string | null) {
   const s = (r ?? '').trim();
   return s || null;
 }
-
-// <<< BLOQUE CLAVE >>>  — Se bloquean roles operativos
 function isOpRole(r?: string | null) {
   const s = (r ?? '').trim().toLowerCase();
   return s === 'delivery' || s === 'repartidor';
 }
-
 function detectBranchKey(sample: Record<string, any> | undefined | null): string | null {
   if (!sample) return null;
   const c = ['branch', 'sucursal', 'store', 'store_name', 'location', 'local'];
   return c.find(k => Object.prototype.hasOwnProperty.call(sample, k)) ?? null;
 }
-
 async function rolesById(sb: SB, ids: string[]) {
   const map = new Map<string, string | null>();
   if (!ids.length) return map;
@@ -65,7 +69,6 @@ async function rolesById(sb: SB, ids: string[]) {
   }
   return map;
 }
-
 async function rolesByName(sb: SB, names: string[]) {
   const map = new Map<string, string | null>();
   const n = names.map(x => x.trim()).filter(Boolean);
@@ -86,19 +89,21 @@ async function rolesByName(sb: SB, names: string[]) {
   return map;
 }
 
+
 export async function GET() {
   const sb = sbAdmin();
 
   try {
     // 1) items
+    // MODIFICADO: Se usa el nombre de columna correcto 'image_url'
     const itRes = await sb.from('order_items')
-      .select('order_id, product_name, quantity, subtotal' as any)
+      .select('order_id, product_name, quantity, subtotal, image_url' as any)
       .order('order_id', { ascending: false });
     if (itRes.error) return NextResponse.json({ error: itRes.error.message }, { status: 500 });
     const items = (itRes.data as unknown as OrderItemRow[]) ?? [];
     if (!items.length) return NextResponse.json([], { status: 200 });
 
-    // 2) orders
+    // 2) orders (la consulta con '*' ya trae todos los campos necesarios de 'orders')
     const ids = Array.from(new Set(items.map(i => i.order_id)));
     const oRes = await sb.from('orders').select('*' as any).in('id', ids);
     if (oRes.error) return NextResponse.json({ error: oRes.error.message }, { status: 500 });
@@ -108,7 +113,7 @@ export async function GET() {
 
     const branchKey = detectBranchKey(orders[0]);
 
-    // 3) cat roles comerciales
+    // 3) cat roles comerciales (sin cambios)
     const salesIds = Array.from(new Set(orders.map(o => clean(o.sales_user_id)).filter(Boolean))) as string[];
     const rById = await rolesById(sb, salesIds);
     const sellerNames = Array.from(new Set(orders.map(o => clean(o.seller)).filter(Boolean))) as string[];
@@ -120,24 +125,31 @@ export async function GET() {
       const branch =
         branchKey && Object.prototype.hasOwnProperty.call(o, branchKey) ? (o as any)[branchKey] ?? null : null;
 
-      // Prioridad:
-      // 1) sales_role (siempre comercial)  2) sales_user_id -> role
-      // 3) seller_role SOLO si NO es operativo  4) nombre -> role
+      // Lógica de roles (sin cambios)
       let role = clean(o.sales_role);
       if (!role && o.sales_user_id) role = clean(rById.get(o.sales_user_id) ?? null);
       if (!role && !isOpRole(o.seller_role)) role = clean(o.seller_role);
       if (!role && o.seller) role = clean(rByName.get(o.seller.trim()) ?? null);
 
-      // NO hay más caídas. Si no se pudo, queda null => “Sin Rol” en UI.
+      // MODIFICADO: Se construye el objeto final con los nombres de columna correctos
       return {
+        // Campos existentes
         order_id: it.order_id,
         order_date: o.created_at ?? null,
         branch,
         seller_full_name: clean(o.seller),
-        seller_role: role, // <- YA FILTRADO (no “delivery”)
+        seller_role: role,
         product_name: it.product_name,
         quantity: Number(it.quantity ?? 0),
         subtotal: Number(it.subtotal ?? 0),
+        
+        // << --- CAMPOS CORREGIDOS SEGÚN TU SCHEMA --- >>
+        delivery_date: o.delivery_date ?? null,
+        product_image_url: it.image_url ?? null, // Fuente: order_items.image_url
+        payment_proof_url: o.payment_proof_url ?? null,
+        sale_type: o.sale_type ?? null,
+        // Lógica para determinar el tipo de orden basado en 'is_encomienda'
+        order_type: o.is_encomienda === true ? 'Encomienda' : 'Pedido',
       };
     });
 

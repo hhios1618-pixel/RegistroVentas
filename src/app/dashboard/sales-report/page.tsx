@@ -12,11 +12,43 @@ import {
   TrendingUp, TrendingDown, DollarSign, Package, ShoppingCart, 
   BarChart3, Download, Calendar, Filter, Users, Target, 
   ArrowUpRight, ArrowDownRight, Eye, Zap, Award, Clock,
-  PieChart as PieChartIcon, Activity, Briefcase, Star
+  PieChart as PieChartIcon, Activity, Briefcase, Star,
+  ImageIcon, CreditCard, X as XIcon
 } from 'lucide-react';
 
-// --- Definiciones de Tipos (Interfaces) ---
+// --- NUEVO: Componente Modal para visualizar imágenes ---
+const ImageModal = ({ src, onClose }: { src: string | null; onClose: () => void }) => {
+  if (!src) return null;
+  return (
+    <motion.div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div 
+        className="relative max-w-4xl max-h-[90vh] bg-white rounded-lg p-2"
+        onClick={(e) => e.stopPropagation()}
+        initial={{ scale: 0.8 }}
+        animate={{ scale: 1 }}
+        exit={{ scale: 0.8 }}
+      >
+        <img src={src} alt="Vista ampliada" className="max-w-full max-h-[88vh] object-contain rounded" />
+        <button 
+          onClick={onClose} 
+          className="absolute -top-3 -right-3 bg-white rounded-full p-2 shadow-lg hover:bg-gray-200 transition-colors"
+        >
+          <XIcon className="w-5 h-5 text-gray-700" />
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// --- MODIFICADO: Definición de Tipos con los nuevos campos ---
 interface SaleRecord {
+  // Campos existentes
   order_id: string;
   order_date: string;
   branch: string | null;
@@ -25,6 +57,13 @@ interface SaleRecord {
   product_name: string;
   quantity: number;
   subtotal: number;
+  
+  // Nuevos campos que debe enviar tu API
+  delivery_date: string | null;
+  product_image_url: string | null;
+  payment_proof_url: string | null;
+  sale_type: 'Por Mayor' | 'Al Detalle' | null;
+  order_type: 'Pedido' | 'Encomienda' | null;
 }
 
 interface StatCardProps {
@@ -264,6 +303,7 @@ export default function SalesReportPageRedesigned() {
     branch: '',
     sellerRole: '',
   });
+  const [modalImageSrc, setModalImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAllSales = async () => {
@@ -339,20 +379,16 @@ export default function SalesReportPageRedesigned() {
       if (sale.branch) branches.add(sale.branch);
       if (sale.seller_role) roles.add(sale.seller_role);
       
-      // Ventas por sucursal
       branchSales[sale.branch || 'Sin Sucursal'] = (branchSales[sale.branch || 'Sin Sucursal'] || 0) + sale.subtotal;
       
-      // Ventas por producto
       if (!productSales[sale.product_name]) {
         productSales[sale.product_name] = { quantity: 0, revenue: 0 };
       }
       productSales[sale.product_name].quantity += sale.quantity;
       productSales[sale.product_name].revenue += sale.subtotal;
       
-      // Ventas por rol
       roleSales[sale.seller_role || 'Sin Rol'] = (roleSales[sale.seller_role || 'Sin Rol'] || 0) + sale.subtotal;
       
-      // Performance por vendedor
       const sellerKey = sale.seller_full_name || 'Sin Vendedor';
       if (!sellerPerformance[sellerKey]) {
         sellerPerformance[sellerKey] = { revenue: 0, orders: 0 };
@@ -360,11 +396,9 @@ export default function SalesReportPageRedesigned() {
       sellerPerformance[sellerKey].revenue += sale.subtotal;
       sellerPerformance[sellerKey].orders += 1;
       
-      // Tendencia diaria
       const date = new Date(sale.order_date).toISOString().split('T')[0];
       dailySales[date] = (dailySales[date] || 0) + sale.subtotal;
       
-      // Ventas por hora
       const hour = new Date(sale.order_date).getHours();
       hourlySales[hour] = (hourlySales[hour] || 0) + sale.subtotal;
     });
@@ -483,7 +517,7 @@ export default function SalesReportPageRedesigned() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Zap className="text-red-600" size={32} />
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Error en el Dashboard</h2>
@@ -495,7 +529,10 @@ export default function SalesReportPageRedesigned() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Header Moderno */}
+      <AnimatePresence>
+        {modalImageSrc && <ImageModal src={modalImageSrc} onClose={() => setModalImageSrc(null)} />}
+      </AnimatePresence>
+      
       <motion.header 
         className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50"
         initial={{ opacity: 0, y: -20 }}
@@ -532,7 +569,6 @@ export default function SalesReportPageRedesigned() {
       </motion.header>
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Filtros Avanzados */}
         <AdvancedFilters
           filters={filters}
           onFilterChange={handleFilterChange}
@@ -541,7 +577,6 @@ export default function SalesReportPageRedesigned() {
           onClearFilters={clearFilters}
         />
 
-        {/* KPIs Principales */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
             title="Ingresos Totales"
@@ -577,7 +612,6 @@ export default function SalesReportPageRedesigned() {
           />
         </div>
 
-        {/* KPIs Secundarios */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <KPICard
             title="Meta Mensual"
@@ -602,9 +636,7 @@ export default function SalesReportPageRedesigned() {
           />
         </div>
 
-        {/* Gráficos Inteligentes */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Tendencia de Ventas (Área) */}
           <ChartContainer title="Tendencia de Ingresos" className="lg:col-span-2">
             <ResponsiveContainer>
               <AreaChart data={monthlyTrend}>
@@ -634,7 +666,6 @@ export default function SalesReportPageRedesigned() {
             </ResponsiveContainer>
           </ChartContainer>
 
-          {/* Distribución por Roles (Radial) */}
           <ChartContainer title="Ventas por Rol">
             <ResponsiveContainer>
               <RadialBarChart cx="50%" cy="50%" innerRadius="30%" outerRadius="90%" data={salesByRole}>
@@ -654,7 +685,6 @@ export default function SalesReportPageRedesigned() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Top Productos (Treemap) */}
           <ChartContainer title="Mapa de Productos por Ingresos">
             <ResponsiveContainer>
               <Treemap
@@ -672,7 +702,6 @@ export default function SalesReportPageRedesigned() {
             </ResponsiveContainer>
           </ChartContainer>
 
-          {/* Performance por Hora (Línea) */}
           <ChartContainer title="Ventas por Hora del Día">
             <ResponsiveContainer>
               <LineChart data={performanceByHour}>
@@ -696,7 +725,6 @@ export default function SalesReportPageRedesigned() {
           </ChartContainer>
         </div>
 
-        {/* Análisis de Sucursales (Composición) */}
         <ChartContainer title="Análisis Comparativo por Sucursal">
           <ResponsiveContainer>
             <ComposedChart data={salesByBranch}>
@@ -718,38 +746,54 @@ export default function SalesReportPageRedesigned() {
           </ResponsiveContainer>
         </ChartContainer>
 
-        {/* Top Performers */}
-        <ChartContainer title="Top 5 Vendedores">
-          <div className="space-y-4">
-            {topPerformers.map((performer, index) => (
-              <motion.div
-                key={performer.name}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-              >
-                <div className="flex items-center space-x-4">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                    index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-orange-500' : 'bg-blue-500'
-                  }`}>
-                    {index + 1}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-800">{performer.name}</p>
-                    <p className="text-sm text-gray-600">{performer.orders} órdenes</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-gray-800">${performer.revenue.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">${performer.avgOrderValue.toFixed(0)} promedio</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </ChartContainer>
+    
 
-        {/* Tabla de Transacciones Mejorada */}
+        
+
+<ChartContainer title="Top 5 Vendedores">
+  <div className="space-y-2">
+    {topPerformers.map((performer, index) => {
+      // --- Lógica para corregir el nombre y evitar mostrar el UUID ---
+      const isUuid = /^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(performer.name);
+      const displayName = isUuid ? 'Vendedor Desconocido' : performer.name;
+      const topPerformerRevenue = topPerformers[0]?.revenue || 1;
+      const performanceRatio = (performer.revenue / topPerformerRevenue) * 100;
+
+      return (
+        <motion.div
+          key={`${performer.name}-${index}`}
+          className="relative w-full h-16 bg-gray-100 rounded-lg overflow-hidden group"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: index * 0.1 }}
+        >
+          {/* Barra de rendimiento */}
+          <motion.div
+            className={`absolute top-0 left-0 h-full ${
+              index === 0 ? 'bg-gradient-to-r from-blue-400 to-indigo-500' : 'bg-gradient-to-r from-gray-300 to-gray-400'
+            } group-hover:from-blue-500 group-hover:to-indigo-600 transition-all duration-300`}
+            initial={{ width: 0 }}
+            animate={{ width: `${performanceRatio}%` }}
+            transition={{ duration: 1, ease: 'easeOut', delay: index * 0.1 + 0.2 }}
+          />
+
+          {/* Contenido superpuesto */}
+          <div className="absolute inset-0 px-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-sm font-bold text-white w-4 text-center">{index + 1}</span>
+              <p className="font-semibold text-white truncate">{displayName}</p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-xs text-white/80 hidden md:inline">{performer.orders} órdenes</span>
+              <span className="text-lg font-bold text-white">${performer.revenue.toLocaleString()}</span>
+            </div>
+          </div>
+        </motion.div>
+      );
+    })}
+  </div>
+</ChartContainer>
+
         <motion.div 
           className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
           initial={{ opacity: 0, y: 30 }}
@@ -773,7 +817,7 @@ export default function SalesReportPageRedesigned() {
             <table className="min-w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                 <tr>
-                  {['Fecha', 'Vendedor', 'Sucursal', 'Producto', 'Cantidad', 'Subtotal'].map(header => (
+                  {['Venta', 'Entrega', 'Vendedor', 'Producto', 'Tipo', 'Detalles', 'Subtotal'].map(header => (
                     <th key={header} className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                       {header}
                     </th>
@@ -802,6 +846,15 @@ export default function SalesReportPageRedesigned() {
                           })}
                         </div>
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {sale.delivery_date ? (
+                          <div className="text-sm font-medium text-gray-700">
+                            {new Date(sale.delivery_date).toLocaleDateString('es-ES')}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">Pendiente</span>
+                        )}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
@@ -818,17 +871,47 @@ export default function SalesReportPageRedesigned() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {sale.branch || 'Sin sucursal'}
-                        </span>
+                        <div className="text-sm text-gray-900 font-medium">{sale.product_name}</div>
+                        <div className="text-xs text-gray-500">{sale.branch || 'Sin sucursal'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap space-y-1">
+                        {sale.sale_type && (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            sale.sale_type === 'Por Mayor' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
+                          }`}>
+                            {sale.sale_type}
+                          </span>
+                        )}
+                        {sale.order_type && (
+                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            sale.order_type === 'Encomienda' ? 'bg-orange-100 text-orange-800' : 'bg-sky-100 text-sky-800'
+                          }`}>
+                            {sale.order_type}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900 font-medium">{sale.product_name}</div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-700">
-                          {sale.quantity}
-                        </span>
+                        <div className="flex items-center space-x-3">
+                           <span className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-700">
+                            {sale.quantity}
+                          </span>
+                          <button 
+                            onClick={() => setModalImageSrc(sale.product_image_url)} 
+                            disabled={!sale.product_image_url} 
+                            className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Ver foto del producto"
+                           >
+                            <ImageIcon className="w-5 h-5 text-gray-600" />
+                          </button>
+                          <button 
+                            onClick={() => setModalImageSrc(sale.payment_proof_url)} 
+                            disabled={!sale.payment_proof_url}
+                            className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Ver comprobante de pago"
+                          >
+                            <CreditCard className="w-5 h-5 text-gray-600" />
+                          </button>
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="text-lg font-bold text-gray-900">
