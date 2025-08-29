@@ -24,9 +24,9 @@ import { EfficiencyChart } from '@/components/EfficiencyChart';
 // Iconos
 import {
   PlusCircle, RefreshCw, Search, Truck, Clock, CheckCircle2,
-  AlertTriangle, Users, Map as MapIcon, Calendar, BarChart2, Radio, 
+  AlertTriangle, Users, Map as MapIcon, Calendar, BarChart2, Radio,
   SlidersHorizontal, Package, Route, Warehouse, Target, TrendingUp,
-  Zap, BarChart3, Eye, Filter, ArrowRight
+  Zap, BarChart3, Eye, Filter, ArrowRight, ChevronDown
 } from 'lucide-react';
 
 // Configuración de Supabase
@@ -35,8 +35,8 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // --- Componente de Tarjeta KPI Mejorado con Animaciones ---
-const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 0 }: 
-  { title: string, value: string | number, icon: React.ElementType, color: string, 
+const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 0 }:
+  { title: string, value: string | number, icon: React.ElementType, color: string,
     description: string, trend?: { value: number, isPositive: boolean }, delay?: number }) => (
   <motion.div
     initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -47,7 +47,7 @@ const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 
   >
     <div className="flex items-start justify-between">
       <div className="flex flex-col">
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: delay + 0.1 }}
@@ -56,7 +56,7 @@ const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 
           <Icon className="w-4 h-4" style={{ color }} />
           {title}
         </motion.p>
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: delay + 0.2 }}
@@ -64,7 +64,7 @@ const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 
         >
           {value}
         </motion.p>
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: delay + 0.3 }}
@@ -72,9 +72,9 @@ const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 
         >
           {description}
         </motion.p>
-        
+
         {trend && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: delay + 0.4 }}
@@ -84,7 +84,7 @@ const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 
           </motion.div>
         )}
       </div>
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
         animate={{ opacity: 1, scale: 1, rotate: 0 }}
         transition={{ delay: delay + 0.3, type: "spring", stiffness: 200 }}
@@ -94,7 +94,7 @@ const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 
         <Icon className="w-5 h-5" style={{ color }} />
       </motion.div>
     </div>
-    <motion.div 
+    <motion.div
       initial={{ width: 0 }}
       animate={{ width: "100%" }}
       transition={{ delay: delay + 0.5, duration: 0.8 }}
@@ -119,7 +119,7 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
   ];
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
@@ -135,8 +135,8 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
           whileTap={{ scale: 0.95 }}
           onClick={() => onStatusChange(option.value)}
           className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 shadow-lg ${
-            currentStatus === option.value 
-              ? `${option.color} text-white shadow-md ${option.color.replace('bg-', 'shadow-')}/30` 
+            currentStatus === option.value
+              ? `${option.color} text-white shadow-md ${option.color.replace('bg-', 'shadow-')}/30`
               : 'bg-slate-800 text-slate-300 hover:bg-slate-700 shadow-slate-900/20'
           }`}
         >
@@ -182,6 +182,64 @@ const ParticlesBackground = () => {
     </div>
   );
 };
+
+// --- Componente para las secciones agrupadas ---
+const CollapsibleOrderSection = ({ city, orders, onRowClick }: { city: string, orders: OrderRow[], onRowClick: (order: OrderRow) => void }) => {
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-slate-900/30 rounded-xl overflow-hidden"
+    >
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full text-left p-4 bg-slate-800/50 hover:bg-slate-800 transition-colors flex justify-between items-center"
+      >
+        <div className="flex items-center gap-3">
+          <MapIcon className="w-5 h-5 text-indigo-400" />
+          <h3 className="font-semibold text-white">{city}</h3>
+          <span className="text-sm text-slate-400 bg-slate-700/50 px-2 py-0.5 rounded-full">{orders.length}</span>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <OrderTable orders={orders} onRowClick={onRowClick} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
+
+// --- LÓGICA DE AGRUPACIÓN FINAL ---
+const getBranchForOrder = (order: OrderRow): string => {
+  const destino = order.destino;
+
+  // Prioridad 1: Usar el campo 'destino' si existe (para encomiendas a otras sucursales)
+  if (destino) {
+    const lowerDestino = destino.toLowerCase();
+    if (lowerDestino.includes('el alto')) return 'El Alto';
+    if (lowerDestino.includes('la paz') || lowerDestino.includes('oruro')) return 'La Paz';
+    if (lowerDestino.includes('cochabamba')) return 'Cochabamba';
+    if (lowerDestino.includes('sucre') || lowerDestino.includes('chuquisaca') || lowerDestino.includes('potosi') || lowerDestino.includes('tarija') || lowerDestino.includes('villamontes')) return 'Sucre';
+    // Si el destino es Santa Cruz, también lo manejamos aquí
+    if (lowerDestino.includes('santa cruz') || lowerDestino.includes('beni') || lowerDestino.includes('pando') || lowerDestino.includes('charagua')) return 'Santa Cruz';
+  }
+
+  // Prioridad 2: Si no hay 'destino', es una entrega local. Todas van a la sucursal de Santa Cruz.
+  // Basado en tu regla de que todo pedido tiene un lugar de entrega.
+  return 'Santa Cruz';
+};
+
 
 export default function LogisticaPage() {
   // --- Estados ---
@@ -248,7 +306,6 @@ export default function LogisticaPage() {
     };
   }, [loadData]);
 
-  // Este useEffect mantiene sincronizado el modal con los datos más frescos.
   useEffect(() => {
     if (selectedOrder) {
       const latestOrderData = orders.find(o => o.id === selectedOrder.id);
@@ -317,6 +374,31 @@ export default function LogisticaPage() {
       return true;
     });
   }, [orders, filters]);
+  
+  const groupedOrders = useMemo(() => {
+    const cityOrder = ['Santa Cruz', 'Cochabamba', 'La Paz', 'El Alto', 'Sucre'];
+    const groups: { [key: string]: OrderRow[] } = {};
+
+    filteredOrders.forEach(order => {
+      const branch = getBranchForOrder(order);
+      if (!groups[branch]) {
+        groups[branch] = [];
+      }
+      groups[branch].push(order);
+    });
+
+    const orderedGroups = Object.entries(groups).sort(([a], [b]) => {
+      const indexA = cityOrder.indexOf(a);
+      const indexB = cityOrder.indexOf(b);
+      if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+
+    return orderedGroups;
+  }, [filteredOrders]);
+
 
   if (loading) {
     return (
@@ -479,8 +561,22 @@ export default function LogisticaPage() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="p-0">
-                    <OrderTable orders={filteredOrders} onRowClick={setSelectedOrder} />
+                  <CardContent className="p-4 space-y-4">
+                    {groupedOrders.length > 0 ? (
+                      groupedOrders.map(([city, cityOrders]) => (
+                        <CollapsibleOrderSection
+                          key={city}
+                          city={city}
+                          orders={cityOrders}
+                          onRowClick={setSelectedOrder}
+                        />
+                      ))
+                    ) : (
+                      <div className="text-center py-12 text-slate-500">
+                        <Package className="mx-auto w-10 h-10 mb-3" />
+                        No se encontraron pedidos que coincidan con los filtros.
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

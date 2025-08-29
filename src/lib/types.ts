@@ -34,6 +34,10 @@ export interface OrderRow {
   order_no?: number | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  
+  // --- PROPIEDAD AÑADIDA ---
+  address?: string | null; // Esta es la línea que soluciona el nuevo error.
+
   delivery_address?: string | null;
   delivery_geo_lat?: number | null;
   delivery_geo_lng?: number | null;
@@ -50,6 +54,7 @@ export interface OrderRow {
   seller?: string | null;
   sales_user_id?: string | null;
   delivery_assigned_to?: string | null;
+  destino: string | null; 
   
   seller_profile?: UserProfile | UserProfile[] | null;
   delivery_profile?: UserProfile | UserProfile[] | null;
@@ -57,7 +62,7 @@ export interface OrderRow {
   image_url?: string | null;
   payment_proof_url?: string | null;
 
-  order_items?: OrderItem[]; // <-- AÑADIDO: Para recibir los items y sus fotos
+  order_items?: OrderItem[];
 }
 
 // --------------------- USERS (from 'people' table) ---------------------
