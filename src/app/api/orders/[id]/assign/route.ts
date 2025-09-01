@@ -135,7 +135,7 @@ export async function POST(
     // estado actual de la orden
     const { data: curOrder, error: curErr } = await supabase
       .from('orders')
-      .select('status, delivery_assigned_to')
+      .select('status, delivery_assigned_to, seller')
       .eq('id', orderId)
       .single();
     if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
@@ -144,12 +144,14 @@ export async function POST(
     const nextStatus = curOrder?.status === 'pending' ? 'assigned' : curOrder?.status;
     const nextAssignee = curOrder?.delivery_assigned_to ?? deliveryUserId;
 
+    // CORRECCIÓN CRÍTICA: NO sobrescribir el campo 'seller' con el nombre del delivery
+    // El vendedor debe mantenerse como está, solo se asigna el delivery
     const { error: updateErr } = await supabase
       .from('orders')
       .update({
         status: nextStatus,
         delivery_assigned_to: nextAssignee,
-        seller: deliveryUser.full_name,
+        // REMOVIDO: seller: deliveryUser.full_name, <- Esta línea causaba el problema
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId);

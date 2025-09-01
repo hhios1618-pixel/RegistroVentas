@@ -21,7 +21,8 @@ type AdSpend = {
 type SellerProfile = {
   id: string;
   full_name: string;
-  local: string | null; // La sucursal puede ser null
+  local: string | null;
+  telegram_username: string | null;
 };
 
 function sbAdmin(): SB {
@@ -45,12 +46,26 @@ function parseCurrency(value: string | number | null): number {
 export async function GET() {
   const sb = sbAdmin();
   try {
+    // 1. OBTENER TODOS LOS VENDEDORES Y CREAR MAPAS DE BÚSQUEDA
     const { data: sellers, error: sellersError } = await sb
       .from('people')
-      .select('id, full_name, local')
+      .select('id, full_name, local, telegram_username')
       .in('role', ['PROMOTOR', 'ASESOR']);
     if (sellersError) throw sellersError;
 
+    const sellersById = new Map<string, SellerProfile>();
+    const sellersByTelegram = new Map<string, SellerProfile>();
+    const sellersByName = new Map<string, SellerProfile>();
+
+    (sellers as SellerProfile[]).forEach(seller => {
+      sellersById.set(seller.id, seller);
+      sellersByName.set(seller.full_name.trim(), seller);
+      if (seller.telegram_username) {
+        sellersByTelegram.set(seller.telegram_username.trim(), seller);
+      }
+    });
+
+    // 2. OBTENER DATOS DE PEDIDOS Y GASTOS EN PUBLICIDAD
     const [{ data: orders, error: ordersError }, { data: adSpends, error: adSpendsError }] = await Promise.all([
       sb.from('orders').select('seller, sales_user_id, amount'),
       sb.from('meta_ad_spend').select(`"Importe gastado (BOB)", matched_user_id`)
@@ -58,20 +73,18 @@ export async function GET() {
     if (ordersError) throw ordersError;
     if (adSpendsError) throw adSpendsError;
 
+    // 3. INICIALIZAR EL MAPA DE RESUMEN
     const sellerSummaryMap = new Map<string, {
       full_name: string;
-      local: string; // Ahora siempre será un string
+      local: string;
       total_sales: number;
       orders_count: number;
       ad_spend: number;
     }>();
 
-    // Inicializar el mapa con todos los vendedores
     (sellers as SellerProfile[]).forEach(seller => {
       sellerSummaryMap.set(seller.id, {
         full_name: seller.full_name,
-        // --- LÓGICA CORREGIDA AQUÍ ---
-        // Si el campo 'local' es nulo, lo clasificamos como 'Promotores'.
         local: seller.local || 'Promotores',
         total_sales: 0,
         orders_count: 0,
@@ -79,16 +92,33 @@ export async function GET() {
       });
     });
 
-    // Procesar pedidos, cruzando por sales_user_id
+    // 4. PROCESAR PEDIDOS CON LA NUEVA LÓGICA DE MATCH INTELIGENTE
     (orders as Order[]).forEach(order => {
-      if (order.sales_user_id && sellerSummaryMap.has(order.sales_user_id)) {
-        const stats = sellerSummaryMap.get(order.sales_user_id)!;
+      let sellerId: string | null = null;
+      const sellerText = order.seller?.trim();
+
+      // Prioridad 1: Usar el ID de venta si existe
+      if (order.sales_user_id && sellersById.has(order.sales_user_id)) {
+        sellerId = order.sales_user_id;
+      }
+      // Prioridad 2: Si no hay ID, intentar matchear por usuario de Telegram
+      else if (sellerText && sellersByTelegram.has(sellerText)) {
+        sellerId = sellersByTelegram.get(sellerText)!.id;
+      }
+      // Prioridad 3: Como último recurso, matchear por nombre completo
+      else if (sellerText && sellersByName.has(sellerText)) {
+        sellerId = sellersByName.get(sellerText)!.id;
+      }
+
+      // Si encontramos un vendedor válido, sumamos sus estadísticas
+      if (sellerId && sellerSummaryMap.has(sellerId)) {
+        const stats = sellerSummaryMap.get(sellerId)!;
         stats.total_sales += order.amount || 0;
         stats.orders_count += 1;
       }
     });
 
-    // Procesar gastos, cruzando por matched_user_id
+    // 5. PROCESAR GASTOS EN PUBLICIDAD (sin cambios)
     (adSpends as AdSpend[]).forEach(ad => {
       if (ad.matched_user_id && sellerSummaryMap.has(ad.matched_user_id)) {
         const stats = sellerSummaryMap.get(ad.matched_user_id)!;
@@ -97,7 +127,7 @@ export async function GET() {
       }
     });
 
-    // Convertir el mapa a un array y calcular ROAS
+    // 6. CONVERTIR EL MAPA A UN ARRAY Y CALCULAR ROAS (sin cambios)
     const finalSummary = Array.from(sellerSummaryMap.values()).map(data => {
       const roas = data.ad_spend > 0 ? data.total_sales / data.ad_spend : null;
       return {

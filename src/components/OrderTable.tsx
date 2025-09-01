@@ -1,7 +1,7 @@
 'use client';
 
 import type { OrderRow, OrderStatus } from '@/lib/types';
-import { User } from 'lucide-react';
+import { User, Package, Truck } from 'lucide-react';
 
 // --- Sub-componentes para el nuevo diseño ---
 
@@ -23,6 +23,53 @@ const StatusBadge = ({ status }: { status: OrderStatus | string | null }) => {
     <span className={`px-3 py-1 text-xs font-medium rounded-full border whitespace-nowrap ${colorClasses}`}>
       {text}
     </span>
+  );
+};
+
+// --- NUEVO: Componente para indicador de encomienda ---
+const EncomiendaBadge = ({ isEncomienda }: { isEncomienda?: boolean | null }) => {
+  if (!isEncomienda) return null;
+  
+  return (
+    <div className="flex items-center gap-1 px-2 py-1 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full text-xs font-medium">
+      <Package size={12} />
+      <span>Encomienda</span>
+    </div>
+  );
+};
+
+// --- NUEVO: Componente para fechas de encomienda ---
+const EncomiendaDates = ({ order }: { order: OrderRow }) => {
+  if (!order.is_encomienda) return null;
+  
+  const formatDate = (dateStr?: string | null) => {
+    if (!dateStr) return 'No definida';
+    try {
+      return new Date(dateStr).toLocaleDateString('es-BO', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+    } catch {
+      return 'Fecha inválida';
+    }
+  };
+
+  return (
+    <div className="text-xs text-slate-400 space-y-1">
+      {order.fecha_salida_bodega && (
+        <div className="flex items-center gap-1">
+          <Truck size={10} />
+          <span>Salida: {formatDate(order.fecha_salida_bodega)}</span>
+        </div>
+      )}
+      {order.fecha_entrega_encomienda && (
+        <div className="flex items-center gap-1">
+          <Package size={10} />
+          <span>Entrega: {formatDate(order.fecha_entrega_encomienda)}</span>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -82,17 +129,25 @@ export function OrderTable({ orders, onRowClick }: { orders: OrderRow[], onRowCl
           <div 
             key={order.id} 
             onClick={() => onRowClick(order)}
-            className="grid grid-cols-1 lg:grid-cols-[auto,1fr,1.5fr,1fr] gap-x-4 gap-y-2 items-center bg-slate-800/20 hover:bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 cursor-pointer transition-colors duration-200"
+            className={`grid grid-cols-1 lg:grid-cols-[auto,1fr,1.5fr,1fr] gap-x-4 gap-y-2 items-center hover:bg-slate-800/50 border rounded-lg p-4 cursor-pointer transition-colors duration-200 ${
+              order.is_encomienda 
+                ? 'bg-orange-900/10 border-orange-500/30' 
+                : 'bg-slate-800/20 border-slate-700/50'
+            }`}
           >
             {/* Columna 1: Nº Pedido */}
-            <div className="font-mono text-blue-400 font-bold text-lg lg:pl-2">
-              #{order.order_no || 'S/N'}
+            <div className="flex flex-col gap-2">
+              <div className="font-mono text-blue-400 font-bold text-lg lg:pl-2">
+                #{order.order_no || 'S/N'}
+              </div>
+              <EncomiendaBadge isEncomienda={order.is_encomienda} />
             </div>
 
             {/* Columna 2: Cliente */}
             <div className="text-sm">
               <div className="font-medium text-white">{order.customer_name || 'N/A'}</div>
               <div className="text-slate-400 text-xs">{order.customer_phone}</div>
+              <EncomiendaDates order={order} />
             </div>
 
             {/* Columna 3: Vendedor y Repartidor */}
@@ -107,6 +162,11 @@ export function OrderTable({ orders, onRowClick }: { orders: OrderRow[], onRowCl
                 Bs {order.amount?.toFixed(2) || '0.00'}
               </div>
               <StatusBadge status={order.status} />
+              {order.is_encomienda && order.destino && (
+                <div className="text-xs text-slate-400 text-right">
+                  Destino: {order.destino}
+                </div>
+              )}
             </div>
           </div>
         ))}

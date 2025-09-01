@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, useMemo, SVGProps, FC } from 'react';
 import { motion } from 'framer-motion';
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import useSWR from 'swr'; // --- CAMBIO: Importamos SWR
 
 // --- TIPOS Y DATOS DE EJEMPLO ---
 
@@ -28,12 +28,6 @@ interface QuickLinkCardProps {
   accentColor: string;
   gradient: string;
 }
-
-const salesData = [
-  { h: 0, v: 5 }, { h: 2, v: 8 }, { h: 4, v: 10 }, { h: 6, v: 15 },
-  { h: 8, v: 12 }, { h: 10, v: 20 }, { h: 12, v: 35 }, { h: 14, v: 40 },
-  { h: 16, v: 55 }, { h: 18, v: 60 }, { h: 20, v: 75 }, { h: 22, v: 80 },
-];
 
 // --- HOOK PERSONALIZADO PARA LA HORA ---
 
@@ -79,7 +73,12 @@ const StatCard: FC<StatCardProps> = ({ icon, title, value, description, trend = 
   const [animatedValue, setAnimatedValue] = useState(0);
 
   useEffect(() => {
-    const numericValue = typeof value === 'string' ? parseInt(value.replace(/[^0-9]/g, '')) || 0 : value;
+    // Si el valor no es un número (ej: '...'), no animamos
+    if (typeof value !== 'number') {
+        setAnimatedValue(0); // O podrías manejar un estado de 'loading' aquí
+        return;
+    }
+    const numericValue = value;
     if (isNaN(numericValue)) return;
     const duration = 1500;
     const steps = 50;
@@ -97,6 +96,7 @@ const StatCard: FC<StatCardProps> = ({ icon, title, value, description, trend = 
     return () => clearInterval(timer);
   }, [value]);
 
+
   const getTrendIcon = () => {
     switch (trend) {
       case 'up': return <span className="text-green-400 text-xs">↗</span>;
@@ -104,6 +104,8 @@ const StatCard: FC<StatCardProps> = ({ icon, title, value, description, trend = 
       default: return <span className="text-gray-400 text-xs">→</span>;
     }
   };
+  
+  const displayValue = typeof value === 'string' ? value : animatedValue.toLocaleString('es-BO');
 
   return (
     <div
@@ -119,7 +121,7 @@ const StatCard: FC<StatCardProps> = ({ icon, title, value, description, trend = 
         </div>
         <h3 className="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">{title}</h3>
         <div className={`text-2xl font-bold text-white mb-2 transition-all duration-300 ${isHovered ? 'scale-105' : ''}`}>
-          {typeof value === 'string' ? value : animatedValue.toLocaleString('es-BO')}
+          {displayValue}
         </div>
         <p className="text-xs text-gray-500">{description}</p>
       </div>
@@ -163,27 +165,62 @@ const QuickLinkCard: FC<QuickLinkCardProps> = ({ href, icon, title, description,
   </Link>
 );
 
+// --- CAMBIO: Creamos una función 'fetcher' para SWR ---
+const fetcher = (url: string) => fetch(url).then((res) => {
+    if (!res.ok) {
+        throw new Error('Error al cargar los datos de la API');
+    }
+    return res.json();
+});
+
 // --- COMPONENTE PRINCIPAL DE LA PÁGINA ---
 export default function FenixHomePage() {
   const { formattedTime, formattedDate, greeting } = useCurrentTime();
   const [isLoaded, setIsLoaded] = useState(false);
   const [usdRate] = useState({ oficial: 6.96, paralelo: 7.15, loading: false, error: null, lastUpdated: 'Hace 5 min' });
-  const [todayStats] = useState({ sales: 847, orders: 124, revenue: 185420, returns: 12, returnsAmount: 8540 });
+
+  // --- CAMBIO: Usamos SWR para obtener los datos reales de la API ---
+  // NOTA: Asumí que la ruta de tu API es '/api/sales-report'. ¡Cámbiala si es diferente!
+  const { data: salesData, error: salesError, isLoading: salesLoading } = useSWR('/api/sales-report', fetcher, {
+    refreshInterval: 60000, // Opcional: refresca los datos cada 60 segundos
+  });
+
+  // --- CAMBIO: Usamos useMemo para calcular los KPIs a partir de los datos reales ---
+  const todayStats = useMemo(() => {
+    if (!salesData || salesError) {
+      // Valores por defecto si hay error o no hay datos
+      return { sales: 0, orders: 0, revenue: 0, returns: 0, returnsAmount: 0 };
+    }
+
+    const today = new Date();
+    // Ajustamos para obtener la fecha en la zona horaria de Bolivia
+    const todayStr = new Date(today.toLocaleString('en-US', { timeZone: 'America/La_Paz' })).toISOString().slice(0, 10);
+
+    const todaySalesItems = salesData.filter((item: any) => 
+      item.order_date && item.order_date.startsWith(todayStr)
+    );
+
+    const totalRevenue = todaySalesItems.reduce((sum: number, item: any) => sum + (item.subtotal || 0), 0);
+    const uniqueOrderIds = new Set(todaySalesItems.map((item: any) => item.order_id));
+    const totalSales = uniqueOrderIds.size;
+
+    return {
+      sales: totalSales,
+      orders: totalSales, // Ver Nota 2 en la respuesta
+      revenue: totalRevenue,
+      returns: 0, // Ver Nota 3 en la respuesta
+      returnsAmount: 0, // Ver Nota 3 en la respuesta
+    };
+  }, [salesData, salesError]);
 
   useEffect(() => {
     setIsLoaded(true);
-
-    // Atajos de teclado → rutas correctas
     const handleKeyDown = (e: KeyboardEvent) => {
       const shortcuts: Record<string, string> = {
-        '1': '/logistica',
-        '2': '/dashboard/sales-report',
-        '3': '/dashboard/vendedores',
-        '4': '/returns-dashboard',
+        '1': '/logistica', '2': '/dashboard/sales-report',
+        '3': '/dashboard/vendedores', '4': '/returns-dashboard',
       };
-      if (shortcuts[e.key]) {
-        window.location.href = shortcuts[e.key];
-      }
+      if (shortcuts[e.key]) { window.location.href = shortcuts[e.key]; }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -211,9 +248,7 @@ export default function FenixHomePage() {
         <header className="space-y-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent">
-                FENIX
-              </h1>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent">FENIX</h1>
               <div className="h-8 w-px bg-gray-700/50"></div>
               <span className="text-sm text-gray-400 font-light uppercase tracking-widest">OPERACIONES</span>
             </div>
@@ -225,101 +260,38 @@ export default function FenixHomePage() {
           <div className="space-y-3">
             <p className="text-lg text-gray-300">{greeting}, <span className="font-medium text-blue-400">Equipo Fenix</span>.</p>
             <div className="flex items-center space-x-5">
-              <div className="text-3xl font-mono text-white font-medium bg-gray-800/30 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700/30">
-                {formattedTime}
-              </div>
-              <div className="text-sm text-gray-400 capitalize bg-gray-800/30 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-700/30">
-                {formattedDate}
-              </div>
+              <div className="text-3xl font-mono text-white font-medium bg-gray-800/30 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700/30">{formattedTime}</div>
+              <div className="text-sm text-gray-400 capitalize bg-gray-800/30 backdrop-blur-sm px-3 py-1.5 rounded-md border border-gray-700/30">{formattedDate}</div>
             </div>
           </div>
         </header>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-gray-900/80 backdrop-blur-xl rounded-xl p-5 border border-gray-700/50 lg:col-span-1 transition-all duration-300 hover:border-yellow-500/30">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-yellow-400">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-xs text-gray-400">{usdRate.lastUpdated}</span>
-              </div>
-            </div>
+            <div className="flex items-center justify-between mb-3"><div className="text-yellow-400"><svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" /></svg></div><div className="flex items-center space-x-1"><div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" /><span className="text-xs text-gray-400">{usdRate.lastUpdated}</span></div></div>
             <h3 className="text-xs font-medium text-gray-400 mb-3 uppercase tracking-wider">USD Bolivia</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Oficial:</span>
-                <span className="text-yellow-300 font-mono text-base font-medium">{usdRate.oficial.toFixed(2)} Bs</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Paralelo:</span>
-                <span className="text-blue-300 font-mono text-base font-medium">{usdRate.paralelo.toFixed(2)} Bs</span>
-              </div>
-            </div>
+            <div className="space-y-2"><div className="flex justify-between items-center"><span className="text-gray-400 text-sm">Oficial:</span><span className="text-yellow-300 font-mono text-base font-medium">{usdRate.oficial.toFixed(2)} Bs</span></div><div className="flex justify-between items-center"><span className="text-gray-400 text-sm">Paralelo:</span><span className="text-blue-300 font-mono text-base font-medium">{usdRate.paralelo.toFixed(2)} Bs</span></div></div>
           </div>
-          <StatCard icon={<TrendingUpIcon />} title="Ventas de Hoy" value={todayStats.sales} description="+12% vs ayer" trend="up" color="blue"/>
-          <StatCard icon={<PackageIcon />} title="Pedidos Activos" value={todayStats.orders} description="En proceso de entrega" color="emerald"/>
-          <StatCard icon={<ReturnIcon />} title="Devoluciones Hoy" value={todayStats.returns} description={`${todayStats.returnsAmount.toLocaleString('es-BO')} Bs`} trend="down" color="red"/>
-          <StatCard icon={<WalletIcon />} title="Ingresos (Bs)" value={todayStats.revenue.toLocaleString('es-BO')} description="Total facturado hoy" trend="up" color="purple"/>
+          {/* --- CAMBIO: Las tarjetas ahora manejan el estado de carga y muestran datos reales --- */}
+          <StatCard icon={<TrendingUpIcon />} title="Ventas de Hoy" value={salesLoading ? '...' : todayStats.sales} description="+12% vs ayer" trend="up" color="blue"/>
+          <StatCard icon={<PackageIcon />} title="Pedidos de Hoy" value={salesLoading ? '...' : todayStats.orders} description="Total de órdenes del día" color="emerald"/>
+          <StatCard icon={<ReturnIcon />} title="Devoluciones Hoy" value={salesLoading ? '...' : todayStats.returns} description={`${todayStats.returnsAmount.toLocaleString('es-BO')} Bs`} trend="down" color="red"/>
+          <StatCard icon={<WalletIcon />} title="Ingresos (Bs)" value={salesLoading ? '...' : todayStats.revenue.toLocaleString('es-BO')} description="Total facturado hoy" trend="up" color="purple"/>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-6">
-          <QuickLinkCard 
-            href="/logistica" icon={<TruckIcon className="w-8 h-8"/>}
-            title="Panel de Logística"
-            description="Asigna, monitorea y gestiona el despacho de todos los pedidos."
-            shortcut="1" accentColor="blue"
-            gradient="from-blue-500 to-cyan-500"
-          />
-          <QuickLinkCard 
-            href="/dashboard/sales-report" icon={<ClipboardIcon className="w-8 h-8"/>}
-            title="Reporte de Ventas"
-            description="Analiza las ventas diarias, semanales y ROAS por canal."
-            shortcut="2" accentColor="emerald"
-            gradient="from-emerald-500 to-green-500"
-          />
-          <QuickLinkCard 
-            href="/dashboard/vendedores" icon={<UsersIcon className="w-8 h-8"/>}
-            title="Detalle de Vendedores"
-            description="Rendimiento por asesor: ventas, inversión Meta y conversión."
-            shortcut="3" accentColor="amber"
-            gradient="from-amber-500 to-orange-500"
-          />
-          <QuickLinkCard 
-            href="/returns-dashboard" icon={<RouteIcon className="w-8 h-8"/>}
-            title="Devoluciones"
-            description="Trazabilidad de devoluciones, motivos y montos recuperados."
-            shortcut="4" accentColor="purple"
-            gradient="from-purple-500 to-violet-500"
-          />
+          <QuickLinkCard href="/logistica" icon={<TruckIcon className="w-8 h-8"/>} title="Panel de Logística" description="Asigna, monitorea y gestiona el despacho de todos los pedidos." shortcut="1" accentColor="blue" gradient="from-blue-500 to-cyan-500" />
+          <QuickLinkCard href="/dashboard/sales-report" icon={<ClipboardIcon className="w-8 h-8"/>} title="Reporte de Ventas" description="Analiza las ventas diarias, semanales y ROAS por canal." shortcut="2" accentColor="emerald" gradient="from-emerald-500 to-green-500" />
+          <QuickLinkCard href="/dashboard/vendedores" icon={<UsersIcon className="w-8 h-8"/>} title="Detalle de Vendedores" description="Rendimiento por asesor: ventas, inversión Meta y conversión." shortcut="3" accentColor="amber" gradient="from-amber-500 to-orange-500" />
+          <QuickLinkCard href="/returns-dashboard" icon={<RouteIcon className="w-8 h-8"/>} title="Devoluciones" description="Trazabilidad de devoluciones, motivos y montos recuperados." shortcut="4" accentColor="purple" gradient="from-purple-500 to-violet-500" />
         </div>
 
         <footer className="text-center pt-8">
           <div className="flex items-center justify-center space-x-4 text-gray-500 text-sm">
             <span>Atajos rápidos:</span>
-            {[
-              { key: '1', label: 'Logística' },
-              { key: '2', label: 'Reporte Ventas' },
-              { key: '3', label: 'Vendedores' },
-              { key: '4', label: 'Devoluciones' }
-            ].map(({ key, label }) => (
-              <div key={key} className="flex items-center space-x-1 group hover:text-white transition-colors duration-200">
-                <kbd className="bg-gray-800/50 backdrop-blur-sm px-2 py-1 rounded text-xs font-mono border border-gray-600/30 group-hover:border-gray-500/50 transition-all duration-200">
-                  {key}
-                </kbd>
-                <span className="text-xs">{label}</span>
-              </div>
-            ))}
+            {[{ key: '1', label: 'Logística' }, { key: '2', label: 'Reporte Ventas' }, { key: '3', label: 'Vendedores' }, { key: '4', label: 'Devoluciones' }].map(({ key, label }) => (<div key={key} className="flex items-center space-x-1 group hover:text-white transition-colors duration-200"><kbd className="bg-gray-800/50 backdrop-blur-sm px-2 py-1 rounded text-xs font-mono border border-gray-600/30 group-hover:border-gray-500/50 transition-all duration-200">{key}</kbd><span className="text-xs">{label}</span></div>))}
           </div>
-          <div className="relative mt-5">
-            <div className="w-24 h-px bg-gradient-to-r from-transparent via-gray-600 to-transparent mx-auto mb-3" />
-            <p className="text-gray-600 text-xs font-light">
-              Fenix Store © 2025 - Sistema de Gestión Integral
-            </p>
-          </div>
+          <div className="relative mt-5"><div className="w-24 h-px bg-gradient-to-r from-transparent via-gray-600 to-transparent mx-auto mb-3" /><p className="text-gray-600 text-xs font-light">Fenix Store © 2025 - Sistema de Gestión Integral</p></div>
         </footer>
       </motion.div>
     </main>

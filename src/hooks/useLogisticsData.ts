@@ -22,7 +22,19 @@ export function useLogisticsData() {
     setError(null);
     try {
       const [ordersRes, deliveriesRes, routesRes] = await Promise.all([
-        supabase.from('orders').select('*, seller_profile:sales_user_id(full_name), delivery_profile:delivery_assigned_to(full_name), order_items(*)').order('created_at', { ascending: false }),
+        // ACTUALIZADO: Agregamos los campos de encomienda en la consulta
+        supabase.from('orders').select(`
+          *, 
+          seller_profile:sales_user_id(full_name), 
+          delivery_profile:delivery_assigned_to(full_name), 
+          order_items(*),
+          is_encomienda,
+          fecha_salida_bodega,
+          fecha_entrega_encomienda,
+          venta_fecha,
+          venta_desde,
+          venta_hasta
+        `).order('created_at', { ascending: false }),
         supabase.from('users_profile').select('*').eq('role', 'delivery').order('full_name', { ascending: true }),
         supabase.from('delivery_routes').select('*').order('created_at', { ascending: false }),
       ]);
@@ -89,6 +101,28 @@ export function useLogisticsData() {
     await handleStatusChange(orderId, 'confirmed');
   };
 
+  // NUEVA FUNCIÓN: Actualizar fechas de encomienda
+  const updateEncomiendaDates = async (orderId: string, fechaSalida?: string, fechaEntrega?: string) => {
+    const updateData: any = {};
+    if (fechaSalida !== undefined) updateData.fecha_salida_bodega = fechaSalida;
+    if (fechaEntrega !== undefined) updateData.fecha_entrega_encomienda = fechaEntrega;
+    
+    const { error } = await supabase.from('orders').update(updateData).eq('id', orderId);
+    if (error) { 
+      setError('Error al actualizar fechas de encomienda: ' + error.message); 
+      throw error; 
+    }
+  };
+
+  // NUEVA FUNCIÓN: Marcar/desmarcar como encomienda
+  const toggleEncomienda = async (orderId: string, isEncomienda: boolean) => {
+    const { error } = await supabase.from('orders').update({ is_encomienda: isEncomienda }).eq('id', orderId);
+    if (error) { 
+      setError('Error al cambiar tipo de pedido: ' + error.message); 
+      throw error; 
+    }
+  };
+
   return { 
     orders, 
     deliveries, 
@@ -101,6 +135,8 @@ export function useLogisticsData() {
     handleStatusChange,
     saveLocation,
     confirmDelivered,
+    updateEncomiendaDates, // NUEVA
+    toggleEncomienda, // NUEVA
     clearError: () => setError(null)
   };
 }

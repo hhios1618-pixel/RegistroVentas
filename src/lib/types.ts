@@ -1,5 +1,5 @@
 // RUTA: src/lib/types.ts
-// TIPOS COMPLETOS ACTUALIZADOS
+// TIPOS COMPLETOS ACTUALIZADOS CON CAMPOS DE ENCOMIENDA
 
 export type OrderStatus =
   | 'pending'
@@ -36,7 +36,7 @@ export interface OrderRow {
   customer_phone?: string | null;
   
   // --- PROPIEDAD AÑADIDA ---
-  address?: string | null; // Esta es la línea que soluciona el nuevo error.
+  address?: string | null;
 
   delivery_address?: string | null;
   delivery_geo_lat?: number | null;
@@ -63,6 +63,35 @@ export interface OrderRow {
   payment_proof_url?: string | null;
 
   order_items?: OrderItem[];
+
+  // --- CAMPOS DE ENCOMIENDA AGREGADOS ---
+  is_encomienda?: boolean | null;
+  fecha_salida_bodega?: string | null;
+  fecha_entrega_encomienda?: string | null;
+  venta_fecha?: string | null;
+  venta_desde?: string | null;
+  venta_hasta?: string | null;
+  
+  // --- CAMPOS ADICIONALES DE LA TABLA ---
+  is_promoter?: boolean | null;
+  customer_id?: string | null;
+  commission?: number | null;
+  commission_amount?: number | null;
+  sistema?: boolean | null;
+  sale_type?: string | null;
+  numero?: string | null;
+  seller_role?: string | null;
+  branch_id?: string | null;
+  items_summary?: string | null;
+  delivery_time_from?: string | null;
+  delivery_time_to?: string | null;
+  delivery_notes?: string | null;
+  geo_lat?: number | null;
+  geo_lng?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  location_hash?: string | null;
+  sales_role?: string | null;
 }
 
 // --------------------- USERS (from 'people' table) ---------------------
