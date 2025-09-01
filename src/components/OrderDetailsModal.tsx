@@ -201,59 +201,61 @@ export default function OrderDetailsModal({
   }, [fixedYear, mes, dia, desdeH, desdeM, hastaH, hastaM]);
 
   async function saveWindow() {
-    // 1. Validar que la ventana sea correcta (aunque el botón ya lo hace)
+    // Primero, verificamos si hay un repartidor seleccionado, ya que es obligatorio
+    if (!selectedDelivery) {
+        setError('Debes seleccionar un repartidor en la pestaña "Asignación" antes de guardar una ventana.');
+        return;
+    }
+
     if (!canSaveWindow) {
       setWindowWarning('La hora "Hasta" debe ser posterior a la hora "Desde".');
       return;
     }
 
-    // 2. Iniciar el proceso y limpiar estados anteriores
     setSavingWindow(true);
     setError(null);
     setSuccess(null);
     setWindowWarning(null);
 
     try {
-      // 3. Construir las fechas en formato ISO local
-      const window_start = composeLocalISO(fixedYear, mes + 1, dia, desdeH, desdeM);
-      const window_end = composeLocalISO(fixedYear, mes + 1, dia, hastaH, hastaM);
+      // Usamos 'desde' y 'hasta' para coincidir con la API
+      const desde = composeLocalISO(fixedYear, mes + 1, dia, desdeH, desdeM);
+      const hasta = composeLocalISO(fixedYear, mes + 1, dia, hastaH, hastaM);
 
-      // 4. Realizar la llamada a la API para guardar los datos
       const response = await fetch(`/api/orders/${order.id}/assign`, {
-        method: 'POST', // O podría ser 'PATCH', depende de cómo diseñaste tu API
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ window_start, window_end }),
+        // Enviamos el cuerpo (body) con el formato que la API espera
+        body: JSON.stringify({ 
+            desde: desde, 
+            hasta: hasta,
+            deliveryUserId: selectedDelivery // <-- AÑADIMOS EL DATO OBLIGATORIO
+        }),
       });
 
-      // 5. Manejar una respuesta de error del servidor
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'No se pudo guardar la ventana de entrega.');
+        // El error "OVERLAP" lo podemos mostrar de forma más amigable
+        if (errorData.error === 'OVERLAP') {
+            throw new Error('El horario se solapa con otra entrega asignada a este repartidor.');
+        }
+        throw new Error(errorData.message || errorData.error || 'No se pudo guardar la ventana de entrega.');
       }
 
       const result = await response.json();
 
-      // 6. Si todo sale bien, mostrar éxito y actualizar la UI
       setSuccess('¡Ventana de entrega guardada correctamente!');
       
-      // Actualizamos el estado local para que el usuario vea el cambio reflejado
-      if(result.assignment) {
-        setCurrentWindow({ 
-            start: result.assignment.window_start, 
-            end: result.assignment.window_end 
-        });
-      }
+      // Actualizamos la vista con los nuevos datos devueltos por la API
+      setCurrentWindow({ start: desde, end: hasta });
       
-      // Ocultar el mensaje de éxito después de unos segundos
-      setTimeout(() => setSuccess(null), 3000);
+      setTimeout(() => setSuccess(null), 4000);
 
     } catch (err: any) {
-      // 7. Si ocurre cualquier error, mostrarlo
       setError(err.message || 'Ocurrió un error inesperado.');
     } finally {
-      // 8. Asegurarse de que el estado de carga se desactive siempre
       setSavingWindow(false);
     }
   }
