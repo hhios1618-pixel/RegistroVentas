@@ -1,233 +1,165 @@
 // RUTA: src/components/EfficiencyChart.tsx
-// VERSIÓN CORREGIDA
+// VERSIÓN FINAL - SOLUCIÓN AL CRASH DE TOOLTIP CON IMPLEMENTACIÓN MANUAL
 
 'use client';
 
 import type { OrderRow } from '@/lib/types';
-import { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
-import { Clock, TrendingUp, Package } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { TrendingUp, Package, Clock, CheckCircle } from 'lucide-react';
+import React from 'react';
 
-interface EfficiencyDataPoint {
+// --- Interfaces y Tipos ---
+interface HeatmapDataPoint {
   hour: string;
   successful: number;
   attempted: number;
-  efficiency: number;
+  efficiency: number | null;
 }
 
+interface TooltipInfo {
+  data: HeatmapDataPoint;
+  x: number;
+  y: number;
+}
+
+// --- Sub-Componente de Tarjeta de Métrica (Sin cambios) ---
+const MetricCard = ({ title, value, icon: Icon, unit = '', colorClass = 'text-white', delay = 0 }: { title: string, value: string | number, icon: React.ElementType, unit?: string, colorClass?: string, delay?: number }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5, delay }}
+    className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/60 shadow-lg"
+  >
+    <div className="flex items-center gap-3 text-slate-400 mb-2">
+      <Icon className="w-5 h-5" />
+      <span className="text-sm font-medium">{title}</span>
+    </div>
+    <div className={`text-3xl font-bold ${colorClass}`}>
+      {value}<span className="text-xl font-medium">{unit}</span>
+    </div>
+  </motion.div>
+);
+
+// --- Componente Principal: Mapa de Calor de Actividad ---
 export function EfficiencyChart({ orders }: { orders: OrderRow[] }) {
-  const chartData = useMemo(() => {
-    // Preparar datos para las 24 horas del día
-    const hourlyData: EfficiencyDataPoint[] = Array.from({ length: 24 }, (_, i) => ({
-      hour: `${i.toString().padStart(2, '0')}:00`,
-      successful: 0,
-      attempted: 0,
-      efficiency: 0
+  
+  // Estado para gestionar el tooltip personalizado
+  const [tooltipData, setTooltipData] = useState<TooltipInfo | null>(null);
+
+  // --- Lógica de Cálculo de Datos (Sin cambios) ---
+  const { heatmapData, overallMetrics, maxAttempted } = useMemo(() => {
+    const hourlyData: HeatmapDataPoint[] = Array.from({ length: 24 }, (_, i) => ({
+      hour: `${i.toString().padStart(2, '0')}:00`, successful: 0, attempted: 0, efficiency: null,
     }));
 
-    // Procesar órdenes para calcular eficiencia por hora
     orders.forEach(order => {
-      // Usar delivered_at si está disponible, de lo contrario usar confirmed_at
       const deliveryDateStr = order.delivered_at || order.confirmed_at;
-      
       if (deliveryDateStr) {
-        try {
-          const deliveryDate = new Date(deliveryDateStr);
-          // Solo procesar si la fecha es válida
-          if (!isNaN(deliveryDate.getTime())) {
-            const hour = deliveryDate.getHours();
-            
-            // Solo contar entregas exitosas
-            hourlyData[hour].attempted += 1;
-            
-            if (['delivered', 'confirmed'].includes(order.status || '')) {
-              hourlyData[hour].successful += 1;
-            }
+        const deliveryDate = new Date(deliveryDateStr);
+        if (!isNaN(deliveryDate.getTime())) {
+          const hour = deliveryDate.getHours();
+          hourlyData[hour].attempted += 1;
+          if (['delivered', 'confirmed'].includes(order.status || '')) {
+            hourlyData[hour].successful += 1;
           }
-        } catch (e) {
-          console.error('Error processing date:', deliveryDateStr, e);
         }
       }
     });
 
-    // Calcular eficiencia para cada hora
-    return hourlyData.map(hourData => ({
-      ...hourData,
-      efficiency: hourData.attempted > 0 
-        ? Math.round((hourData.successful / hourData.attempted) * 100) 
-        : 0
-    }));
+    let maxVol = 0;
+    const calculatedHeatmapData = hourlyData.map(hourData => {
+      if (hourData.attempted > maxVol) maxVol = hourData.attempted;
+      return {
+        ...hourData,
+        efficiency: hourData.attempted > 0 ? Math.round((hourData.successful / hourData.attempted) * 100) : null,
+      };
+    });
+
+    const totalAttempted = calculatedHeatmapData.reduce((sum, data) => sum + data.attempted, 0);
+    const totalSuccessful = calculatedHeatmapData.reduce((sum, data) => sum + data.successful, 0);
+    const overallEfficiency = totalAttempted > 0 ? Math.round((totalSuccessful / totalAttempted) * 100) : 0;
+    const peakHours = [...calculatedHeatmapData].sort((a, b) => b.attempted - a.attempted).slice(0, 3).filter(d => d.attempted > 0).map(data => data.hour);
+
+    return { heatmapData: calculatedHeatmapData, overallMetrics: { totalAttempted, totalSuccessful, overallEfficiency, peakHours }, maxAttempted: maxVol > 0 ? maxVol : 1 };
   }, [orders]);
 
-  // Calcular métricas generales
-  const overallMetrics = useMemo(() => {
-    const totalAttempted = chartData.reduce((sum, data) => sum + data.attempted, 0);
-    const totalSuccessful = chartData.reduce((sum, data) => sum + data.successful, 0);
-    const overallEfficiency = totalAttempted > 0 
-      ? Math.round((totalSuccessful / totalAttempted) * 100) 
-      : 0;
-    
-    // Encontrar horas pico (las 3 horas con más intentos)
-    const peakHours = chartData
-      .map((data, index) => ({ hour: index, attempted: data.attempted }))
-      .filter(data => data.attempted > 0)
-      .sort((a, b) => b.attempted - a.attempted)
-      .slice(0, 3)
-      .map(data => `${data.hour.toString().padStart(2, '0')}:00`);
-    
-    return {
-      totalAttempted,
-      totalSuccessful,
-      overallEfficiency,
-      peakHours
-    };
-  }, [chartData]);
+  // --- Función para determinar el color de la celda (Sin cambios) ---
+  const getCellColor = (point: HeatmapDataPoint) => {
+    if (point.attempted === 0 || point.efficiency === null) return 'rgba(51, 65, 85, 0.3)';
+    const opacity = 0.2 + (point.attempted / maxAttempted) * 0.8;
+    if (point.efficiency >= 80) return `rgba(74, 222, 128, ${opacity})`;
+    if (point.efficiency >= 60) return `rgba(96, 165, 250, ${opacity})`;
+    if (point.efficiency >= 40) return `rgba(251, 191, 36, ${opacity})`;
+    return `rgba(248, 113, 113, ${opacity})`;
+  };
 
-  if (!orders || orders.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 bg-slate-800/20 rounded-lg p-6 text-center">
-        <Package className="w-12 h-12 text-slate-500 mb-4" />
-        <p className="text-slate-400 font-medium">No hay datos suficientes</p>
-        <p className="text-slate-500 text-sm mt-1">No se encontraron entregas para analizar</p>
-      </div>
-    );
-  }
-
+  // --- Renderizado del Componente ---
   return (
-    <div className="space-y-6">
-      {/* Métricas resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-400 mb-1">
-            <Package className="w-4 h-4" />
-            <span className="text-sm">Total Entregas</span>
-          </div>
-          <div className="text-2xl font-bold text-white">{overallMetrics.totalAttempted}</div>
-        </div>
-        
-        <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-400 mb-1">
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-sm">Eficiencia General</span>
-          </div>
-          <div className="text-2xl font-bold text-green-400">{overallMetrics.overallEfficiency}%</div>
-        </div>
-        
-        <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-400 mb-1">
-            <Clock className="w-4 h-4" />
-            <span className="text-sm">Horas Pico</span>
-          </div>
-          <div className="text-lg font-medium text-white">
-            {overallMetrics.peakHours.length > 0 
-              ? overallMetrics.peakHours.join(', ') 
-              : 'Sin datos'
-            }
-          </div>
-        </div>
-      </div>
-
-      {/* Gráfico de barras */}
-      <div className="bg-slate-900/40 rounded-xl p-4 border border-slate-700/30">
-        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-blue-400" />
-          Eficiencia de Entregas por Hora del Día
-        </h3>
-        
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-            <XAxis 
-              dataKey="hour" 
-              stroke="#9ca3af" 
-              fontSize={12} 
-              tickLine={false} 
-              axisLine={false}
-              interval={2}
-            />
-            <YAxis 
-              stroke="#9ca3af" 
-              fontSize={12} 
-              tickLine={false} 
-              axisLine={false}
-              tickFormatter={(value) => `${value}%`}
-              width={40}
-            />
-            // Replace the existing Tooltip formatter with this:
-<Tooltip
-  formatter={(value: unknown, name: string) => {
-    if (name === 'Eficiencia') {
-      return [
-        typeof value === 'number' ? `${(value * 100).toFixed(2)}%` : value,
-        'Eficiencia'
-      ] as [React.ReactNode, string];
-    }
-    return [
-      value as number,
-      name as 'Éxitos' | 'Intentos'
-    ] as [React.ReactNode, string];
-  }}
-/>
-            <Bar 
-              dataKey="efficiency" 
-              name="Eficiencia" 
-              radius={[4, 4, 0, 0]}
-            >
-              {chartData.map((entry, index) => (
-                <rect 
-                  key={`cell-${index}`}
-                  fill={
-                    entry.efficiency >= 80 ? '#4ade80' : 
-                    entry.efficiency >= 60 ? '#60a5fa' : 
-                    entry.efficiency >= 40 ? '#fbbf24' : 
-                    '#f87171'
-                  }
-                />
-              ))}
-              <LabelList 
-                dataKey="efficiency" 
-                position="top" 
-                formatter={(value: unknown) => (typeof value === 'number' && value > 0) ? `${value}%` : ''}
-                fontSize={12}
-                fill="#e5e7eb"
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-        
-        <div className="flex justify-center gap-4 mt-4 text-xs">
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-sm bg-green-500"></div>
-            <span className="text-slate-400">Alta (≥80%)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-sm bg-blue-500"></div>
-            <span className="text-slate-400">Media (60-79%)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-sm bg-yellow-500"></div>
-            <span className="text-slate-400">Moderada (40-59%)</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-sm bg-red-500"></div>
-            <span className="text-slate-400">Baja (&lt;40%)</span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Insights generados */}
-      {overallMetrics.peakHours.length > 0 && (
-        <div className="bg-blue-900/20 rounded-lg p-4 border border-blue-700/30">
-          <h4 className="font-medium text-blue-300 mb-2">📈 Insights de Gestión</h4>
-          <ul className="text-sm text-slate-300 space-y-1">
-            <li>• Horas de mayor eficiencia: {overallMetrics.peakHours.join(', ')}</li>
-            <li>• Eficiencia general: {overallMetrics.overallEfficiency}%</li>
-            {chartData.some(h => h.attempted > 0 && h.efficiency < 50) && (
-              <li>• Considera reasignar recursos en horas con baja eficiencia</li>
-            )}
-          </ul>
+    <div className="space-y-6 relative">
+      {/* Tooltip Personalizado */}
+      {tooltipData && (
+        <div
+          className="bg-slate-900/80 backdrop-blur-sm border border-slate-600 rounded-lg p-3 text-sm shadow-2xl pointer-events-none"
+          style={{
+            position: 'fixed',
+            left: tooltipData.x + 15,
+            top: tooltipData.y + 15,
+            zIndex: 1000,
+          }}
+        >
+          <p className="font-bold text-white mb-2">{tooltipData.data.hour}</p>
+          {tooltipData.data.attempted > 0 ? (
+            <>
+              <p className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500" />Éxitos: <span className="font-semibold text-white">{tooltipData.data.successful} / {tooltipData.data.attempted}</span></p>
+              <p className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-blue-500" />Eficiencia: <span className="font-semibold text-white">{tooltipData.data.efficiency}%</span></p>
+            </>
+          ) : (
+            <p className="text-slate-400">Sin actividad en esta hora</p>
+          )}
         </div>
       )}
+
+      {/* Métricas Clave */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <MetricCard title="Total Entregas" value={overallMetrics.totalAttempted} icon={Package} delay={0.1} />
+        <MetricCard title="Eficiencia General" value={overallMetrics.totalAttempted > 0 ? overallMetrics.overallEfficiency : 0} icon={TrendingUp} unit="%" colorClass={overallMetrics.overallEfficiency >= 70 ? 'text-green-400' : 'text-yellow-400'} delay={0.2} />
+        <MetricCard title="Horas Pico" value={overallMetrics.peakHours.length > 0 ? overallMetrics.peakHours.join(', ') : '---'} icon={Clock} delay={0.3} />
+      </div>
+
+      {/* Mapa de Calor */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }} className="bg-slate-900/60 rounded-xl p-4 sm:p-6 border border-slate-700/50 backdrop-blur-sm">
+        <div className="grid grid-cols-12 gap-1.5">
+          {heatmapData.map((point) => (
+            <motion.div
+              key={point.hour}
+              onMouseEnter={(e) => setTooltipData({ data: point, x: e.clientX, y: e.clientY })}
+              onMouseLeave={() => setTooltipData(null)}
+              onMouseMove={(e) => setTooltipData(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+              whileHover={{ scale: 1.1, zIndex: 10 }}
+              className="w-full h-16 rounded-md border border-transparent hover:border-slate-400 cursor-pointer"
+              style={{ backgroundColor: getCellColor(point) }}
+            >
+              <span className="text-xs text-slate-400 p-1 select-none">{point.hour.substring(0, 2)}</span>
+            </motion.div>
+          ))}
+        </div>
+        
+        {/* Leyenda */}
+        <div className="flex justify-center flex-wrap items-center gap-x-4 gap-y-2 mt-5 text-xs text-slate-400">
+          <span>Bajo Vol.</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded-sm bg-red-500/30"></div>
+            <div className="w-3 h-3 rounded-sm bg-yellow-500/50"></div>
+            <div className="w-3 h-3 rounded-sm bg-blue-500/70"></div>
+            <div className="w-3 h-3 rounded-sm bg-green-500/100"></div>
+          </div>
+          <span>Alto Vol.</span>
+          <div className="w-px h-4 bg-slate-600 mx-2"></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-green-500"></div><span>Alta Efic.</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-red-500"></div><span>Baja Efic.</span></div>
+        </div>
+      </motion.div>
     </div>
   );
 }

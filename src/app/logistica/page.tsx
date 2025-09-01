@@ -17,7 +17,7 @@ import { DeliveryCard } from '@/components/DeliveryCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import Button from '@/components/Button';
 import MapOverviewModal from '@/components/MapOverviewModal';
-import { EfficiencyChart } from '@/components/EfficiencyChart';
+import { SettlementTable } from '@/components/SettlementTable';
 
 // Iconos (sin cambios)
 import {
@@ -405,8 +405,8 @@ export default function LogisticaPage() {
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.7 }} className="lg:col-span-8 xl:col-span-9 space-y-6">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
                 <Card className="bg-gradient-to-br from-slate-900/50 to-slate-800/30 border-slate-700/30 backdrop-blur-sm shadow-xl">
-                  <CardHeader className="border-b border-slate-700/30"><CardTitle className="text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-blue-400" />Eficiencia de Entregas por Horario</CardTitle><p className="text-sm text-slate-400 mt-1">Rendimiento de entregas exitosas por hora del día</p></CardHeader>
-                  <CardContent className="pt-6"><EfficiencyChart orders={orders} /></CardContent>
+                  <CardHeader className="border-b border-slate-700/30"><CardTitle className="text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-blue-400" />Eficiencia de Entregas por Horario</CardTitle><p className="text-sm text-slate-400 mt-1">{/* El componente SettlementTable ya tiene su propio contenedor y título */}</p></CardHeader>
+                  <CardContent className="pt-6"><SettlementTable /></CardContent>
                 </Card>
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
