@@ -62,6 +62,9 @@ export default function OrderDetailsModal({
   error: externalError,
   onClearError,
 }: Props) {
+  // --- CAMBIO 1: Se añade estado local para una UI reactiva ---
+  const [localOrder, setLocalOrder] = useState<OrderRow>(order);
+
   // --------- estado general ----------
   const [selectedDelivery, setSelectedDelivery] = useState<string>(order.delivery_assigned_to || '');
   const [address, setAddress] = useState(order.delivery_address || order.address || '');
@@ -144,10 +147,11 @@ export default function OrderDetailsModal({
     } catch { return dateStr ?? ''; }
   };
 
-  const handleAction = async (action: () => Promise<void>, okMsg: string) => {
+  const handleAction = async (action: () => Promise<void>, okMsg: string, updateFn?: () => void) => {
     setError(null); setSuccess(null); setIsProcessing(true);
     try {
       await action();
+      if (updateFn) updateFn(); // <-- Actualiza el estado local si se provee la función
       setSuccess(okMsg);
       setTimeout(() => setSuccess(null), 2500);
     } catch (e: any) {
@@ -173,7 +177,11 @@ export default function OrderDetailsModal({
   const handleStatusSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value as OrderStatus;
     const successMessage = `Estado cambiado a "${STATUS_MAP[newStatus]}"`;
-    handleAction(() => onStatusChange(order.id, newStatus), successMessage);
+    handleAction(
+      () => onStatusChange(order.id, newStatus), 
+      successMessage,
+      () => setLocalOrder(prev => ({...prev, status: newStatus, updated_at: new Date().toISOString()})) // Actualiza estado local al instante
+    );
   };
 
   useEffect(() => {
@@ -200,59 +208,52 @@ export default function OrderDetailsModal({
     return new Date(hISO) > new Date(dISO);
   }, [fixedYear, mes, dia, desdeH, desdeM, hastaH, hastaM]);
 
+  // --- CAMBIO 2: La función saveWindow ahora actualiza el estado local ---
   async function saveWindow() {
-    // Primero, verificamos si hay un repartidor seleccionado, ya que es obligatorio
     if (!selectedDelivery) {
         setError('Debes seleccionar un repartidor en la pestaña "Asignación" antes de guardar una ventana.');
         return;
     }
-
     if (!canSaveWindow) {
       setWindowWarning('La hora "Hasta" debe ser posterior a la hora "Desde".');
       return;
     }
-
     setSavingWindow(true);
     setError(null);
     setSuccess(null);
     setWindowWarning(null);
 
     try {
-      // Usamos 'desde' y 'hasta' para coincidir con la API
       const desde = composeLocalISO(fixedYear, mes + 1, dia, desdeH, desdeM);
       const hasta = composeLocalISO(fixedYear, mes + 1, dia, hastaH, hastaM);
-
       const response = await fetch(`/api/orders/${order.id}/assign`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Enviamos el cuerpo (body) con el formato que la API espera
-        body: JSON.stringify({ 
-            desde: desde, 
-            hasta: hasta,
-            deliveryUserId: selectedDelivery // <-- AÑADIMOS EL DATO OBLIGATORIO
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ desde, hasta, deliveryUserId: selectedDelivery }),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
-        // El error "OVERLAP" lo podemos mostrar de forma más amigable
         if (errorData.error === 'OVERLAP') {
             throw new Error('El horario se solapa con otra entrega asignada a este repartidor.');
         }
         throw new Error(errorData.message || errorData.error || 'No se pudo guardar la ventana de entrega.');
       }
 
-      const result = await response.json();
-
       setSuccess('¡Ventana de entrega guardada correctamente!');
-      
-      // Actualizamos la vista con los nuevos datos devueltos por la API
       setCurrentWindow({ start: desde, end: hasta });
       
-      setTimeout(() => setSuccess(null), 4000);
-
+      const fechaStr = `${String(dia).padStart(2, '0')}/${String(mes + 1).padStart(2, '0')}/${fixedYear}`;
+      const desdeStr = `${String(desdeH).padStart(2, '0')}:${String(desdeM).padStart(2, '0')}`;
+      const hastaStr = `${String(hastaH).padStart(2, '0')}:${String(hastaM).padStart(2, '0')}`;
+      
+      setLocalOrder(prevOrder => ({
+        ...prevOrder,
+        delivery_date: fechaStr,
+        delivery_from: desdeStr,
+        delivery_to: hastaStr,
+      }));
+      
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.message || 'Ocurrió un error inesperado.');
     } finally {
@@ -263,19 +264,20 @@ export default function OrderDetailsModal({
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-gray-900 border border-white/20 rounded-lg shadow-xl w-full max-w-5xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* --- CAMBIO 3: El JSX ahora lee de 'localOrder' para ser reactivo --- */}
         <header className="p-4 sm:p-6 border-b border-white/10 flex justify-between items-start">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
               <h2 className="text-xl font-bold text-white">
-                Pedido <span className="font-mono text-blue-400">#{order.order_no ?? 'S/N'}</span>
+                Pedido <span className="font-mono text-blue-400">#{localOrder.order_no ?? 'S/N'}</span>
               </h2>
-              <StatusBadge status={order.status} />
+              <StatusBadge status={localOrder.status} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm text-white/70">
-              {order.customer_name && <div className="flex items-center gap-2"><User className="w-4 h-4" /><span>{order.customer_name}</span></div>}
-              {order.customer_phone && <div className="flex items-center gap-2"><Phone className="w-4 h-4" /><span>{order.customer_phone}</span></div>}
-              {order.amount != null && <div className="flex items-center gap-2"><CreditCard className="w-4 h-4" /><span className="text-white font-medium">Bs {order.amount.toFixed(2)}</span></div>}
-              <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>{formatDateTime(order.created_at)}</span></div>
+              {localOrder.customer_name && <div className="flex items-center gap-2"><User className="w-4 h-4" /><span>{localOrder.customer_name}</span></div>}
+              {localOrder.customer_phone && <div className="flex items-center gap-2"><Phone className="w-4 h-4" /><span>{localOrder.customer_phone}</span></div>}
+              {localOrder.amount != null && <div className="flex items-center gap-2"><CreditCard className="w-4 h-4" /><span className="text-white font-medium">Bs {localOrder.amount.toFixed(2)}</span></div>}
+              <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>{formatDateTime(localOrder.created_at)}</span></div>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
@@ -338,7 +340,6 @@ export default function OrderDetailsModal({
               </div>
 
               <div className="space-y-2">
-                {/* La línea con el conflicto estaba aquí. Ahora solo tiene 'flex' */}
                 <label className="text-sm font-medium text-white/90 flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
                   Pin de Ubicación (arrastra para ajustar)
@@ -374,9 +375,27 @@ export default function OrderDetailsModal({
               <Card>
                 <CardContent className="p-4 text-sm text-white/80">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-white/60" /><span className="text-white/60">Fecha:</span><span className="text-white">{order.delivery_date ?? '—'}</span></div>
-                    <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-white/60" /><span className="text-white/60">Desde:</span><span className="text-white">{order.delivery_from ?? '—'}</span></div>
-                    <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-white/60" /><span className="text-white/60">Hasta:</span><span className="text-white">{order.delivery_to ?? '—'}</span></div>
+                    <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-white/60" />
+                        <span className="text-white/60">Fecha:</span>
+                        <span className="text-white">
+                            {localOrder.delivery_date ? new Date(localOrder.delivery_date.replace(/-/g, '/')).toLocaleDateString('es-BO') : '—'}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-white/60" />
+                        <span className="text-white/60">Desde:</span>
+                        <span className="text-white">
+                            {localOrder.delivery_from?.substring(0, 5) ?? '—'}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-white/60" />
+                        <span className="text-white/60">Hasta:</span>
+                        <span className="text-white">
+                            {localOrder.delivery_to?.substring(0, 5) ?? '—'}
+                        </span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -450,7 +469,6 @@ export default function OrderDetailsModal({
                   Refrescar
                 </Button>
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="bg-black/20 rounded-md p-3 border border-white/10 space-y-3">
                   <div className="text-white/80 font-medium">Fotos de producto (vendedor)</div>
@@ -494,7 +512,6 @@ export default function OrderDetailsModal({
                     </div>
                   )}
                 </div>
-
                 <div className="bg-black/20 rounded-md p-3 border border-white/10">
                   <div className="text-white/80 font-medium mb-2">Comprobante de pago</div>
                   {paymentUrl ? (
@@ -518,21 +535,20 @@ export default function OrderDetailsModal({
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-medium text-white mb-1">Estado Actual</h4>
-                      <StatusBadge status={order.status} />
+                      <StatusBadge status={localOrder.status} />
                     </div>
                     <div className="text-right text-sm text-white/60">
                       <div>Última actualización</div>
-                      <div>{formatDateTime(order.updated_at || order.created_at)}</div>
+                      <div>{formatDateTime(localOrder.updated_at || localOrder.created_at)}</div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-
               <div className="bg-black/20 p-4 rounded-md">
                 <h3 className="font-semibold mb-3 text-white/90">Cambiar Estado</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <select
-                    value={order.status}
+                    value={localOrder.status}
                     onChange={handleStatusSelect}
                     className="w-full bg-gray-800 border border-white/20 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={isProcessing}
@@ -541,18 +557,19 @@ export default function OrderDetailsModal({
                       <option
                         key={statusKey}
                         value={statusKey}
-                        disabled={order.status === statusKey}
+                        disabled={localOrder.status === statusKey}
                       >
                         {statusLabel}
                       </option>
                     ))}
                   </select>
 
-                  {order.status === 'delivered' && (
+                  {localOrder.status === 'delivered' && (
                     <Button
                       onClick={() => handleAction(
                         () => onConfirmDelivered(order.id),
-                        '¡Entrega confirmada!'
+                        '¡Entrega confirmada!',
+                        () => setLocalOrder(prev => ({...prev, status: 'confirmed', updated_at: new Date().toISOString()}))
                       )}
                       disabled={isProcessing}
                       className="bg-emerald-600/80 hover:bg-emerald-600 flex items-center justify-center gap-2"
