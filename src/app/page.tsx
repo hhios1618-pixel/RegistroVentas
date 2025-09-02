@@ -3,10 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState, useMemo, SVGProps, FC } from 'react';
 import { motion } from 'framer-motion';
-import useSWR from 'swr'; // --- CAMBIO: Importamos SWR
+import useSWR from 'swr';
 
-// --- TIPOS Y DATOS DE EJEMPLO ---
-
+// --- TIPOS ---
 type IconProps = SVGProps<SVGSVGElement>;
 
 interface StatCardProps {
@@ -29,8 +28,7 @@ interface QuickLinkCardProps {
   gradient: string;
 }
 
-// --- HOOK PERSONALIZADO PARA LA HORA ---
-
+// --- HOOK HORA/FECHA ---
 const useCurrentTime = () => {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
@@ -65,18 +63,15 @@ const useCurrentTime = () => {
   return { formattedTime, formattedDate, greeting };
 };
 
-
-// --- COMPONENTES DE UI REUTILIZABLES ---
-
+// --- UI REUTILIZABLE ---
 const StatCard: FC<StatCardProps> = ({ icon, title, value, description, trend = 'stable', color }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [animatedValue, setAnimatedValue] = useState(0);
 
   useEffect(() => {
-    // Si el valor no es un número (ej: '...'), no animamos
     if (typeof value !== 'number') {
-        setAnimatedValue(0);
-        return;
+      setAnimatedValue(0);
+      return;
     }
     const numericValue = value;
     if (isNaN(numericValue)) return;
@@ -103,7 +98,7 @@ const StatCard: FC<StatCardProps> = ({ icon, title, value, description, trend = 
       default: return <span className="text-gray-400 text-xs">→</span>;
     }
   };
-  
+
   const displayValue = typeof value === 'string' ? value : animatedValue.toLocaleString('es-BO');
 
   return (
@@ -164,21 +159,19 @@ const QuickLinkCard: FC<QuickLinkCardProps> = ({ href, icon, title, description,
   </Link>
 );
 
-// --- fetcher para SWR ---
+// --- SWR fetcher ---
 const fetcher = (url: string) => fetch(url).then((res) => {
-  if (!res.ok) {
-    throw new Error('Error al cargar los datos de la API');
-  }
+  if (!res.ok) throw new Error('Error al cargar los datos de la API');
   return res.json();
 });
 
-// --- COMPONENTE PRINCIPAL DE LA PÁGINA ---
+// --- PAGE ---
 export default function FenixHomePage() {
   const { formattedTime, formattedDate, greeting } = useCurrentTime();
   const [isLoaded, setIsLoaded] = useState(false);
   const [usdRate] = useState({ oficial: 6.96, paralelo: 7.15, loading: false, error: null, lastUpdated: 'Hace 5 min' });
 
-  // Datos reales de ventas
+  // Ventas reales
   const { data: salesData, error: salesError, isLoading: salesLoading } = useSWR('/api/sales-report', fetcher, {
     refreshInterval: 60000,
   });
@@ -193,13 +186,7 @@ export default function FenixHomePage() {
     const totalRevenue = todaySalesItems.reduce((sum: number, item: any) => sum + (item.subtotal || 0), 0);
     const uniqueOrderIds = new Set(todaySalesItems.map((item: any) => item.order_id));
     const totalSales = uniqueOrderIds.size;
-    return {
-      sales: totalSales,
-      orders: totalSales,
-      revenue: totalRevenue,
-      returns: 0,
-      returnsAmount: 0,
-    };
+    return { sales: totalSales, orders: totalSales, revenue: totalRevenue, returns: 0, returnsAmount: 0 };
   }, [salesData, salesError]);
 
   useEffect(() => {
@@ -210,9 +197,11 @@ export default function FenixHomePage() {
         '2': '/dashboard/sales-report',
         '3': '/dashboard/vendedores',
         '4': '/returns-dashboard',
-        '5': '/playbook-whatsapp', // --- CAMBIO: atajo al nuevo page
+        '5': '/playbook-whatsapp',
+        '6': '/promotores/registro', // Registro Promotores
+        '7': '/promotores/resumen',  // Resumen Promotores
       };
-      if (shortcuts[e.key]) { window.location.href = shortcuts[e.key]; }
+      if (shortcuts[e.key]) window.location.href = shortcuts[e.key];
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -284,43 +273,43 @@ export default function FenixHomePage() {
             </div>
           </div>
 
-          {/* KPIs con datos reales */}
+          {/* KPIs */}
           <StatCard icon={<TrendingUpIcon />} title="Ventas de Hoy" value={salesLoading ? '...' : todayStats.sales} description="+12% vs ayer" trend="up" color="blue"/>
           <StatCard icon={<PackageIcon />} title="Pedidos de Hoy" value={salesLoading ? '...' : todayStats.orders} description="Total de órdenes del día" color="emerald"/>
           <StatCard icon={<ReturnIcon />} title="Devoluciones Hoy" value={salesLoading ? '...' : todayStats.returns} description={`${todayStats.returnsAmount.toLocaleString('es-BO')} Bs`} trend="down" color="red"/>
           <StatCard icon={<WalletIcon />} title="Ingresos (Bs)" value={salesLoading ? '...' : todayStats.revenue.toLocaleString('es-BO')} description="Total facturado hoy" trend="up" color="purple"/>
         </div>
 
+        {/* Links principales */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-6">
           <QuickLinkCard
             href="/logistica"
-            icon={<TruckIcon className="w-8 h-8"/>}
+            icon={<TruckIcon className="w-8 h-8" />}
             title="Panel de Logística"
             description="Asigna, monitorea y gestiona el despacho de todos los pedidos."
             shortcut="1" accentColor="blue" gradient="from-blue-500 to-cyan-500"
           />
           <QuickLinkCard
             href="/dashboard/sales-report"
-            icon={<ClipboardIcon className="w-8 h-8"/>}
+            icon={<ClipboardIcon className="w-8 h-8" />}
             title="Reporte de Ventas"
             description="Analiza las ventas diarias, semanales y ROAS por canal."
             shortcut="2" accentColor="emerald" gradient="from-emerald-500 to-green-500"
           />
           <QuickLinkCard
             href="/dashboard/vendedores"
-            icon={<UsersIcon className="w-8 h-8"/>}
+            icon={<UsersIcon className="w-8 h-8" />}
             title="Detalle de Vendedores"
             description="Rendimiento por asesor: ventas, inversión Meta y conversión."
             shortcut="3" accentColor="amber" gradient="from-amber-500 to-orange-500"
           />
           <QuickLinkCard
             href="/returns-dashboard"
-            icon={<RouteIcon className="w-8 h-8"/>}
+            icon={<RouteIcon className="w-8 h-8" />}
             title="Devoluciones"
             description="Trazabilidad de devoluciones, motivos y montos recuperados."
             shortcut="4" accentColor="purple" gradient="from-purple-500 to-violet-500"
           />
-          {/* --- CAMBIO: botón al nuevo page Playbook --- */}
           <QuickLinkCard
             href="/playbook-whatsapp"
             icon={<BookIcon className="w-8 h-8" />}
@@ -329,6 +318,37 @@ export default function FenixHomePage() {
             shortcut="5" accentColor="pink" gradient="from-pink-500 to-fuchsia-500"
           />
         </div>
+
+        {/* --- CATEGORÍA: PROMOTORES --- */}
+        <section className="pt-2">
+          <div className="bg-gray-900/60 border border-gray-700/40 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30">
+                  <MegaphoneIcon className="w-5 h-5" />
+                </span>
+                <h3 className="text-sm font-semibold text-white/90 tracking-wide uppercase">Promotores</h3>
+              </div>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300">Operación de terreno</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <QuickLinkCard
+                href="/promotores/registro"
+                icon={<MegaphoneIcon className="w-8 h-8" />}
+                title="Registro de Ventas"
+                description="Carga por sucursal, cliente y WhatsApp. Validado."
+                shortcut="6" accentColor="indigo" gradient="from-indigo-500 to-blue-500"
+              />
+              <QuickLinkCard
+                href="/promotores/resumen"
+                icon={<ChartIcon className="w-8 h-8" />}
+                title="Resumen de Ventas"
+                description="Matriz por sucursal × ejecutivo. Día / Semana / Mes."
+                shortcut="7" accentColor="cyan" gradient="from-cyan-500 to-sky-500"
+              />
+            </div>
+          </div>
+        </section>
 
         <footer className="text-center pt-8">
           <div className="flex items-center justify-center space-x-4 text-gray-500 text-sm">
@@ -339,6 +359,8 @@ export default function FenixHomePage() {
               { key: '3', label: 'Vendedores' },
               { key: '4', label: 'Devoluciones' },
               { key: '5', label: 'Playbook' },
+              { key: '6', label: 'Promotores · Registro' },
+              { key: '7', label: 'Promotores · Resumen' },
             ].map(({ key, label }) => (
               <div key={key} className="flex items-center space-x-1 group hover:text-white transition-colors duration-200">
                 <kbd className="bg-gray-800/50 backdrop-blur-sm px-2 py-1 rounded text-xs font-mono border border-gray-600/30 group-hover:border-gray-500/50 transition-all duration-200">{key}</kbd>
@@ -356,49 +378,81 @@ export default function FenixHomePage() {
   );
 }
 
-// --- ICONOS SVG ---
-const TrendingUpIcon = (props: IconProps) => (
-  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-  </svg>
-);
-const PackageIcon = (props: IconProps) => (
-  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-  </svg>
-);
-const ReturnIcon = (props: IconProps) => (
-  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15l6-6m-6 0l6 6m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-const WalletIcon = (props: IconProps) => (
-  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 00-2 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-  </svg>
-);
-const TruckIcon = (props: IconProps) => (
-  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.125-.504 1.125-1.125V14.25m-17.25 4.5v-1.875a3.375 3.375 0 0 1 3.375-3.375h9.75a3.375 3.375 0 0 1 3.375 3.375v1.875M16.5 12.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H3.75m12.75 15-3.75-3.75M16.5 12.75 12.75 9" />
-  </svg>
-);
-const ClipboardIcon = (props: IconProps) => (
-  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5-1.5H15M10.5 4.5h3m-3 0V3" />
-  </svg>
-);
-const RouteIcon = (props: IconProps) => (
-  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.622 10.551a1.061 1.061 0 0 1 .535 1.954l-3.355 1.678a1.06 1.06 0 0 0 .535 1.954l3.355-1.678a1.06 1.06 0 0 1 1.07 0l3.355 1.678a1.06 1.06 0 0 0 1.07 0l3.355-1.678a1.06 1.06 0 0 1 .535-1.954l-3.355-1.678a1.06 1.06 0 0 0 0-1.908l3.355-1.678a1.06 1.06 0 0 1-.535-1.954l-3.355 1.678a1.06 1.06 0 0 0-1.07 0L10.5 8.822a1.06 1.06 0 0 1-1.07 0L6.075 7.144a1.06 1.06 0 0 0-1.07 0L1.65 8.822a1.06 1.06 0 0 1-.535 1.954l3.355 1.678a1.06 1.06 0 0 0 1.07 0l3.355-1.678Z" />
-  </svg>
-);
-const UsersIcon = (props: IconProps) => (
-  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 18.72a9.094 9.094 0 0 0 3.75-5.25M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM6.75 18h9a9.06 9.06 0 0 0-9 0Zm-3.375 0a9.06 9.06 0 0 1-1.875-5.25M9 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z" />
-  </svg>
-);
-const BookIcon = (props: IconProps) => (
-  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 5.25A2.25 2.25 0 016.75 3h9A2.25 2.25 0 0118 5.25v13.5A2.25 2.25 0 0115.75 21H6.75A2.25 2.25 0 014.5 18.75V5.25zM9 7.5h6M9 10.5h6M9 13.5h6M6 7.5h.01M6 10.5h.01M6 13.5h.01" />
-  </svg>
-);
+// --- ICONOS ---
+function TrendingUpIcon(props: IconProps) {
+  return (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+    </svg>
+  );
+}
+function PackageIcon(props: IconProps) {
+  return (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+    </svg>
+  );
+}
+function ReturnIcon(props: IconProps) {
+  return (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 15l6-6m-6 0l6 6m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+function WalletIcon(props: IconProps) {
+  return (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 00-2 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  );
+}
+function TruckIcon(props: IconProps) {
+  return (
+    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.125-.504 1.125-1.125V14.25m-17.25 4.5v-1.875a3.375 3.375 0 0 1 3.375-3.375h9.75a3.375 3.375 0 0 1 3.375 3.375v1.875M16.5 12.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H3.75m12.75 15-3.75-3.75M16.5 12.75 12.75 9" />
+    </svg>
+  );
+}
+function ClipboardIcon(props: IconProps) {
+  return (
+    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5-1.5H15M10.5 4.5h3m-3 0V3" />
+    </svg>
+  );
+}
+function RouteIcon(props: IconProps) {
+  return (
+    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.622 10.551a1.061 1.061 0 0 1 .535 1.954l-3.355 1.678a1.06 1.06 0 0 0 .535 1.954l3.355-1.678a1.06 1.06 0 0 1 1.07 0l3.355 1.678a1.06 1.06 0 0 0 1.07 0l3.355-1.678a1.06 1.06 0 0 1 .535-1.954l-3.355-1.678a1.06 1.06 0 0 0 0-1.908l3.355-1.678a1.06 1.06 0 0 1-.535-1.954l-3.355 1.678a1.06 1.06 0 0 0-1.07 0L10.5 8.822a1.06 1.06 0 0 1-1.07 0L6.075 7.144a1.06 1.06 0 0 0-1.07 0L1.65 8.822a1.06 1.06 0 0 1-.535 1.954l3.355 1.678a1.06 1.06 0 0 0 1.07 0l3.355-1.678Z" />
+    </svg>
+  );
+}
+function UsersIcon(props: IconProps) {
+  return (
+    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 18.72a9.094 9.094 0 0 0 3.75-5.25M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM6.75 18h9a9.06 9.06 0 0 0-9 0Zm-3.375 0a9.06 9.06 0 0 1-1.875-5.25M9 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z" />
+    </svg>
+  );
+}
+function BookIcon(props: IconProps) {
+  return (
+    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 5.25A2.25 2.25 0 016.75 3h9A2.25 2.25 0 0118 5.25v13.5A2.25 2.25 0 0115.75 21H6.75A2.25 2.25 0 014.5 18.75V5.25zM9 7.5h6M9 10.5h6M9 13.5h6M6 7.5h.01M6 10.5h.01M6 13.5h.01" />
+    </svg>
+  );
+}
+function MegaphoneIcon(props: IconProps) {
+  return (
+    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 8.25l5.25-2.25v12l-5.25-2.25m0-7.5v12a2.25 2.25 0 01-4.5 0v-3m4.5-9l-6.75 3M3 12h4.5" />
+    </svg>
+  );
+}
+function ChartIcon(props: IconProps) {
+  return (
+    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 19.5h18M6 16.5v-6m6 6v-10m6 10v-4" />
+    </svg>
+  );
+}
