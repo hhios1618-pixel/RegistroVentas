@@ -157,7 +157,7 @@ const SALES_FLOW: SalesStep[] = [
       {
         id: 'no-me-sirve',
         title: '"No sé si me va a servir"',
-        content: 'Entiendo su preocupación, [NOMBRE]. Por eso le ofrezco nuestra garantía: si por alguna razón no queda satisfecho, le devolvemos su dinero sin preguntas. Así puede probarlo con total tranquilidad.',
+        content: 'Entiendo su preocupación, [NOMBRE]. Le ofrecemos una garantía de 48 horas una vez recepcionado el producto. Así puede probarlo con total tranquilidad.',
         situation: 'Cuando hay dudas sobre la utilidad',
         tips: 'Ofrecer garantía para eliminar el riesgo percibido'
       },
@@ -271,7 +271,7 @@ const QUICK_RESPONSES: QuickResponse[] = [
     id: 'garantia',
     label: 'Dar garantía',
     situation: 'Generar confianza',
-    response: 'Le ofrezco nuestra garantía completa, [NOMBRE]. Si por alguna razón no queda satisfecho, le devolvemos su dinero sin preguntas. Así puede probarlo con total tranquilidad.',
+    response: 'Le ofrecemos una garantía de 48 horas una vez recepcionado el producto, [NOMBRE]. Así puede probarlo con total tranquilidad.',
     icon: '🛡️',
     color: 'from-green-500 to-emerald-500'
   }
