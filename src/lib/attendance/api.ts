@@ -1,5 +1,4 @@
 // src/lib/attendance/api.ts
-
 export type CheckInPayload = {
   person_id: string;
   site_id: string;
@@ -39,6 +38,11 @@ export async function getQR(site_id: string): Promise<QrResp> {
 
 export async function checkIn(payload: CheckInPayload): Promise<CheckInResp> {
   assertEnv();
+
+  // timeout duro para evitar “procesando” infinito
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+
   const res = await fetch(`${FUNCTIONS_BASE}/checkin`, {
     method: 'POST',
     headers: {
@@ -46,16 +50,22 @@ export async function checkIn(payload: CheckInPayload): Promise<CheckInResp> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
-  });
+    signal: ctrl.signal,
+  }).catch((e) => {
+    throw new Error(`network_timeout_or_abort: ${e?.message || ''}`);
+  }).finally(() => clearTimeout(t));
+
   let json: any = null;
   try { json = await res.json(); } catch {}
+
   if (!res.ok) {
     const base = (json && (json.error || json.message)) || `checkin_failed_${res.status}`;
     const extra =
       json && json.distance_m !== undefined
-        ? ` (${Math.round(json.distance_m)} m, radio ${json.required_radius ?? 'N/A'} m)`
+        ? ` (${Math.round(json.distance_m)} m, radio ${json.required_radius ?? 'N/A'} m, acc ±${Math.round(json.accuracy ?? 0)} m)`
         : '';
     throw new Error(base + extra);
   }
+
   return json as CheckInResp;
 }

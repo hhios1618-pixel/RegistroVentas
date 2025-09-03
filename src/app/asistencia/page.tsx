@@ -5,6 +5,7 @@ import PersonCombo from '@/components/attendance/PersonCombo';
 import SiteSelect from '@/components/attendance/SiteSelect';
 import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
 import { isMobileUA } from '@/lib/device';
+import { compressDataUrl } from '@/lib/image';
 
 // ======== GPS mejorado (muestreo) ========
 type GeoFix = { lat: number; lng: number; accuracy: number; ts: number };
@@ -59,7 +60,7 @@ type CheckType = 'in' | 'out';
 type Person = { id: string; full_name: string; local?: string | null };
 
 export default function AsistenciaPage() {
-  // Bloquea escritorio → marcaje solo desde móvil (GPS real)
+  // Bloquea escritorio
   if (typeof window !== 'undefined' && !isMobileUA()) {
     return (
       <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
@@ -91,7 +92,6 @@ export default function AsistenciaPage() {
   }, []);
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
-
   useEffect(() => { setPersonId(person?.id ?? null); }, [person?.id]);
 
   const canSubmit = Boolean(personId && siteId && selfie && loc);
@@ -115,6 +115,22 @@ export default function AsistenciaPage() {
       setToast(e?.message || 'No se pudo obtener ubicación');
     } finally {
       setLocLoading(false);
+    }
+  };
+
+  const handleMeasureDistance = async () => {
+    if (!loc || !siteId) return;
+    try {
+      const r = await fetch('/api/debug/distance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ site_id: siteId, lat: loc.lat, lng: loc.lng })
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'debug_failed');
+      setToast(`Distancia a ${j.site_name}: ${Math.round(j.distance_m)} m (radio ${j.site_radius_m} m)`);
+    } catch (e:any) {
+      setToast(e?.message || 'debug_failed');
     }
   };
 
@@ -222,11 +238,22 @@ export default function AsistenciaPage() {
               <h3 style={{ color:'#f1f5f9', fontSize:16, fontWeight:600, margin:0 }}>Verificación Biométrica</h3>
             </div>
             <div style={{ display:'grid', gap:16 }}>
-              <CameraCapture onCapture={setSelfie} />
-              <button type="button" onClick={handleGetLocation} disabled={locLoading}
-                style={{ padding:'12px 16px', borderRadius:12, border:'1px solid rgba(148,163,184,.2)', background: locLoading ? 'rgba(71,85,105,.5)' : 'rgba(15,23,42,.8)', color:'#e5e7eb', fontWeight:600, cursor: locLoading ? 'not-allowed' : 'pointer' }}>
-                {locLoading ? 'Obteniendo ubicación…' : '📍 Obtener ubicación (mejorada)'}
-              </button>
+              <CameraCapture onCapture={async (raw) => {
+                const small = await compressDataUrl(raw, 720, 0.72);
+                setSelfie(small);
+              }} />
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                <button type="button" onClick={handleGetLocation} disabled={locLoading}
+                  style={{ padding:'12px 16px', borderRadius:12, border:'1px solid rgba(148,163,184,.2)', background: locLoading ? 'rgba(71,85,105,.5)' : 'rgba(15,23,42,.8)', color:'#e5e7eb', fontWeight:600, cursor: locLoading ? 'not-allowed' : 'pointer' }}>
+                  {locLoading ? 'Obteniendo ubicación…' : '📍 Obtener ubicación (mejorada)'}
+                </button>
+                {loc && siteId && (
+                  <button type="button" onClick={handleMeasureDistance}
+                    style={{ padding:'12px 16px', borderRadius:12, border:'1px solid rgba(148,163,184,.2)', background:'rgba(15,23,42,.8)', color:'#e5e7eb', fontWeight:600, cursor:'pointer' }}>
+                    🧭 Medir distancia a sede
+                  </button>
+                )}
+              </div>
               {loc && <div style={{ color:'#94a3b8', fontSize:13 }}>Precisión: <b>±{Math.round(loc.accuracy)} m</b> — lat {loc.lat.toFixed(6)}, lng {loc.lng.toFixed(6)}</div>}
             </div>
           </div>
