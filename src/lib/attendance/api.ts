@@ -1,48 +1,48 @@
 // src/lib/attendance/api.ts
+// Lib de asistencia: tipos + llamadas a Edge Functions (qr, checkin)
+
+export type CheckType = 'in' | 'out' | 'lunch_in' | 'lunch_out';
+
 export type CheckInPayload = {
   person_id: string;
   site_id: string;
-  type: 'in' | 'out';
+  type: CheckType;
   lat: number;
   lng: number;
   accuracy: number;
   device_id: string;
-  selfie_base64: string;
-  qr_code: string;
+  selfie_base64: string; // para colación envía ''
+  qr_code: string;       // para colación envía ''
 };
 
-type QrResp = { code: string; exp_at: string };
-type CheckInResp = { ok: boolean; distance_m: number; recorded_at: string };
-
-const PROJECT_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const FUNCTIONS_BASE = PROJECT_URL.replace('.supabase.co', '.functions.supabase.co');
+const URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+// Si tienes var explícita para functions base, úsala; si no, derive del URL
+const FUNCTIONS_BASE =
+  process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL ??
+  `${URL}/functions/v1`;
+
 function assertEnv() {
-  if (!PROJECT_URL) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
-  if (!ANON) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  if (!URL || !ANON) throw new Error('env_missing');
 }
 
-export async function getQR(site_id: string): Promise<QrResp> {
+// === QR ===
+export async function getQR(site_id: string): Promise<{ code: string; exp_at: string }> {
   assertEnv();
   const url = `${FUNCTIONS_BASE}/qr?site_id=${encodeURIComponent(site_id)}&ttl=60`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${ANON}` }, cache: 'no-store' });
-  let json: any = null;
-  try { json = await res.json(); } catch {}
-  if (!res.ok) {
-    const err = (json && (json.error || json.message)) || `qr_failed_${res.status}`;
-    throw new Error(err);
-  }
-  return json as QrResp;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${ANON}` },
+    cache: 'no-store',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'internal_error');
+  return json as { code: string; exp_at: string };
 }
 
-export async function checkIn(payload: CheckInPayload): Promise<CheckInResp> {
+// === Check-in (turno y colación) ===
+export async function checkIn(payload: CheckInPayload): Promise<{ ok: boolean }> {
   assertEnv();
-
-  // timeout duro para evitar “procesando” infinito
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 15000);
-
   const res = await fetch(`${FUNCTIONS_BASE}/checkin`, {
     method: 'POST',
     headers: {
@@ -50,22 +50,12 @@ export async function checkIn(payload: CheckInPayload): Promise<CheckInResp> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
-    signal: ctrl.signal,
-  }).catch((e) => {
-    throw new Error(`network_timeout_or_abort: ${e?.message || ''}`);
-  }).finally(() => clearTimeout(t));
-
-  let json: any = null;
-  try { json = await res.json(); } catch {}
-
+  });
+  const json = await res.json();
   if (!res.ok) {
-    const base = (json && (json.error || json.message)) || `checkin_failed_${res.status}`;
-    const extra =
-      json && json.distance_m !== undefined
-        ? ` (${Math.round(json.distance_m)} m, radio ${json.required_radius ?? 'N/A'} m, acc ±${Math.round(json.accuracy ?? 0)} m)`
-        : '';
-    throw new Error(base + extra);
+    // propaga mensaje para toasts
+    const err = (json && (json.error || json.message)) || `checkin_failed_${res.status}`;
+    throw new Error(err);
   }
-
-  return json as CheckInResp;
+  return json as { ok: boolean };
 }

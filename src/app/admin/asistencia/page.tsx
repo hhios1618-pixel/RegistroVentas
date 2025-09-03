@@ -1,213 +1,297 @@
 'use client';
+
 import React, { useEffect, useMemo, useState } from 'react';
+import CameraCapture from '@/components/attendance/CameraCapture';
+import LocationButton, { GeoResult } from '@/components/attendance/LocationButton';
+import PersonCombo from '@/components/attendance/PersonCombo';
+import SiteSelect from '@/components/attendance/SiteSelect';
+import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
 
-type Row = {
-  id: string;
-  created_at: string;
-  type: 'in'|'out';
-  lat: number;
-  lng: number;
-  accuracy_m: number;
-  device_id: string;
-  selfie_path?: string | null;
-  person?: { id: string; full_name: string; role?: string|null; local?: string|null };
-  site?:   { id: string; name: string };
-};
+type CheckType = 'in' | 'out' | 'lunch_in' | 'lunch_out';
+type Person = { id: string; full_name: string; local?: string | null };
 
-type Site = { id: string; name: string };
-
-const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then(r => r.json());
-
-function fmtDate(dt: string) {
-  const d = new Date(dt);
-  return d.toLocaleString();
+/** ---- helpers dispositivo ---- */
+function isLocalLike(host: string) {
+  return host === 'localhost' || host.startsWith('192.168.') || host.startsWith('127.') || host.endsWith('.local');
+}
+function detectMobile() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  // userAgentData (Chromium) si existe
+  // @ts-ignore
+  if (navigator.userAgentData?.mobile) return true;
+  return /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(ua);
 }
 
-function toCSV(rows: Row[]) {
-  const head = [
-    "FechaHora","Tipo","Persona","Sucursal","Lat","Lng","Precision(m)","Device","SelfiePath"
-  ].join(',');
-  const body = rows.map(r => ([
-    new Date(r.created_at).toISOString(),
-    r.type,
-    `"${(r.person?.full_name || '').replaceAll('"','""')}"`,
-    `"${(r.site?.name || '').replaceAll('"','""')}"`,
-    String(r.lat ?? ''),
-    String(r.lng ?? ''),
-    String(r.accuracy_m ?? ''),
-    `"${(r.device_id || '').replaceAll('"','""')}"`,
-    `"${(r.selfie_path || '').replaceAll('"','""')}"`
-  ].join(',')));
-  return [head, ...body].join('\n');
-}
+export default function AsistenciaPage() {
+  /** ---- device gate ---- */
+  const [allow, setAllow] = useState<boolean>(false);
+  const [why, setWhy] = useState<string>('');
 
-export default function AdminAsistenciaPage() {
-  // Filtros
-  const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-  const [start, setStart] = useState(firstDay.toISOString().slice(0,10));
-  const [end, setEnd]     = useState(today.toISOString().slice(0,10));
-  const [q, setQ]         = useState('');
-  const [siteId, setSiteId] = useState<string>('');
+  useEffect(() => {
+    const mobile = detectMobile();
+    const isHttps = typeof location !== 'undefined' && location.protocol === 'https:';
+    const allowLocal = typeof location !== 'undefined' && isLocalLike(location.hostname);
+    const permitted = mobile && (isHttps || allowLocal);
 
-  // Datos
-  const [sites, setSites] = useState<Site[]>([]);
-  const [rows, setRows]   = useState<Row[]>([]);
+    setAllow(permitted);
+    if (!mobile) setWhy('Esta página solo permite marcaje desde teléfono o tablet.');
+    else if (!isHttps && !allowLocal) setWhy('Activa HTTPS para marcar (en producción). En local/LAN está permitido.');
+  }, []);
+
+  // Bloqueo total si no cumple
+  if (!allow) {
+    return (
+      <div style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'linear-gradient(135deg,#0f172a 0%, #1e293b 100%)',
+        color: '#e5e7eb',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <div style={{
+          width: 'min(640px, 92vw)',
+          background: 'rgba(15,23,42,.9)',
+          border: '1px solid rgba(148,163,184,.15)',
+          borderRadius: 16,
+          padding: 20,
+          textAlign: 'center'
+        }}>
+          <div style={{
+            display:'inline-flex', alignItems:'center', justifyContent:'center',
+            width:56, height:56, borderRadius:14,
+            background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'#fff',
+            fontWeight:800, fontSize:22, marginBottom:10
+          }}>A</div>
+          <h1 style={{margin:'6px 0 8px 0', fontSize:22, fontWeight:800}}>Marcaje solo desde teléfono 📱</h1>
+          <p style={{margin:0, color:'#94a3b8'}}>{why}</p>
+          <p style={{margin:'10px 0 0 0', color:'#9ca3af', fontSize:13}}>
+            Abre este enlace en tu celular y habilita <strong>Ubicación precisa</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /** ---- estado normal del page ---- */
+  const [person, setPerson] = useState<Person | null>(null);
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [siteId, setSiteId] = useState<string | null>(null);
+  const [checkType, setCheckType] = useState<CheckType>('in');
+
+  const [selfie, setSelfie] = useState<string | null>(null);
+  const [loc, setLoc] = useState<GeoResult | null>(null);
+  const [qr, setQr] = useState<{ code: string; exp_at: string } | null>(null);
+
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string|null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const loadSites = async () => {
-    const res = await fetch('/api/sites', { cache: 'no-store' });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j?.error || 'sites_fetch_failed');
-    setSites(j.data as Site[]);
-  };
+  // Device id persistente
+  const deviceId = useMemo<string>(() => {
+    if (typeof window === 'undefined') return 'web-client';
+    const k = 'fx_device_id';
+    let v = localStorage.getItem(k);
+    if (!v) { v = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2); localStorage.setItem(k, v); }
+    return v;
+  }, []);
 
-  const load = async () => {
-    setLoading(true); setErr(null);
+  useEffect(() => { setPersonId(person?.id ?? null); }, [person?.id]);
+  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
+
+  // Reglas
+  const isTurno = checkType === 'in' || checkType === 'out'; // exige selfie + QR + geo
+  const isColacion = !isTurno;                               // solo geo
+  const hasMinForTurno = Boolean(personId && siteId && loc && selfie && qr);
+  const hasMinForColacion = Boolean(personId && siteId && loc);
+  const canSubmit = isTurno ? hasMinForTurno : hasMinForColacion;
+
+  const progress = (() => {
+    const reqs = isTurno ? [personId, siteId, selfie, loc, qr] : [personId, siteId, loc];
+    const done = reqs.filter(Boolean).length;
+    return { done, total: reqs.length, percent: (done / reqs.length) * 100 };
+  })();
+
+  const handleGetQR = async () => {
+    if (!siteId) { setToast('⚠️ Selecciona una sucursal primero'); return; }
     try {
-      const params = new URLSearchParams();
-      if (start) params.set('start', start);
-      if (end)   params.set('end', end);
-      if (q)     params.set('q', q);
-      if (siteId) params.set('site_id', siteId);
-      const res = await fetch(`/api/attendance?${params.toString()}`, { cache: 'no-store' });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'attendance_fetch_failed');
-      setRows(j.data as Row[]);
-    } catch (e: any) {
-      setErr(e?.message || 'error');
-    } finally {
-      setLoading(false);
-    }
+      const r = await getQR(siteId);
+      setQr(r);
+      setToast(`✅ Código QR generado`);
+    } catch { setToast('❌ No se pudo generar el QR'); }
   };
 
-  useEffect(() => { loadSites(); }, []);
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [start, end, siteId]);
-
-  const kpis = useMemo(() => {
-    const total = rows.length;
-    const ins   = rows.filter(r => r.type === 'in').length;
-    const outs  = rows.filter(r => r.type === 'out').length;
-    const avgAcc = rows.length ? Math.round(rows.reduce((a,r)=>a+(r.accuracy_m||0),0) / rows.length) : 0;
-    return { total, ins, outs, avgAcc };
-  }, [rows]);
-
-  const exportCSV = () => {
-    const csv = toCSV(rows);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `reporte_asistencia_${start}_a_${end}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+  const submit = async () => {
+    if (!canSubmit) { setToast('❌ Completa los requisitos antes de marcar'); return; }
+    setLoading(true);
+    const payload: CheckInPayload = {
+      person_id: personId!,
+      site_id: siteId!,
+      type: checkType,
+      lat: loc!.lat,
+      lng: loc!.lng,
+      accuracy: loc!.accuracy,
+      device_id: deviceId,
+      selfie_base64: isTurno ? (selfie ?? '') : '',
+      qr_code: isTurno ? (qr?.code ?? '') : '',
+    };
+    try {
+      const r = await checkIn(payload);
+      if (r.ok) {
+        setToast(`🎉 ${labelByType(checkType)} registrada`);
+        if (isTurno) { setSelfie(null); setQr(null); }
+        setLoc(null);
+      } else setToast('❌ Error al registrar la asistencia');
+    } catch { setToast('❌ Error al registrar la asistencia'); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div style={{ minHeight:'100dvh', background:'#0b1220', color:'#e5e7eb', fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif' }}>
-      <div style={{ maxWidth: 1200, margin:'0 auto', padding:'24px 20px' }}>
-        <h1 style={{ marginBottom: 16, fontSize: 24, fontWeight: 800 }}>Dashboard de Asistencia</h1>
-
-        {/* Filtros */}
-        <div style={{
-          display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px,1fr))', gap:12,
-          background:'rgba(17,24,39,0.6)', border:'1px solid #223047', borderRadius:12, padding:12, marginBottom:16
-        }}>
-          <div>
-            <label style={{ fontSize:12, opacity:.8 }}>Desde</label>
-            <input type="date" value={start} onChange={e=>setStart(e.currentTarget.value)}
-              style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #223047', background:'transparent', color:'#e5e7eb' }} />
+    <div style={{
+      minHeight: '100dvh',
+      background: `
+        radial-gradient(circle at 20% 10%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.12) 0%, transparent 50%),
+        radial-gradient(circle at 40% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, #0f172a 0%, #1e293b 100%)
+      `,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }}>
+      {/* Header */}
+      <div style={{ position:'sticky', top:0, zIndex:50, background:'rgba(15,23,42,.8)', backdropFilter:'blur(20px)', borderBottom:'1px solid rgba(148,163,184,.1)' }}>
+        <div style={{ maxWidth:896, margin:'0 auto', padding:'16px 20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'#fff' }}>A</div>
+              <div>
+                <h1 style={{ fontSize:24, fontWeight:700, color:'#f8fafc', margin:0 }}>Registro de Asistencia</h1>
+                <p style={{ color:'#94a3b8', fontSize:14, margin:0 }}>Turno y colación con validaciones inteligentes</p>
+              </div>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <div style={{ width:80, height:4, background:'rgba(148,163,184,.2)', borderRadius:2, overflow:'hidden' }}>
+                <div style={{ width:`${progress.percent}%`, height:'100%', background:'linear-gradient(90deg,#10b981,#059669)', transition:'width .3s ease' }} />
+              </div>
+              <span style={{ color:'#94a3b8', fontSize:12, fontWeight:500 }}>{progress.done}/{progress.total}</span>
+            </div>
           </div>
-          <div>
-            <label style={{ fontSize:12, opacity:.8 }}>Hasta</label>
-            <input type="date" value={end} onChange={e=>setEnd(e.currentTarget.value)}
-              style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #223047', background:'transparent', color:'#e5e7eb' }} />
-          </div>
-          <div>
-            <label style={{ fontSize:12, opacity:.8 }}>Sucursal</label>
-            <select value={siteId} onChange={e=>setSiteId(e.currentTarget.value)}
-              style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #223047', background:'transparent', color:'#e5e7eb' }}>
-              <option value="">Todas</option>
-              {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize:12, opacity:.8 }}>Persona</label>
-            <input placeholder="Buscar nombre..." value={q} onChange={e=>setQ(e.currentTarget.value)} onKeyDown={(e)=>{ if(e.key==='Enter') load(); }}
-              style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #223047', background:'transparent', color:'#e5e7eb' }} />
-          </div>
-          <div style={{ display:'flex', alignItems:'end', gap:8 }}>
-            <button onClick={load}
-              style={{ padding:'10px 14px', borderRadius:10, border:'1px solid #2a3b55', background:'#133a55', color:'#e5e7eb', fontWeight:700 }}>
-              Aplicar filtros
-            </button>
-            <button onClick={exportCSV}
-              style={{ padding:'10px 14px', borderRadius:10, border:'1px solid #2a3b55', background:'#0b5e2e', color:'#e5e7eb', fontWeight:700 }}>
-              Exportar CSV
-            </button>
-          </div>
-        </div>
-
-        {/* KPIs */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px,1fr))', gap:12, marginBottom:16 }}>
-          <div style={{ background:'rgba(17,24,39,0.6)', border:'1px solid #223047', borderRadius:12, padding:14 }}>
-            <div style={{ fontSize:12, opacity:.8 }}>Total marcas</div>
-            <div style={{ fontSize:24, fontWeight:800 }}>{kpis.total}</div>
-          </div>
-          <div style={{ background:'rgba(17,24,39,0.6)', border:'1px solid #223047', borderRadius:12, padding:14 }}>
-            <div style={{ fontSize:12, opacity:.8 }}>Entradas</div>
-            <div style={{ fontSize:24, fontWeight:800 }}>{kpis.ins}</div>
-          </div>
-          <div style={{ background:'rgba(17,24,39,0.6)', border:'1px solid #223047', borderRadius:12, padding:14 }}>
-            <div style={{ fontSize:12, opacity:.8 }}>Salidas</div>
-            <div style={{ fontSize:24, fontWeight:800 }}>{kpis.outs}</div>
-          </div>
-          <div style={{ background:'rgba(17,24,39,0.6)', border:'1px solid #223047', borderRadius:12, padding:14 }}>
-            <div style={{ fontSize:12, opacity:.8 }}>Precisión promedio</div>
-            <div style={{ fontSize:24, fontWeight:800 }}>±{kpis.avgAcc} m</div>
-          </div>
-        </div>
-
-        {/* Tabla */}
-        <div style={{ overflowX:'auto', border:'1px solid #223047', borderRadius:12 }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', minWidth: 900 }}>
-            <thead>
-              <tr style={{ background:'rgba(17,24,39,0.6)' }}>
-                {['Fecha/Hora','Persona','Sucursal','Tipo','Precisión','Lat','Lng','Device','Selfie'].map(h =>
-                  <th key={h} style={{ textAlign:'left', padding:'10px 12px', borderBottom:'1px solid #223047', fontWeight:700 }}>{h}</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={9} style={{ padding:16, opacity:.8 }}>Cargando...</td></tr>
-              ) : err ? (
-                <tr><td colSpan={9} style={{ padding:16, color:'#ef4444' }}>Error: {err}</td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={9} style={{ padding:16, opacity:.8 }}>Sin resultados</td></tr>
-              ) : rows.map(r => (
-                <tr key={r.id} style={{ borderBottom:'1px solid #223047' }}>
-                  <td style={{ padding:'10px 12px' }}>{fmtDate(r.created_at)}</td>
-                  <td style={{ padding:'10px 12px' }}>{r.person?.full_name || '-'}</td>
-                  <td style={{ padding:'10px 12px' }}>{r.site?.name || '-'}</td>
-                  <td style={{ padding:'10px 12px', fontWeight:700, color: r.type==='in' ? '#10b981' : '#f87171' }}>
-                    {r.type === 'in' ? 'Entrada' : 'Salida'}
-                  </td>
-                  <td style={{ padding:'10px 12px' }}>±{Math.round(r.accuracy_m || 0)} m</td>
-                  <td style={{ padding:'10px 12px' }}>{r.lat?.toFixed(6)}</td>
-                  <td style={{ padding:'10px 12px' }}>{r.lng?.toFixed(6)}</td>
-                  <td style={{ padding:'10px 12px', opacity:.8 }}>{r.device_id}</td>
-                  <td style={{ padding:'10px 12px', opacity:.8 }}>{r.selfie_path ? r.selfie_path : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ marginTop:10, fontSize:12, opacity:.7 }}>
-          * Selfies quedan en bucket <b>attendance-selfies</b> (mostrar miniaturas requiere signed URL; lo agregamos si lo necesitas).
         </div>
       </div>
+
+      <div style={{ maxWidth:896, margin:'0 auto', padding:'32px 20px' }}>
+        {/* Selector tipo */}
+        <div style={{ background:'rgba(30,41,59,.6)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:16, marginBottom:16 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+            {[
+              { k: 'in', label: '🟢 Entrada' },
+              { k: 'out', label: '🔴 Salida' },
+              { k: 'lunch_in', label: '🥪 Inicio colación' },
+              { k: 'lunch_out', label: '🍽️ Fin colación' },
+            ].map(opt => (
+              <button
+                key={opt.k}
+                onClick={() => { setCheckType(opt.k as CheckType); if (opt.k === 'lunch_in' || opt.k === 'lunch_out') setQr(null); }}
+                style={{
+                  padding:'12px', borderRadius:12, border:'1px solid rgba(148,163,184,.15)',
+                  background: checkType === opt.k ? 'linear-gradient(135deg,#2563eb,#7c3aed)' : 'transparent',
+                  color:'#fff', fontWeight:700, cursor:'pointer'
+                }}
+              >{opt.label}</button>
+            ))}
+          </div>
+          <div style={{ marginTop:8, fontSize:12, color:'#94a3b8' }}>
+            {isTurno ? 'Requisitos: Selfie + QR + ubicación (GPS).' : 'Requisito: ubicación (GPS). No se pide selfie ni QR.'}
+          </div>
+        </div>
+
+        {/* Grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))', gap:24, marginBottom:24 }}>
+          {/* Datos */}
+          <div style={{ background:'rgba(30,41,59,.6)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:20 }}>
+            <h3 style={{ margin:0, marginBottom:12, color:'#f1f5f9' }}>Datos</h3>
+            <div style={{ display:'grid', gap:12 }}>
+              <PersonCombo value={person} onSelect={(p) => setPerson(p)} />
+              <SiteSelect value={siteId} onChange={setSiteId} preselectName={person?.local ?? null} />
+            </div>
+          </div>
+
+          {/* Verificaciones */}
+          <div style={{ background:'rgba(30,41,59,.6)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:20 }}>
+            <h3 style={{ margin:0, marginBottom:12, color:'#f1f5f9' }}>Verificaciones</h3>
+            <div style={{ display:'grid', gap:12 }}>
+              {/* Selfie solo turno */}
+              <div>
+                <button disabled={!isTurno} title={isTurno ? 'Tomar selfie' : 'No requerido para colación'} style={{
+                  width:'100%', padding:'10px', borderRadius:12, border:'1px solid rgba(148,163,184,.2)',
+                  background: isTurno ? 'rgba(15,23,42,.7)' : 'rgba(71,85,105,.4)', color:'#e5e7eb',
+                  cursor: isTurno ? 'pointer':'not-allowed', marginBottom:8
+                }}> {isTurno ? 'Tomar selfie' : 'Selfie no requerido'} </button>
+                {isTurno && <CameraCapture onCapture={setSelfie} />}
+              </div>
+
+              {/* Ubicación */}
+              <LocationButton onOk={setLoc} />
+
+              {/* QR solo turno */}
+              <button type="button" onClick={handleGetQR} disabled={!isTurno || !siteId} style={{
+                padding:'12px', borderRadius:12, border:'none',
+                background: (!isTurno || !siteId) ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#0ea5e9,#0284c7)',
+                color:'#fff', fontWeight:700, cursor: (!isTurno || !siteId) ? 'not-allowed':'pointer'
+              }}>
+                🔲 Obtener QR {qr ? '✅' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Acciones */}
+        <div style={{ background:'rgba(30,41,59,.6)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:16 }}>
+          <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' }}>
+            <button type="button" onClick={submit} disabled={!canSubmit || loading} style={{
+              padding:'14px 22px', borderRadius:14, border:'none',
+              background: (!canSubmit || loading) ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#10b981,#059669)',
+              color:'#fff', fontWeight:800, fontSize:16, cursor: (!canSubmit || loading) ? 'not-allowed' : 'pointer',
+              boxShadow: (!canSubmit || loading) ? 'none' : '0 8px 25px rgba(16,185,129,.35)'
+            }}>
+              {loading ? 'Procesando…' : `Marcar ${labelByType(checkType)}`}
+            </button>
+          </div>
+
+          <div style={{ display:'flex', gap:10, marginTop:14, justifyContent:'center', flexWrap:'wrap', fontSize:13 }}>
+            <Status ok={!!personId} label="Empleado" />
+            <Status ok={!!siteId} label="Sucursal" />
+            <Status ok={!!loc} label="Ubicación" />
+            {isTurno && <Status ok={!!selfie} label="Selfie" />}
+            {isTurno && <Status ok={!!qr} label="QR" />}
+          </div>
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position:'fixed', top:20, right:20,
+          background:'rgba(15,23,42,.95)', border:'1px solid rgba(148,163,184,.2)',
+          borderRadius:16, padding:'12px 16px', color:'#f1f5f9', fontSize:14, zIndex:100
+        }}>{toast}</div>
+      )}
     </div>
   );
+}
+
+function Status({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6, color: ok ? '#10b981' : '#94a3b8' }}>
+      {ok ? '✅' : '⏳'} {label}
+    </div>
+  );
+}
+function labelByType(t: CheckType) {
+  switch (t) {
+    case 'in': return 'Entrada';
+    case 'out': return 'Salida';
+    case 'lunch_in': return 'Inicio colación';
+    case 'lunch_out': return 'Fin colación';
+    default: return 'Marcaje';
+  }
 }
