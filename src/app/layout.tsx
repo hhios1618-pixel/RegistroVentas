@@ -1,11 +1,11 @@
-// app/layout.tsx
+// En: src/app/layout.tsx
 
 import type { Metadata } from "next";
-import { GeistSans } from "geist/font/sans";
-import { GeistMono } from "geist/font/mono";
+// CORRECCIÓN: Se importan las funciones de las fuentes
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import "./globals.css";
-
-// No es necesario crear constantes nuevas, los objetos importados ya están listos.
+import LogoutButton from "@/components/LogoutButton";
 
 export const metadata: Metadata = {
   title: "Fenix Store | Sistema de Gestión",
@@ -18,13 +18,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark">
-      {/* 👇 CORRECCIÓN FINAL AQUÍ */}
-      {/* Usamos directamente las propiedades .variable de los objetos importados */}
-      <body
-        className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}
-      >
-        {children}
+    // CORRECCIÓN: Se usan .className en lugar de .variable
+    <html lang="es" className={`${GeistSans.className} ${GeistMono.className} dark`}>
+      <body>
+        {/* Barra superior con Logout */}
+        <div className="w-full flex justify-end p-4 border-b border-white/10 bg-black/30 backdrop-blur-md">
+          <LogoutButton />
+        </div>
+
+        {/* Contenido */}
+        <main>{children}</main>
       </body>
     </html>
   );

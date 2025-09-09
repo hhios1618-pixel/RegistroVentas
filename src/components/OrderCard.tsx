@@ -9,7 +9,7 @@ import {
   Truck, Eye, EyeOff 
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/Card';
-import Button from '@/components/Button';
+import { Button } from '@/components/Button';
 import { StatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils/cn';
 import type { OrderCardProps, LatLng, DeliveryUser, AddressSuggestion, OrderStatus, OrderRow } from '@/lib/types';

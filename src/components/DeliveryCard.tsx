@@ -4,7 +4,7 @@
 import React from 'react';
 import { User, MoreVertical, PackageCheck, BarChart2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/Card';
-import Button from '@/components/Button';
+import { Button } from '@/components/Button';
 import { cn } from '@/lib/utils/cn';
 import { DeliveryCardProps } from '@/lib/types';
 import { motion } from 'framer-motion';

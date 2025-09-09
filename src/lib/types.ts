@@ -1,5 +1,4 @@
 // RUTA: src/lib/types.ts
-// TIPOS COMPLETOS ACTUALIZADOS CON CAMPOS DE ENCOMIENDA
 
 export type OrderStatus =
   | 'pending'
@@ -11,12 +10,12 @@ export type OrderStatus =
   | 'returned'
   | 'failed';
 
-// Definimos un tipo base para el perfil.
-type UserProfile = {
+// Perfil básico (p.ej. de tabla people)
+export type UserProfile = {
   full_name: string | null;
 };
 
-// NUEVO: Definimos el tipo para un item individual del pedido
+// ---- ITEMS ----
 export interface OrderItem {
   id: string;
   product_name: string;
@@ -24,38 +23,49 @@ export interface OrderItem {
   unit_price: number | null;
   subtotal: number | null;
   image_url?: string | null;
+  product_code?: string | null;
+  type?: 'BASE' | 'PROMO';
 }
 
-// --------------------- ORDERS ---------------------
+// ---- ORDERS (tabla principal) ----
 export interface OrderRow {
   id: string;
   created_at: string;
   updated_at?: string | null;
+
   order_no?: number | null;
+
   customer_name?: string | null;
   customer_phone?: string | null;
-  
-  // --- PROPIEDAD AÑADIDA ---
+
+  // Dato agregado (dirección texto llano)
   address?: string | null;
 
+  // Dirección de entrega estructurada
   delivery_address?: string | null;
   delivery_geo_lat?: number | null;
   delivery_geo_lng?: number | null;
+
   notes?: string | null;
+
   amount?: number | null;
   local?: string | null;
   payment_method?: string | null;
+
+  // Ventana de entrega
   delivery_date?: string | null;
   delivery_from?: string | null;
   delivery_to?: string | null;
+
   confirmed_at?: string | null;
   delivered_at?: string | null;
   status: OrderStatus;
+
   seller?: string | null;
   sales_user_id?: string | null;
   delivery_assigned_to?: string | null;
-  destino: string | null; 
-  
+  destino: string | null;
+
   seller_profile?: UserProfile | UserProfile[] | null;
   delivery_profile?: UserProfile | UserProfile[] | null;
 
@@ -64,15 +74,17 @@ export interface OrderRow {
 
   order_items?: OrderItem[];
 
-  // --- CAMPOS DE ENCOMIENDA AGREGADOS ---
+  // --- ENCOMIENDA ---
   is_encomienda?: boolean | null;
   fecha_salida_bodega?: string | null;
   fecha_entrega_encomienda?: string | null;
+
+  // --- CAMPOS VENTA/HORARIO (alias históricos del bot) ---
   venta_fecha?: string | null;
   venta_desde?: string | null;
   venta_hasta?: string | null;
-  
-  // --- CAMPOS ADICIONALES DE LA TABLA ---
+
+  // --- EXTRAS DEL ESQUEMA ---
   is_promoter?: boolean | null;
   customer_id?: string | null;
   commission?: number | null;
@@ -86,15 +98,17 @@ export interface OrderRow {
   delivery_time_from?: string | null;
   delivery_time_to?: string | null;
   delivery_notes?: string | null;
+
   geo_lat?: number | null;
   geo_lng?: number | null;
   lat?: number | null;
   lng?: number | null;
   location_hash?: string | null;
+
   sales_role?: string | null;
 }
 
-// --------------------- USERS (from 'people' table) ---------------------
+// ---- PEOPLE (delivery/promoters) ----
 export interface DeliveryUser {
   id: string;
   full_name: string;
@@ -109,7 +123,7 @@ export interface DeliveryUser {
   max_load?: number | null;
 }
 
-// --------------------- ROUTES ---------------------
+// ---- ROUTES ----
 export interface DeliveryRoute {
   id: string;
   delivery_user_id: string;
@@ -119,11 +133,12 @@ export interface DeliveryRoute {
   completed_at?: string | null;
   route_date?: string | null;
 }
+
 export interface EnrichedDeliveryRoute extends DeliveryRoute {
   order_no: number | null;
 }
 
-// --------------------- METRICS ---------------------
+// ---- METRICS ----
 export interface DeliveryMetrics {
   id: string;
   delivery_user_id: string;
@@ -138,10 +153,10 @@ export interface DeliveryMetrics {
   efficiency?: number | null;
 }
 
-// --------------------- UI & HELPERS ---------------------
-export interface LatLng { 
-  lat: number; 
-  lng: number; 
+// ---- UI & HELPERS ----
+export interface LatLng {
+  lat: number;
+  lng: number;
 }
 
 export interface AddressSuggestion {
@@ -170,6 +185,7 @@ export interface MapPickerProps {
   routePoints?: LatLng[];
 }
 
+// ---- Tarjetas/Tablas (si las usas en otros módulos) ----
 export interface OrderCardProps {
   order: OrderRow;
   deliveries: DeliveryUser[];
@@ -200,7 +216,6 @@ export interface DeliveryCardProps {
   onViewDetails: (delivery: DeliveryUser) => void;
 }
 
-// --------------------- CHART TYPES ---------------------
 export interface EfficiencyDataPoint {
   hour: string;
   successful: number;
@@ -212,7 +227,6 @@ export interface EfficiencyChartProps {
   orders: OrderRow[];
 }
 
-// --------------------- MODAL TYPES ---------------------
 export interface OrderDetailsModalProps {
   order: OrderRow;
   deliveries: DeliveryUser[];
@@ -251,13 +265,12 @@ export interface MapOverviewProps {
   defaultZoom?: number;
 }
 
-// --------------------- TABLE TYPES ---------------------
 export interface OrderTableProps {
   orders: OrderRow[];
   onRowClick: (order: OrderRow) => void;
 }
 
-// --------------------- CARD TYPES ---------------------
+// ---- Card UI (si los consumes en props) ----
 export interface CardProps {
   children: React.ReactNode;
   className?: string;
@@ -276,15 +289,4 @@ export interface CardTitleProps {
 export interface CardContentProps {
   children: React.ReactNode;
   className?: string;
-}
-
-// --------------------- BUTTON TYPES ---------------------
-export interface ButtonProps {
-  children: React.ReactNode;
-  variant?: 'default' | 'outline' | 'ghost' | 'link';
-  size?: 'small' | 'medium' | 'large';
-  onClick?: () => void;
-  className?: string;
-  disabled?: boolean;
-  type?: 'button' | 'submit' | 'reset';
 }

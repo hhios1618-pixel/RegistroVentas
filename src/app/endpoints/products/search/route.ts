@@ -24,17 +24,36 @@ export async function GET(req: Request) {
       return NextResponse.json({ items: [], hint: 'Escribe al menos 3 letras' }, { status: 200 })
     }
 
+    // --- INICIO DE LA CORRECCIÓN ---
+    // 1. Dividimos la consulta en palabras individuales.
+    const words = q.split(' ').filter(word => word.length > 2);
+
+    // Si no hay palabras válidas, no buscamos nada.
+    if (words.length === 0) {
+      return NextResponse.json({ items: [] });
+    }
+
+    // 2. Creamos una cadena de condiciones 'OR' para Supabase.
+    //    Buscará cualquier palabra en el campo 'name' O en el campo 'code'.
+    //    Ejemplo: name.ilike.%escurridor%,code.ilike.%escurridor%,name.ilike.%plomo%,code.ilike.%plomo%
+    const orCondition = words
+      .flatMap(word => [`name.ilike.%${word}%`, `code.ilike.%${word}%`])
+      .join(',');
+
+    // 3. Ejecutamos la consulta con la condición 'OR'.
     const { data, error } = await supabase
       .from('product_prices')
       .select('code,name,category,stock')
-      .or(`name.ilike.%${q}%,code.ilike.%${q}%`)
+      .or(orCondition)
       .order('name', { ascending: true })
-      .limit(limit)
+      .limit(limit);
+    // --- FIN DE LA CORRECCIÓN ---
+
 
     if (error) throw error
 
     const items = (data || []).map((p: any) => ({
-      id: String(p.code ?? ''),      // usamos code como id
+      id: String(p.code ?? ''),
       code: p.code ?? null,
       name: p.name ?? '',
       category: p.category ?? null,

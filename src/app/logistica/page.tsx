@@ -15,7 +15,7 @@ import OrderDetailsModal from '@/components/OrderDetailsModal';
 import DeliveryDetailsModal from '@/components/DeliveryDetailsModal';
 import { DeliveryCard } from '@/components/DeliveryCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
-import Button from '@/components/Button';
+import { Button } from '@/components/Button';
 import MapOverviewModal from '@/components/MapOverviewModal';
 import { SettlementTable } from '@/components/SettlementTable';
 
