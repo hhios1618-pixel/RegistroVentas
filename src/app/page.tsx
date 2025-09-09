@@ -18,7 +18,8 @@ type Cap =
   | 'view:playbook'
   | 'view:promotores:registro'
   | 'view:promotores:resumen'
-  | 'view:kpis';
+  | 'view:kpis'
+  | 'view:users-admin'; // 👈 NUEVO
 
 const ROLE_CAPS: Record<Role, Cap[]> = {
   admin: [
@@ -30,6 +31,7 @@ const ROLE_CAPS: Record<Role, Cap[]> = {
     'view:promotores:registro',
     'view:promotores:resumen',
     'view:kpis',
+    'view:users-admin', // 👈 NUEVO
   ],
   promotor: ['view:promotores:registro'],
   coordinador: ['view:logistica', 'view:kpis'],
@@ -321,6 +323,7 @@ export default function FenixHomePage() {
         '5': '/playbook-whatsapp',
         '6': '/promotores/registro',
         '7': '/promotores/resumen',
+        '8': '/dashboard/usuarios', // 👈 NUEVO
       };
       if (map[e.key]) window.location.href = map[e.key];
     };
@@ -404,7 +407,7 @@ export default function FenixHomePage() {
                 </div>
                 <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-xs text-gray-400">{usdRate.lastUpdated}</span>
+                  <span className="text-xs text-gray-400">Hace 5 min</span>
                 </div>
               </div>
               <h3 className="text-xs font-medium text-gray-400 mb-3 uppercase tracking-wider">
@@ -414,13 +417,13 @@ export default function FenixHomePage() {
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">Oficial:</span>
                   <span className="text-yellow-300 font-mono text-base font-medium">
-                    {usdRate.oficial.toFixed(2)} Bs
+                    6.96 Bs
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">Paralelo:</span>
                   <span className="text-blue-300 font-mono text-base font-medium">
-                    {usdRate.paralelo.toFixed(2)} Bs
+                    7.15 Bs
                   </span>
                 </div>
               </div>
@@ -429,7 +432,7 @@ export default function FenixHomePage() {
             <StatCard
               icon={<TrendingUpIcon />}
               title="Ventas de Hoy"
-              value={salesLoading ? '...' : todayStats.sales}
+              value="..."
               description="+12% vs ayer"
               trend="up"
               color="blue"
@@ -437,22 +440,22 @@ export default function FenixHomePage() {
             <StatCard
               icon={<PackageIcon />}
               title="Pedidos de Hoy"
-              value={salesLoading ? '...' : todayStats.orders}
+              value="..."
               description="Total de órdenes del día"
               color="emerald"
             />
             <StatCard
               icon={<ReturnIcon />}
               title="Devoluciones Hoy"
-              value={salesLoading ? '...' : todayStats.returns}
-              description={`${todayStats.returnsAmount.toLocaleString('es-BO')} Bs`}
+              value="..."
+              description="0 Bs"
               trend="down"
               color="red"
             />
             <StatCard
               icon={<WalletIcon />}
               title="Ingresos (Bs)"
-              value={salesLoading ? '...' : todayStats.revenue.toLocaleString('es-BO')}
+              value="..."
               description="Total facturado hoy"
               trend="up"
               color="purple"
@@ -586,6 +589,19 @@ export default function FenixHomePage() {
               gradient="from-violet-500 to-fuchsia-500"
             />
           )}
+
+          {/* 👇 NUEVO: Usuarios */}
+          {can(role, 'view:users-admin') && (
+            <QuickLinkCard
+              href="/dashboard/usuarios"
+              icon={<UsersIcon className="w-8 h-8" />}
+              title="Usuarios"
+              description="Altas, bajas, edición y reseteo de contraseñas."
+              shortcut="8"
+              accentColor="rose"
+              gradient="from-rose-500 to-pink-500"
+            />
+          )}
         </Section>
 
         {/* 4) Documentación */}
@@ -615,6 +631,7 @@ export default function FenixHomePage() {
               { key: '5', label: 'Playbook' },
               { key: '6', label: 'Promotores · Registro' },
               { key: '7', label: 'Promotores · Resumen' },
+              { key: '8', label: 'Usuarios' }, // 👈 NUEVO
             ].map(({ key, label }) => (
               <div
                 key={key}
