@@ -4,10 +4,13 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface CheckboxProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+  extends React.InputHTMLAttributes<HTMLInputElement> {
+  /** Callback adicional tipo Radix */
+  onCheckedChange?: (checked: boolean) => void;
+}
 
 const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, ...props }, ref) => {
+  ({ className, onCheckedChange, onChange, ...props }, ref) => {
     return (
       <input
         type="checkbox"
@@ -19,6 +22,10 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
             'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
           className
         )}
+        onChange={(e) => {
+          onChange?.(e); // mantiene compatibilidad nativa
+          onCheckedChange?.(e.target.checked); // dispara callback custom
+        }}
         {...props}
       />
     );
