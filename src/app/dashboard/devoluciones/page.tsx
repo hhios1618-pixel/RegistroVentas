@@ -2,14 +2,14 @@
 
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/Button';
-import { Input } from '@/components/input';
-import { Textarea } from '@/components/textarea';
+import { Input } from '@/components/Input';
+import { Textarea } from '@/components/Textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { Badge } from '@/components/badge';
 import { Separator } from '@/components/separator';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/select';
-import { Checkbox } from '@/components/checkbox';
+import { Checkbox } from '@/components/Checkbox';
 import { toast } from 'sonner';
 import { Loader2, Search, Package, RotateCcw, AlertCircle } from 'lucide-react';
 
@@ -47,28 +47,28 @@ const RETURN_REASONS = [
   'Producto vencido',
   'Daño en transporte',
   'Error en la orden',
-  'Otro'
-];
+  'Otro',
+] as const;
 
 const RETURN_METHODS = [
   { value: 'EFECTIVO', label: 'Efectivo' },
   { value: 'QR', label: 'QR' },
-  { value: 'TRANSFERENCIA', label: 'Transferencia' }
-];
+  { value: 'TRANSFERENCIA', label: 'Transferencia' },
+] as const;
 
-const BRANCHES = ['La Paz', 'El Alto', 'Cochabamba', 'Santa Cruz', 'Sucre'];
+const BRANCHES = ['La Paz', 'El Alto', 'Cochabamba', 'Santa Cruz', 'Sucre'] as const;
 
 export default function DevolucionesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [order, setOrder] = useState<Order | null>(null);
   const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
-  const [returnBranch, setReturnBranch] = useState('');
+  const [returnBranch, setReturnBranch] = useState<string>('');
   const [returnMethod, setReturnMethod] = useState<'EFECTIVO' | 'QR' | 'TRANSFERENCIA'>('EFECTIVO');
   const [generalReason, setGeneralReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Buscar pedido
+  // Buscar pedido (mock por ahora)
   const searchOrder = async () => {
     if (!searchTerm.trim()) {
       toast.error('Ingresa un número de pedido o ID');
@@ -77,55 +77,34 @@ export default function DevolucionesPage() {
 
     setIsSearching(true);
     try {
-      // Simulación de búsqueda de pedido
-      // En la implementación real, esto haría una consulta a la base de datos
       const mockOrder: Order = {
         id: 'order-123',
         order_no: parseInt(searchTerm) || 12345,
         customer_name: 'Juan Pérez',
         customer_phone: '59177123456',
         seller: 'María González',
-        amount: 85.50,
+        amount: 85.5,
         local: 'Santa Cruz',
         created_at: '2024-01-15T10:30:00Z',
         items: [
-          {
-            id: 'item-1',
-            product_name: 'Coca Cola 2L',
-            quantity: 2,
-            unit_price: 12.50,
-            subtotal: 25.00
-          },
-          {
-            id: 'item-2',
-            product_name: 'Pan Integral',
-            quantity: 3,
-            unit_price: 8.00,
-            subtotal: 24.00
-          },
-          {
-            id: 'item-3',
-            product_name: 'Yogurt Fresa 1L',
-            quantity: 2,
-            unit_price: 18.25,
-            subtotal: 36.50
-          }
-        ]
+          { id: 'item-1', product_name: 'Coca Cola 2L', quantity: 2, unit_price: 12.5, subtotal: 25.0 },
+          { id: 'item-2', product_name: 'Pan Integral', quantity: 3, unit_price: 8.0, subtotal: 24.0 },
+          { id: 'item-3', product_name: 'Yogurt Fresa 1L', quantity: 2, unit_price: 18.25, subtotal: 36.5 },
+        ],
       };
 
       setOrder(mockOrder);
-      
-      // Inicializar items de devolución
-      const initialReturnItems: ReturnItem[] = mockOrder.items.map(item => ({
+
+      const initialReturnItems: ReturnItem[] = mockOrder.items.map((item) => ({
         ...item,
         selected: false,
         return_quantity: 0,
-        return_reason: ''
+        return_reason: '',
       }));
-      
+
       setReturnItems(initialReturnItems);
       toast.success('Pedido encontrado');
-    } catch (error) {
+    } catch {
       toast.error('Error al buscar el pedido');
       setOrder(null);
       setReturnItems([]);
@@ -136,51 +115,47 @@ export default function DevolucionesPage() {
 
   // Actualizar selección de item
   const toggleItemSelection = (itemId: string, selected: boolean) => {
-    setReturnItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { 
-            ...item, 
-            selected, 
-            return_quantity: selected ? 1 : 0,
-            return_reason: selected ? (generalReason || RETURN_REASONS[0]) : ''
-          }
-        : item
-    ));
+    setReturnItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              selected,
+              return_quantity: selected ? 1 : 0,
+              return_reason: selected ? (generalReason || RETURN_REASONS[0]) : '',
+            }
+          : item
+      )
+    );
   };
 
   // Actualizar cantidad de devolución
   const updateReturnQuantity = (itemId: string, quantity: number) => {
-    setReturnItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { ...item, return_quantity: Math.min(quantity, item.quantity) }
-        : item
-    ));
+    setReturnItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId ? { ...item, return_quantity: Math.min(Math.max(1, quantity), item.quantity) } : item
+      )
+    );
   };
 
   // Actualizar motivo de devolución
   const updateReturnReason = (itemId: string, reason: string) => {
-    setReturnItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { ...item, return_reason: reason }
-        : item
-    ));
+    setReturnItems((prev) => prev.map((item) => (item.id === itemId ? { ...item, return_reason: reason } : item)));
   };
 
   // Calcular monto total de devolución
   const calculateReturnAmount = useCallback(() => {
-    return returnItems
-      .filter(item => item.selected)
-      .reduce((sum, item) => sum + (item.return_quantity * item.unit_price), 0);
+    return returnItems.filter((item) => item.selected).reduce((sum, item) => sum + item.return_quantity * item.unit_price, 0);
   }, [returnItems]);
 
-  // Procesar devolución
+  // Procesar devolución (POST a tu endpoint real)
   const processReturn = async () => {
     if (!order) {
       toast.error('No hay pedido seleccionado');
       return;
     }
 
-    const selectedItems = returnItems.filter(item => item.selected);
+    const selectedItems = returnItems.filter((item) => item.selected);
     if (selectedItems.length === 0) {
       toast.error('Selecciona al menos un producto para devolver');
       return;
@@ -191,8 +166,7 @@ export default function DevolucionesPage() {
       return;
     }
 
-    // Validar que todos los items seleccionados tengan motivo
-    const itemsWithoutReason = selectedItems.filter(item => !item.return_reason.trim());
+    const itemsWithoutReason = selectedItems.filter((item) => !item.return_reason.trim());
     if (itemsWithoutReason.length > 0) {
       toast.error('Todos los productos seleccionados deben tener un motivo de devolución');
       return;
@@ -209,37 +183,37 @@ export default function DevolucionesPage() {
         return_amount: calculateReturnAmount(),
         reason: generalReason || 'Devolución procesada desde sistema web',
         return_method: returnMethod,
-        items: selectedItems.map(item => ({
+        items: selectedItems.map((item) => ({
           product_name: item.product_name,
           quantity: item.return_quantity,
           unit_price: item.unit_price,
-          reason: item.return_reason
-        }))
+          reason: item.return_reason,
+        })),
       };
 
       const response = await fetch('/endpoints/returns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(returnPayload)
+        body: JSON.stringify(returnPayload),
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error || 'Error al procesar devolución');
       }
 
       const result = await response.json();
       toast.success(`Devolución procesada exitosamente. ID: ${result.id}`);
-      
-      // Resetear formulario
+
+      // Reset
       setOrder(null);
       setReturnItems([]);
       setSearchTerm('');
       setReturnBranch('');
       setGeneralReason('');
       setReturnMethod('EFECTIVO');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al procesar devolución');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al procesar devolución');
     } finally {
       setIsProcessing(false);
     }
@@ -272,14 +246,13 @@ export default function DevolucionesPage() {
                 placeholder="Ej: 12345 o order-abc123"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && searchOrder()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') searchOrder();
+                }}
               />
             </div>
             <div className="flex items-end">
-              <Button 
-                onClick={searchOrder} 
-                disabled={isSearching || !searchTerm.trim()}
-              >
+              <Button onClick={searchOrder} disabled={isSearching || !searchTerm.trim()}>
                 {isSearching ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -311,9 +284,7 @@ export default function DevolucionesPage() {
               <div>
                 <Label className="text-sm font-medium text-gray-500">Cliente</Label>
                 <p className="font-medium">{order.customer_name}</p>
-                {order.customer_phone && (
-                  <p className="text-sm text-gray-600">{order.customer_phone}</p>
-                )}
+                {order.customer_phone && <p className="text-sm text-gray-600">{order.customer_phone}</p>}
               </div>
               <div>
                 <Label className="text-sm font-medium text-gray-500">Vendedor</Label>
@@ -323,9 +294,7 @@ export default function DevolucionesPage() {
               <div>
                 <Label className="text-sm font-medium text-gray-500">Total Original</Label>
                 <p className="font-medium text-lg">Bs. {order.amount.toFixed(2)}</p>
-                <p className="text-sm text-gray-600">
-                  {new Date(order.created_at).toLocaleDateString()}
-                </p>
+                <p className="text-sm text-gray-600">{new Date(order.created_at).toLocaleDateString()}</p>
               </div>
             </div>
 
@@ -339,29 +308,23 @@ export default function DevolucionesPage() {
                     <div className="flex items-start gap-4">
                       <Checkbox
                         checked={item.selected}
-                        onCheckedChange={(checked) => 
-                          toggleItemSelection(item.id, checked as boolean)
-                        }
+                        onChange={(e) => toggleItemSelection(item.id, e.currentTarget.checked)}
                       />
-                      
+
                       <div className="flex-1">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           <div>
                             <Label className="text-sm font-medium">Producto</Label>
                             <p className="font-medium">{item.product_name}</p>
-                            <p className="text-sm text-gray-600">
-                              Cantidad original: {item.quantity}
-                            </p>
+                            <p className="text-sm text-gray-600">Cantidad original: {item.quantity}</p>
                           </div>
-                          
+
                           <div>
                             <Label className="text-sm font-medium">Precio Unitario</Label>
                             <p className="font-medium">Bs. {item.unit_price.toFixed(2)}</p>
-                            <p className="text-sm text-gray-600">
-                              Subtotal: Bs. {item.subtotal.toFixed(2)}
-                            </p>
+                            <p className="text-sm text-gray-600">Subtotal: Bs. {item.subtotal.toFixed(2)}</p>
                           </div>
-                          
+
                           {item.selected && (
                             <>
                               <div>
@@ -369,15 +332,15 @@ export default function DevolucionesPage() {
                                 <Input
                                   id={`quantity-${item.id}`}
                                   type="number"
-                                  min="1"
+                                  min={1}
                                   max={item.quantity}
                                   value={item.return_quantity}
-                                  onChange={(e) => 
-                                    updateReturnQuantity(item.id, parseInt(e.target.value) || 1)
+                                  onChange={(e) =>
+                                    updateReturnQuantity(item.id, Number.parseInt(e.target.value || '1'))
                                   }
                                 />
                               </div>
-                              
+
                               <div>
                                 <Label htmlFor={`reason-${item.id}`}>Motivo</Label>
                                 <Select
@@ -388,7 +351,7 @@ export default function DevolucionesPage() {
                                     <SelectValue placeholder="Seleccionar motivo" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {RETURN_REASONS.map(reason => (
+                                    {RETURN_REASONS.map((reason) => (
                                       <SelectItem key={reason} value={reason}>
                                         {reason}
                                       </SelectItem>
@@ -399,7 +362,7 @@ export default function DevolucionesPage() {
                             </>
                           )}
                         </div>
-                        
+
                         {item.selected && (
                           <div className="mt-2 text-right">
                             <Badge variant="secondary">
@@ -418,7 +381,7 @@ export default function DevolucionesPage() {
       )}
 
       {/* Configuración de devolución */}
-      {order && returnItems.some(item => item.selected) && (
+      {order && returnItems.some((item) => item.selected) && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Configuración de Devolución</CardTitle>
@@ -427,12 +390,12 @@ export default function DevolucionesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="branch">Sucursal de devolución</Label>
-                <Select value={returnBranch} onValueChange={setReturnBranch}>
+                <Select value={returnBranch} onValueChange={(value) => setReturnBranch(value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar sucursal" />
                   </SelectTrigger>
                   <SelectContent>
-                    {BRANCHES.map(branch => (
+                    {BRANCHES.map((branch) => (
                       <SelectItem key={branch} value={branch}>
                         {branch}
                       </SelectItem>
@@ -440,15 +403,18 @@ export default function DevolucionesPage() {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div>
                 <Label htmlFor="method">Método de devolución</Label>
-                <Select value={returnMethod} onValueChange={(value: any) => setReturnMethod(value)}>
+                <Select
+                  value={returnMethod}
+                  onValueChange={(value: 'EFECTIVO' | 'QR' | 'TRANSFERENCIA') => setReturnMethod(value)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {RETURN_METHODS.map(method => (
+                    {RETURN_METHODS.map((method) => (
                       <SelectItem key={method.value} value={method.value}>
                         {method.label}
                       </SelectItem>
@@ -457,7 +423,7 @@ export default function DevolucionesPage() {
                 </Select>
               </div>
             </div>
-            
+
             <div>
               <Label htmlFor="general-reason">Motivo general (opcional)</Label>
               <Textarea
@@ -468,24 +434,18 @@ export default function DevolucionesPage() {
                 rows={3}
               />
             </div>
-            
+
             <Separator />
-            
+
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-lg font-semibold">
-                  Total a devolver: Bs. {calculateReturnAmount().toFixed(2)}
-                </p>
+                <p className="text-lg font-semibold">Total a devolver: Bs. {calculateReturnAmount().toFixed(2)}</p>
                 <p className="text-sm text-gray-600">
-                  {returnItems.filter(item => item.selected).length} producto(s) seleccionado(s)
+                  {returnItems.filter((item) => item.selected).length} producto(s) seleccionado(s)
                 </p>
               </div>
-              
-              <Button 
-                onClick={processReturn} 
-                disabled={isProcessing || !returnBranch}
-                size="lg"
-              >
+
+              <Button onClick={processReturn} disabled={isProcessing || !returnBranch} size="lg">
                 {isProcessing ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -508,16 +468,11 @@ export default function DevolucionesPage() {
         <Card>
           <CardContent className="text-center py-12">
             <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">
-              No hay pedido seleccionado
-            </h3>
-            <p className="text-gray-500">
-              Busca un pedido por su número o ID para comenzar el proceso de devolución
-            </p>
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">No hay pedido seleccionado</h3>
+            <p className="text-gray-500">Busca un pedido por su número o ID para comenzar el proceso de devolución</p>
           </CardContent>
         </Card>
       )}
     </div>
   );
 }
-

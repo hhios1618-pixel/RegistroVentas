@@ -14,16 +14,24 @@
     "jsx": "preserve",
     "incremental": true,
     "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+
+      // 🔥 Aliases explícitos para case-sensitive en Vercel
+      "@/components/input": ["./src/components/Input"],
+      "@/components/textarea": ["./src/components/Textarea"],
+      "@/components/checkbox": ["./src/components/Checkbox"],
+      "@/components/ui/label": ["./src/components/label"]
+    }
   },
   "include": [
     "next-env.d.ts",
-    "src/**/*",               // ⬅️ Solo tu app
+    "src/**/*",
     ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "supabase",               // ⬅️ Excluye Deno/Edge Functions
+    "supabase",
     "supabase/**/*"
   ]
 }
