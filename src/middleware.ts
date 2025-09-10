@@ -32,6 +32,15 @@ function isStaticAsset(pathname: string) {
   );
 }
 
+// ✅ ALLOWLIST para el rol ASESOR
+const ASESOR_ALLOW: RegExp[] = [
+  /^\/asesoras(?:\/.*)?$/,              // módulo asesoras
+  /^\/playbook-whatsapp(?:\/.*)?$/,     // playbook
+  /^\/asistencia(?:\/.*)?$/,            // asistencia
+  /^\/dashboard\/captura(?:\/.*)?$/,    // captura
+  /^\/dashboard\/devoluciones(?:\/.*)?$/,// devoluciones
+];
+
 // Decodifica el payload del JWT (sin verificación) para leer el rol
 function readRoleFromCookie(req: NextRequest): string | null {
   const raw = req.cookies.get(SESSION_COOKIE)?.value;
@@ -39,6 +48,7 @@ function readRoleFromCookie(req: NextRequest): string | null {
   const parts = raw.split('.');
   if (parts.length < 2) return null;
   try {
+    // Nota: si en algún entorno Edge no hay Buffer, cambia por atob() equivalente.
     const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const json = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
     const r = json?.role || json?.rol || json?.r;
@@ -79,7 +89,7 @@ export function middleware(req: NextRequest) {
   // 3) RBAC básico SOLO para páginas (no afecta endpoints)
   const role = readRoleFromCookie(req);
 
-  // PROMOTOR → /promotores/registro
+  // PROMOTOR → /promotores/registro (como ya tenías)
   if (role === 'PROMOTOR' && !pathname.startsWith('/promotores/registro')) {
     const url = req.nextUrl.clone();
     url.pathname = '/promotores/registro';
@@ -87,12 +97,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ASESOR → /asesoras
-  if (role === 'ASESOR' && !pathname.startsWith('/asesoras')) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/asesoras';
-    url.searchParams.delete('redirectTo');
-    return NextResponse.redirect(url);
+  // 🔓 ASESOR → allowlist explícita
+  if (role === 'ASESOR') {
+    const allowed = ASESOR_ALLOW.some((rx) => rx.test(pathname));
+    if (!allowed) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/asesoras';
+      url.searchParams.delete('redirectTo');
+      return NextResponse.redirect(url);
+    }
   }
 
   // Otros roles: pasan (admin, gerencia, coordinador, líder, etc.)

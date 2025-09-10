@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import './globals.css';
 import LogoutButton from '@/components/LogoutButton';
+import DevOverlayKiller from '@/components/DevOverlayKiller'; // ← mata overlays de Next DevTools en dev
 
 export const metadata: Metadata = {
   title: 'Fenix Store | Sistema de Gestión',
@@ -13,10 +14,7 @@ export const viewport: Viewport = {
   themeColor: '#0B0F17',
 };
 
-// Se mantiene como función 'async'
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // FIX: Añadido 'await' para resolver la promesa de headers()
-  // Esta línea es la que soluciona el error de la captura.
   const heads = await headers();
   const pathname = heads.get('next-url') || '';
   const showNavbar = !pathname.startsWith('/login');
@@ -24,7 +22,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="es" className="dark">
       <body className="font-sans antialiased bg-app text-app-foreground selection:bg-apple-blue/30">
-        
+        {/* Neutraliza overlays que interceptan clicks (sólo afecta dev) */}
+        <DevOverlayKiller />
+
         {showNavbar && (
           <div className="sticky top-0 z-50 w-full glass border-b border-app-border">
             <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -38,7 +38,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     Fenix Store
                   </span>
                 </div>
-
                 {/* Actions */}
                 <div className="flex items-center space-x-2">
                   <LogoutButton className="!px-3 !py-1.5 !text-xs" />

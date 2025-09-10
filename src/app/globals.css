@@ -151,3 +151,15 @@ body {
 }
 html, body { height: 100%; }
 body { background: var(--app-bg); }
+
+/* Mata overlays de Next Dev Tools en dev */
+#nextjs-devtools,
+#nextjs-portal,
+#nextjs-toast,
+[data-nextjs-overlay],
+[data-nextjs-toast],
+[data-nextjs-devtools] {
+  pointer-events: none !important;
+  z-index: 0 !important;
+  display: none !important;
+}

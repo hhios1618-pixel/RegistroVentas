@@ -1,6 +1,6 @@
 // --- ARCHIVO COMPLETO: src/components/Card.tsx ---
 import React from 'react';
-import { cn } from '@/lib/utils/cn'; // Asumo que tienes esta utilidad para las clases
+import { cn } from '@/lib/utils/cn';
 
 const Card = React.forwardRef<
   HTMLDivElement,
@@ -9,7 +9,8 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      'glass-card apple-fade-in',
+      // ⚠️ Fix: aseguramos que el card reciba clicks
+      'glass-card apple-fade-in pointer-events-auto',
       className
     )}
     {...props}
@@ -35,10 +36,7 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn(
-      'apple-h3 text-app-foreground',
-      className
-    )}
+    className={cn('apple-h3 text-app-foreground', className)}
     {...props}
   />
 ));
@@ -48,11 +46,7 @@ const CardDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <p
-    ref={ref}
-    className={cn('apple-body apple-muted', className)}
-    {...props}
-  />
+  <p ref={ref} className={cn('apple-body apple-muted', className)} {...props} />
 ));
 CardDescription.displayName = 'CardDescription';
 
@@ -77,4 +71,3 @@ const CardFooter = React.forwardRef<
 CardFooter.displayName = 'CardFooter';
 
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };
-
