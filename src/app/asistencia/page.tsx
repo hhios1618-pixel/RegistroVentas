@@ -1,8 +1,6 @@
 'use client';
 import React, { useEffect, useMemo, useState } from 'react';
 import CameraCapture from '@/components/attendance/CameraCapture';
-// import PersonCombo from '@/components/attendance/PersonCombo';  // ELIMINADO
-// import SiteSelect from '@/components/attendance/SiteSelect';    // ELIMINADO
 import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
 import { isMobileUA } from '@/lib/device';
 import { compressDataUrl } from '@/lib/image';
@@ -57,17 +55,14 @@ async function getBestLocation(opts?: {
 // ========================================
 
 type CheckType = 'in' | 'out';
-
 type Me = {
   ok: boolean;
   id: string;
   full_name: string;
   role?: string;
   email?: string;
-  // opcionalmente podría venir local aquí en el futuro
+  local?: string | null; // ⬅️ viene desde /endpoints/me
 };
-
-type Person = { id: string; full_name: string; local?: string | null };
 
 export default function AsistenciaPage() {
   // Bloquea escritorio
@@ -83,8 +78,6 @@ export default function AsistenciaPage() {
   }
 
   const [me, setMe] = useState<Me | null>(null);
-  const [person, setPerson] = useState<Person | null>(null);
-
   const [siteId, setSiteId] = useState<string | null>(null);
   const [siteName, setSiteName] = useState<string | null>(null);
 
@@ -107,29 +100,27 @@ export default function AsistenciaPage() {
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
 
-  // === Cargar identidad y fijarla como persona bloqueada ===
+  // === Cargar identidad (incluye local) ===
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch('/endpoints/me', { cache: 'no-store' });
         const d: Me = await r.json();
-        if (!r.ok || !d?.ok) throw new Error('no_session');
+        if (!r.ok || !d?.ok) throw new Error(d as any);
         setMe(d);
-        setPerson({ id: d.id, full_name: d.full_name, local: null });
       } catch {
-        setToast('No se pudo cargar tu sesión'); // bloquea flujo
+        setToast('No se pudo cargar tu sesión');
       }
     })();
   }, []);
 
-  // === Resolver sucursal asignada (sin permitir edición) ===
+  // === Resolver sucursal asignada ===
   useEffect(() => {
-    if (!person?.id) return;
+    if (!me?.id) return;
     (async () => {
       setResolvingSite(true);
       try {
-        // 1) Intento directo: backend resuelve por sesión
-        //    /endpoints/sites?assigned_to=me  (ajústalo si tu endpoint usa otra query)
+        // 1) Directo: asignada por sesión
         let r = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
         if (r.ok) {
           const j = await r.json();
@@ -141,36 +132,26 @@ export default function AsistenciaPage() {
             return;
           }
         }
-
-        // 2) Fallback: leer local del registro de la persona y resolver por nombre
-        //    /endpoints/people?id=<me.id>
-        r = await fetch(`/endpoints/people?id=${encodeURIComponent(person.id)}`, { cache: 'no-store' });
-        if (r.ok) {
-          const j = await r.json();
-          const row = Array.isArray(j?.results) ? j.results[0] : Array.isArray(j) ? j[0] : j;
-          const localName = row?.local || row?.site_name || null;
-          if (localName) {
-            // Buscar site por nombre
-            const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(localName)}`, { cache: 'no-store' });
-            if (r2.ok) {
-              const j2 = await r2.json();
-              const s2 = Array.isArray(j2?.results) ? j2.results[0] : Array.isArray(j2) ? j2[0] : null;
-              if (s2?.id) {
-                setSiteId(s2.id);
-                setSiteName(s2.name || s2.title || localName);
-                setResolvingSite(false);
-                return;
-              }
+        // 2) Fallback: usar me.local como nombre para buscar en sites
+        if (me.local) {
+          const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
+          if (r2.ok) {
+            const j2 = await r2.json();
+            const s2 = Array.isArray(j2?.results) ? j2.results[0] : Array.isArray(j2) ? j2[0] : null;
+            if (s2?.id) {
+              setSiteId(s2.id);
+              setSiteName(s2.name || s2.title || me.local);
+              setResolvingSite(false);
+              return;
             }
-            // Si no hay match exacto, al menos mostramos el nombre “heredado”
+            // si no match exacto, al menos mostramos el nombre “heredado”
             setSiteId(null);
-            setSiteName(`${localName} (no mapeada)`);
+            setSiteName(`${me.local} (no mapeada)`);
             setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
             setResolvingSite(false);
             return;
           }
         }
-
         setToast('No se pudo resolver tu sucursal asignada');
       } catch {
         setToast('Fallo resolviendo sucursal');
@@ -178,10 +159,10 @@ export default function AsistenciaPage() {
         setResolvingSite(false);
       }
     })();
-  }, [person?.id]);
+  }, [me?.id, me?.local]);
 
-  const canSubmit = Boolean(person?.id && siteId && selfie && loc && qr);
-  const progress = [Boolean(person?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
+  const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
+  const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
   const progressPercent = (progress / 4) * 100;
 
   const handleGetQR = async () => {
@@ -225,7 +206,7 @@ export default function AsistenciaPage() {
     setLoading(true);
     try {
       const payload: CheckInPayload = {
-        person_id: person!.id,
+        person_id: me!.id,
         site_id: siteId!,
         type: checkType,
         lat: loc!.lat,
@@ -278,14 +259,14 @@ export default function AsistenciaPage() {
               <div style={{ width: 80, height: 4, background: 'rgba(148,163,184,0.2)', borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', transition: 'width 0.3s ease' }} />
               </div>
-              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 500 }}>{[Boolean(person?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length}/4</span>
+              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 500 }}>{[Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length}/4</span>
             </div>
           </div>
         </div>
       </div>
 
       <div style={{ maxWidth: 896, margin: '0 auto', padding: '32px 20px' }}>
-        {/* Identidad (bloqueado) */}
+        {/* Identidad (solo lectura) */}
         <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, marginBottom:32, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
           <div style={{ display:'grid', gap:12 }}>
             <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
@@ -297,7 +278,7 @@ export default function AsistenciaPage() {
             <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
               <div style={{ color:'#94a3b8' }}>Sucursal</div>
               <div style={{ background:'rgba(15,23,42,.7)', border:'1px solid rgba(148,163,184,.18)', borderRadius:12, padding:'10px 12px', color: siteId ? '#e5e7eb' : '#f59e0b' }}>
-                {resolvingSite ? 'Resolviendo…' : (siteName ?? 'No asignada')}
+                {resolvingSite ? 'Resolviendo…' : (siteName ?? me?.local ?? 'No asignada')}
               </div>
             </div>
           </div>
@@ -387,7 +368,7 @@ export default function AsistenciaPage() {
 
               {!siteId && !resolvingSite && (
                 <div style={{ marginTop:12, textAlign:'center', color:'#f59e0b', fontSize:13 }}>
-                  ⚠️ No encontramos tu sucursal asignada. Pide a un admin que te asigne una en /sites.
+                  ⚠️ No encontramos tu sucursal en /sites. Pide a un admin que la registre como “{me?.local ?? '—'}”.
                 </div>
               )}
             </div>
