@@ -1,8 +1,8 @@
 'use client';
 import React, { useEffect, useMemo, useState } from 'react';
 import CameraCapture from '@/components/attendance/CameraCapture';
-import PersonCombo from '@/components/attendance/PersonCombo';
-import SiteSelect from '@/components/attendance/SiteSelect';
+// import PersonCombo from '@/components/attendance/PersonCombo';  // ELIMINADO
+// import SiteSelect from '@/components/attendance/SiteSelect';    // ELIMINADO
 import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
 import { isMobileUA } from '@/lib/device';
 import { compressDataUrl } from '@/lib/image';
@@ -57,6 +57,16 @@ async function getBestLocation(opts?: {
 // ========================================
 
 type CheckType = 'in' | 'out';
+
+type Me = {
+  ok: boolean;
+  id: string;
+  full_name: string;
+  role?: string;
+  email?: string;
+  // opcionalmente podría venir local aquí en el futuro
+};
+
 type Person = { id: string; full_name: string; local?: string | null };
 
 export default function AsistenciaPage() {
@@ -72,9 +82,12 @@ export default function AsistenciaPage() {
     );
   }
 
+  const [me, setMe] = useState<Me | null>(null);
   const [person, setPerson] = useState<Person | null>(null);
-  const [personId, setPersonId] = useState<string | null>(null);
+
   const [siteId, setSiteId] = useState<string | null>(null);
+  const [siteName, setSiteName] = useState<string | null>(null);
+
   const [checkType, setCheckType] = useState<CheckType>('in');
   const [selfie, setSelfie] = useState<string | null>(null);
   const [loc, setLoc] = useState<GeoResult | null>(null);
@@ -82,6 +95,7 @@ export default function AsistenciaPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [locLoading, setLocLoading] = useState(false);
+  const [resolvingSite, setResolvingSite] = useState(false);
 
   // Device id
   const deviceId = useMemo<string>(() => {
@@ -92,14 +106,86 @@ export default function AsistenciaPage() {
   }, []);
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
-  useEffect(() => { setPersonId(person?.id ?? null); }, [person?.id]);
 
-  const canSubmit = Boolean(personId && siteId && selfie && loc);
-  const progress = [personId, siteId, selfie, loc].filter(Boolean).length;
+  // === Cargar identidad y fijarla como persona bloqueada ===
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/endpoints/me', { cache: 'no-store' });
+        const d: Me = await r.json();
+        if (!r.ok || !d?.ok) throw new Error('no_session');
+        setMe(d);
+        setPerson({ id: d.id, full_name: d.full_name, local: null });
+      } catch {
+        setToast('No se pudo cargar tu sesión'); // bloquea flujo
+      }
+    })();
+  }, []);
+
+  // === Resolver sucursal asignada (sin permitir edición) ===
+  useEffect(() => {
+    if (!person?.id) return;
+    (async () => {
+      setResolvingSite(true);
+      try {
+        // 1) Intento directo: backend resuelve por sesión
+        //    /endpoints/sites?assigned_to=me  (ajústalo si tu endpoint usa otra query)
+        let r = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
+        if (r.ok) {
+          const j = await r.json();
+          const s = Array.isArray(j?.results) ? j.results[0] : Array.isArray(j) ? j[0] : null;
+          if (s?.id) {
+            setSiteId(s.id);
+            setSiteName(s.name || s.title || s.local || 'Sucursal asignada');
+            setResolvingSite(false);
+            return;
+          }
+        }
+
+        // 2) Fallback: leer local del registro de la persona y resolver por nombre
+        //    /endpoints/people?id=<me.id>
+        r = await fetch(`/endpoints/people?id=${encodeURIComponent(person.id)}`, { cache: 'no-store' });
+        if (r.ok) {
+          const j = await r.json();
+          const row = Array.isArray(j?.results) ? j.results[0] : Array.isArray(j) ? j[0] : j;
+          const localName = row?.local || row?.site_name || null;
+          if (localName) {
+            // Buscar site por nombre
+            const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(localName)}`, { cache: 'no-store' });
+            if (r2.ok) {
+              const j2 = await r2.json();
+              const s2 = Array.isArray(j2?.results) ? j2.results[0] : Array.isArray(j2) ? j2[0] : null;
+              if (s2?.id) {
+                setSiteId(s2.id);
+                setSiteName(s2.name || s2.title || localName);
+                setResolvingSite(false);
+                return;
+              }
+            }
+            // Si no hay match exacto, al menos mostramos el nombre “heredado”
+            setSiteId(null);
+            setSiteName(`${localName} (no mapeada)`);
+            setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
+            setResolvingSite(false);
+            return;
+          }
+        }
+
+        setToast('No se pudo resolver tu sucursal asignada');
+      } catch {
+        setToast('Fallo resolviendo sucursal');
+      } finally {
+        setResolvingSite(false);
+      }
+    })();
+  }, [person?.id]);
+
+  const canSubmit = Boolean(person?.id && siteId && selfie && loc && qr);
+  const progress = [Boolean(person?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
   const progressPercent = (progress / 4) * 100;
 
   const handleGetQR = async () => {
-    if (!siteId) { setToast('⚠️ Selecciona una sucursal primero'); return; }
+    if (!siteId) { setToast('⚠️ No hay sucursal asignada'); return; }
     const r = await getQR(siteId!);
     setQr(r);
     setToast(`✅ Código QR generado`);
@@ -135,13 +221,19 @@ export default function AsistenciaPage() {
   };
 
   const submit = async () => {
-    if (!canSubmit || !qr) { setToast('❌ Completa todos los campos y obtén el código QR'); return; }
+    if (!canSubmit) { setToast('❌ Completa todos los pasos y genera el QR'); return; }
     setLoading(true);
     try {
       const payload: CheckInPayload = {
-        person_id: personId!, site_id: siteId!, type: checkType,
-        lat: loc!.lat, lng: loc!.lng, accuracy: loc!.accuracy,
-        device_id: deviceId, selfie_base64: selfie!, qr_code: qr.code,
+        person_id: person!.id,
+        site_id: siteId!,
+        type: checkType,
+        lat: loc!.lat,
+        lng: loc!.lng,
+        accuracy: loc!.accuracy,
+        device_id: deviceId,
+        selfie_base64: selfie!,
+        qr_code: qr!.code,
       };
       const r = await checkIn(payload);
       if (r.ok) {
@@ -186,51 +278,33 @@ export default function AsistenciaPage() {
               <div style={{ width: 80, height: 4, background: 'rgba(148,163,184,0.2)', borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', transition: 'width 0.3s ease' }} />
               </div>
-              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 500 }}>{progress}/4</span>
+              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 500 }}>{[Boolean(person?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length}/4</span>
             </div>
           </div>
         </div>
       </div>
 
       <div style={{ maxWidth: 896, margin: '0 auto', padding: '32px 20px' }}>
-        {/* Tipo */}
+        {/* Identidad (bloqueado) */}
         <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, marginBottom:32, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
-          <div style={{ textAlign:'center', marginBottom:20 }}>
-            <h2 style={{ color:'#f1f5f9', fontSize:18, fontWeight:600, margin:0 }}>Tipo de Marcaje</h2>
-            <p style={{ color:'#64748b', fontSize:14, margin:'4px 0 0 0' }}>Selecciona si es entrada o salida</p>
-          </div>
-          <div style={{ display:'flex', background:'rgba(15,23,42,.6)', borderRadius:16, padding:6, maxWidth:280, margin:'0 auto' }}>
-            <button onClick={() => setCheckType('in')}
-              style={{ flex:1, padding:'14px 20px', borderRadius:12, border:'none',
-                background: checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'transparent',
-                color: checkType==='in' ? 'white' : '#94a3b8', fontWeight: checkType==='in' ? 700 : 500, fontSize:15, cursor:'pointer',
-                transition:'all .3s', boxShadow: checkType==='in' ? '0 4px 12px rgba(16,185,129,.3)' : 'none' }}>
-              🟢 Entrada
-            </button>
-            <button onClick={() => setCheckType('out')}
-              style={{ flex:1, padding:'14px 20px', borderRadius:12, border:'none',
-                background: checkType==='out' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'transparent',
-                color: checkType==='out' ? 'white' : '#94a3b8', fontWeight: checkType==='out' ? 700 : 500, fontSize:15, cursor:'pointer',
-                transition:'all .3s', boxShadow: checkType==='out' ? '0 4px 12px rgba(239,68,68,.3)' : 'none' }}>
-              🔴 Salida
-            </button>
+          <div style={{ display:'grid', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
+              <div style={{ color:'#94a3b8' }}>Empleado</div>
+              <div style={{ background:'rgba(15,23,42,.7)', border:'1px solid rgba(148,163,184,.18)', borderRadius:12, padding:'10px 12px', color:'#e5e7eb' }}>
+                {me?.full_name ?? '—'}
+              </div>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
+              <div style={{ color:'#94a3b8' }}>Sucursal</div>
+              <div style={{ background:'rgba(15,23,42,.7)', border:'1px solid rgba(148,163,184,.18)', borderRadius:12, padding:'10px 12px', color: siteId ? '#e5e7eb' : '#f59e0b' }}>
+                {resolvingSite ? 'Resolviendo…' : (siteName ?? 'No asignada')}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Grid principal */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:24, marginBottom:32 }}>
-          {/* Datos */}
-          <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
-              <div style={{ width:32, height:32, borderRadius:8, background:'linear-gradient(135deg,#3b82f6,#1d4ed8)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, color:'white' }}>👤</div>
-              <h3 style={{ color:'#f1f5f9', fontSize:16, fontWeight:600, margin:0 }}>Datos del Empleado</h3>
-            </div>
-            <div style={{ display:'grid', gap:16 }}>
-              <PersonCombo value={person} onSelect={(p) => setPerson(p)} />
-              <SiteSelect value={siteId} onChange={setSiteId} preselectName={person?.local ?? null} />
-            </div>
-          </div>
-
           {/* Biométrico */}
           <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
@@ -243,7 +317,8 @@ export default function AsistenciaPage() {
                 setSelfie(small);
               }} />
               <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                <button type="button" onClick={handleGetLocation} disabled={locLoading}
+                <button type="button" onClick={async ()=>{ await handleGetLocation(); }}
+                  disabled={locLoading}
                   style={{ padding:'12px 16px', borderRadius:12, border:'1px solid rgba(148,163,184,.2)', background: locLoading ? 'rgba(71,85,105,.5)' : 'rgba(15,23,42,.8)', color:'#e5e7eb', fontWeight:600, cursor: locLoading ? 'not-allowed' : 'pointer' }}>
                   {locLoading ? 'Obteniendo ubicación…' : '📍 Obtener ubicación (mejorada)'}
                 </button>
@@ -257,32 +332,65 @@ export default function AsistenciaPage() {
               {loc && <div style={{ color:'#94a3b8', fontSize:13 }}>Precisión: <b>±{Math.round(loc.accuracy)} m</b> — lat {loc.lat.toFixed(6)}, lng {loc.lng.toFixed(6)}</div>}
             </div>
           </div>
-        </div>
 
-        {/* Acciones */}
-        <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
-          <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent:'center' }}>
-            <button type="button" onClick={handleGetQR} disabled={!siteId}
-              style={{ padding:'16px 24px', borderRadius:16, border:'none', background: !siteId ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#0ea5e9,#0284c7)', color:'white', fontWeight:600, fontSize:15, cursor: !siteId ? 'not-allowed' : 'pointer', transition:'all .3s', boxShadow: !siteId ? 'none' : '0 8px 25px rgba(14,165,233,.3)', minWidth:160, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-              🔲 Obtener QR
-            </button>
-            <button type="button" onClick={submit} disabled={!canSubmit || !qr || loading}
-              style={{ padding:'16px 32px', borderRadius:16, border:'none',
-                background: (!canSubmit || !qr || loading) ? 'rgba(71,85,105,.5)' : (checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'),
-                color:'white', fontWeight:700, fontSize:16, cursor: (!canSubmit || !qr || loading) ? 'not-allowed' : 'pointer', transition:'all .3s',
-                boxShadow: (!canSubmit || !qr || loading) ? 'none' : (checkType==='in' ? '0 8px 25px rgba(16,185,129,.4)' : '0 8px 25px rgba(239,68,68,.4)'),
-                minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transform: (!canSubmit || !qr || loading) ? 'none' : 'translateY(-2px)' }}>
-              {loading ? (<><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,.3)', borderTop:'2px solid white', borderRadius:'50%', animation:'spin 1s linear infinite' }} /> Procesando...</>) : (`${checkType==='in' ? '✅' : '🚪'} Marcar ${checkType==='in' ? 'Entrada' : 'Salida'}`)}
-            </button>
-          </div>
+          {/* Tipo + QR */}
+          <div style={{ display:'grid', gap:24 }}>
+            <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
+              <div style={{ textAlign:'center', marginBottom:20 }}>
+                <h2 style={{ color:'#f1f5f9', fontSize:18, fontWeight:600, margin:0 }}>Tipo de Marcaje</h2>
+                <p style={{ color:'#64748b', fontSize:14, margin:'4px 0 0 0' }}>Entrada o salida</p>
+              </div>
+              <div style={{ display:'flex', background:'rgba(15,23,42,.6)', borderRadius:16, padding:6, maxWidth:280, margin:'0 auto' }}>
+                <button onClick={() => setCheckType('in')}
+                  style={{ flex:1, padding:'14px 20px', borderRadius:12, border:'none',
+                    background: checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'transparent',
+                    color: checkType==='in' ? 'white' : '#94a3b8', fontWeight: checkType==='in' ? 700 : 500, fontSize:15, cursor:'pointer',
+                    transition:'all .3s', boxShadow: checkType==='in' ? '0 4px 12px rgba(16,185,129,.3)' : 'none' }}>
+                  🟢 Entrada
+                </button>
+                <button onClick={() => setCheckType('out')}
+                  style={{ flex:1, padding:'14px 20px', borderRadius:12, border:'none',
+                    background: checkType==='out' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'transparent',
+                    color: checkType==='out' ? 'white' : '#94a3b8', fontWeight: checkType==='out' ? 700 : 500, fontSize:15, cursor:'pointer',
+                    transition:'all .3s', boxShadow: checkType==='out' ? '0 4px 12px rgba(239,68,68,.3)' : 'none' }}>
+                  🔴 Salida
+                </button>
+              </div>
+            </div>
 
-          {/* Status */}
-          <div style={{ display:'flex', gap:12, marginTop:20, fontSize:13, justifyContent:'center', flexWrap:'wrap' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:6, color: personId ? '#10b981' : '#64748b' }}>{personId ? '✅' : '⏳'} Empleado</div>
-            <div style={{ display:'flex', alignItems:'center', gap:6, color: siteId ? '#10b981' : '#64748b' }}>{siteId ? '✅' : '⏳'} Sucursal</div>
-            <div style={{ display:'flex', alignItems:'center', gap:6, color: selfie ? '#10b981' : '#64748b' }}>{selfie ? '✅' : '⏳'} Foto</div>
-            <div style={{ display:'flex', alignItems:'center', gap:6, color: loc ? '#10b981' : '#64748b' }}>{loc ? `✅ Ubicación (±${Math.round(loc.accuracy)} m)` : '⏳ Ubicación'}</div>
-            <div style={{ display:'flex', alignItems:'center', gap:6, color: qr ? '#10b981' : '#64748b' }}>{qr ? '✅' : '⏳'} QR</div>
+            <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
+              <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent:'center' }}>
+                <button type="button" onClick={handleGetQR}
+                  disabled={!siteId || resolvingSite}
+                  style={{ padding:'16px 24px', borderRadius:16, border:'none', background: (!siteId || resolvingSite) ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#0ea5e9,#0284c7)', color:'white', fontWeight:600, fontSize:15, cursor: (!siteId || resolvingSite) ? 'not-allowed' : 'pointer', transition:'all .3s', boxShadow: (!siteId || resolvingSite) ? 'none' : '0 8px 25px rgba(14,165,233,.3)', minWidth:160, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  🔲 Obtener QR
+                </button>
+                <button type="button" onClick={submit}
+                  disabled={(!me?.id) || (!siteId) || !selfie || !loc || !qr || loading}
+                  style={{ padding:'16px 32px', borderRadius:16, border:'none',
+                    background: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'rgba(71,85,105,.5)' : (checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'),
+                    color:'white', fontWeight:700, fontSize:16, cursor: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'not-allowed' : 'pointer', transition:'all .3s',
+                    boxShadow: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'none' : (checkType==='in' ? '0 8px 25px rgba(16,185,129,.4)' : '0 8px 25px rgba(239,68,68,.4)'),
+                    minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transform: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'none' : 'translateY(-2px)' }}>
+                  {loading ? (<><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,.3)', borderTop:'2px solid white', borderRadius:'50%', animation:'spin 1s linear infinite' }} /> Procesando...</>) : (`${checkType==='in' ? '✅' : '🚪'} Marcar ${checkType==='in' ? 'Entrada' : 'Salida'}`)}
+                </button>
+              </div>
+
+              {/* Status */}
+              <div style={{ display:'flex', gap:12, marginTop:20, fontSize:13, justifyContent:'center', flexWrap:'wrap' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, color: me?.id ? '#10b981' : '#64748b' }}>{me?.id ? '✅' : '⏳'} Empleado</div>
+                <div style={{ display:'flex', alignItems:'center', gap:6, color: siteId ? '#10b981' : '#64748b' }}>{siteId ? `✅ ${siteName}` : '⏳ Sucursal'}</div>
+                <div style={{ display:'flex', alignItems:'center', gap:6, color: selfie ? '#10b981' : '#64748b' }}>{selfie ? '✅' : '⏳'} Foto</div>
+                <div style={{ display:'flex', alignItems:'center', gap:6, color: loc ? '#10b981' : '#64748b' }}>{loc ? `✅ Ubicación (±${Math.round(loc.accuracy)} m)` : '⏳ Ubicación'}</div>
+                <div style={{ display:'flex', alignItems:'center', gap:6, color: qr ? '#10b981' : '#64748b' }}>{qr ? '✅' : '⏳'} QR</div>
+              </div>
+
+              {!siteId && !resolvingSite && (
+                <div style={{ marginTop:12, textAlign:'center', color:'#f59e0b', fontSize:13 }}>
+                  ⚠️ No encontramos tu sucursal asignada. Pide a un admin que te asigne una en /sites.
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
