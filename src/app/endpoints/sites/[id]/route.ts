@@ -6,16 +6,13 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 /**
- * PATCH /api/sites/:id
- * Actualiza: name, lat, lng, radius_m, is_active
- * Nota: no tipeamos el 2º argumento para evitar el error del builder de Next 15.
+ * PATCH /endpoints/sites/:id
+ * Body: { name?, lat?, lng?, radius_m?, is_active? }
  */
 export async function PATCH(req: Request, ctx: any) {
   try {
     const id: string | undefined = ctx?.params?.id;
-    if (!id) {
-      return NextResponse.json({ error: 'missing_id' }, { status: 400 });
-    }
+    if (!id) return NextResponse.json({ error: 'missing_id' }, { status: 400 });
 
     let body: any = null;
     try {
@@ -43,13 +40,13 @@ export async function PATCH(req: Request, ctx: any) {
       .single();
 
     if (error) {
-      console.error('[API /sites/:id PATCH] error:', error);
+      console.error('[PATCH /endpoints/sites/:id] error:', error);
       return NextResponse.json({ error: 'update_failed' }, { status: 500 });
     }
 
     return NextResponse.json({ data }, { status: 200 });
   } catch (e) {
-    console.error('[API /sites/:id PATCH] unexpected:', e);
+    console.error('[PATCH /endpoints/sites/:id] unexpected:', e);
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });
   }
 }

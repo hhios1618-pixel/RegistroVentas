@@ -1,40 +1,49 @@
-// src/app/api/debug/distance/route.ts
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-function haversineMeters(lat1:number, lon1:number, lat2:number, lon2:number){
-  const toRad = (x:number)=>(x*Math.PI)/180;
-  const R = 6371000;
-  const dLat = toRad(lat2-lat1);
-  const dLon = toRad(lon2-lon1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-  return 2*R*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
+/**
+ * POST /endpoints/debug/distance
+ * Body: { site_id: string, lat: number, lng: number }
+ * Respuesta: { site_name, site_radius_m, distance_m }
+ */
 export async function POST(req: Request) {
   try {
     const { site_id, lat, lng } = await req.json();
-    if (!site_id || typeof lat!=='number' || typeof lng!=='number') {
-      return NextResponse.json({ error: 'bad_input' }, { status: 400 });
+    if (!site_id || typeof lat !== 'number' || typeof lng !== 'number') {
+      return NextResponse.json({ error: 'bad_request' }, { status: 400 });
     }
 
     const { data: site, error } = await supabaseAdmin
       .from('sites')
       .select('id, name, lat, lng, radius_m')
       .eq('id', site_id)
-      .single();
+      .maybeSingle();
 
-    if (error || !site || site.lat == null || site.lng == null) {
-      return NextResponse.json({ error: 'site_not_found_or_unset' }, { status: 404 });
+    if (error || !site) {
+      return NextResponse.json({ error: 'site_not_found' }, { status: 404 });
     }
 
-    const d = haversineMeters(lat, lng, site.lat, site.lng);
-    return NextResponse.json({
-      distance_m: d,
-      site_radius_m: site.radius_m ?? 100,
-      site_name: site.name
-    });
+    // Haversine
+    const R = 6371000; // m
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat - site.lat);
+    const dLng = toRad(lng - site.lng);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(site.lat)) * Math.cos(toRad(lat)) * Math.sin(dLng / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance_m = R * c;
+
+    return NextResponse.json(
+      { site_name: site.name, site_radius_m: site.radius_m, distance_m },
+      { status: 200 }
+    );
   } catch (e) {
-    return NextResponse.json({ error: 'internal', details: String(e) }, { status: 500 });
+    console.error('[POST /endpoints/debug/distance] unexpected:', e);
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
   }
 }

@@ -5,7 +5,7 @@ import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
 import { isMobileUA } from '@/lib/device';
 import { compressDataUrl } from '@/lib/image';
 
-// ======== GPS mejorado (muestreo) ========
+/* =================== GPS mejorado (tu lógica) =================== */
 type GeoFix = { lat: number; lng: number; accuracy: number; ts: number };
 type GeoResult = { lat: number; lng: number; accuracy: number };
 
@@ -52,20 +52,58 @@ async function getBestLocation(opts?: {
   if (hardOk) return hardOk;
   return best[0];
 }
-// ========================================
+/* =============================================================== */
 
 type CheckType = 'in' | 'out';
 type Me = {
   ok: boolean;
-  id: string;
+  id: string;              // ← /endpoints/me debe devolverlo
   full_name: string;
   role?: string;
   email?: string;
-  local?: string | null; // ⬅️ viene desde /endpoints/me
+  local?: string | null;   // ← /endpoints/me debe devolverlo
 };
 
+type Site = { id: string; name: string; lat?: number; lng?: number; radius_m?: number; is_active?: boolean };
+
+/* Helpers de matching robusto para nombres de sede */
+const normalize = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+const CITY_ALIASES: Record<string, string[]> = {
+  'santa cruz': ['santa cruz', 'santa cruz de la sierra', 'scz', 'santa-cruz'],
+  'la paz': ['la paz', 'lapaz', 'lpz'],
+  'cochabamba': ['cochabamba', 'cocha', 'cbba'],
+  'sucre': ['sucre'],
+  'el alto': ['el alto', 'elalto'],
+};
+
+/** Intenta emparejar me.local con /api/sites por nombre, con tolerancia. */
+function resolveSiteIdByName(sites: Site[], localName: string | null | undefined): { id: string | null; name: string | null } {
+  if (!localName) return { id: null, name: null };
+  const needle = normalize(localName);
+
+  // 1) Alias directos
+  for (const [canonical, aliases] of Object.entries(CITY_ALIASES)) {
+    if (aliases.some(a => needle === a || needle.includes(a))) {
+      const m = sites.find(s => normalize(s.name) === canonical || normalize(s.name).includes(canonical));
+      if (m) return { id: m.id, name: m.name };
+    }
+  }
+
+  // 2) Exacto normalizado
+  const exact = sites.find(s => normalize(s.name) === needle);
+  if (exact) return { id: exact.id, name: exact.name };
+
+  // 3) Coincidencia parcial
+  const partial = sites.find(s => normalize(s.name).includes(needle) || needle.includes(normalize(s.name)));
+  if (partial) return { id: partial.id, name: partial.name };
+
+  return { id: null, name: null };
+}
+
 export default function AsistenciaPage() {
-  // Bloquea escritorio
+  /* Bloqueo a escritorio */
   if (typeof window !== 'undefined' && !isMobileUA()) {
     return (
       <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
@@ -78,8 +116,10 @@ export default function AsistenciaPage() {
   }
 
   const [me, setMe] = useState<Me | null>(null);
+
   const [siteId, setSiteId] = useState<string | null>(null);
   const [siteName, setSiteName] = useState<string | null>(null);
+  const [resolvingSite, setResolvingSite] = useState(false);
 
   const [checkType, setCheckType] = useState<CheckType>('in');
   const [selfie, setSelfie] = useState<string | null>(null);
@@ -88,19 +128,21 @@ export default function AsistenciaPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [locLoading, setLocLoading] = useState(false);
-  const [resolvingSite, setResolvingSite] = useState(false);
 
-  // Device id
+  /* Device id */
   const deviceId = useMemo<string>(() => {
     const k = 'fx_device_id';
     let v = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
-    if (!v) { v = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2); if (typeof window !== 'undefined') localStorage.setItem(k, v); }
+    if (!v) {
+      v = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+      if (typeof window !== 'undefined') localStorage.setItem(k, v);
+    }
     return v || 'web-client';
   }, []);
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
 
-  // === Cargar identidad (incluye local) ===
+  /* === Cargar identidad (incluye local + id) === */
   useEffect(() => {
     (async () => {
       try {
@@ -114,64 +156,37 @@ export default function AsistenciaPage() {
     })();
   }, []);
 
-  // === Resolver sucursal asignada ===
+  /* === Resolver sucursal con /api/sites === */
   useEffect(() => {
-    if (!me?.id) return;
+    if (!me?.local) return;
     (async () => {
       setResolvingSite(true);
       try {
-        // 1) Directo: asignada por sesión
-        let r = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
-        if (r.ok) {
-          const j = await r.json();
-          const s = Array.isArray(j?.results) ? j.results[0] : Array.isArray(j) ? j[0] : null;
-          if (s?.id) {
-            setSiteId(s.id);
-            setSiteName(s.name || s.title || s.local || 'Sucursal asignada');
-            setResolvingSite(false);
-            return;
-          }
+        // Trae todas las sedes activas
+        const res = await fetch('/api/sites', { cache: 'no-store', headers: { Accept: 'application/json' } });
+        const js = await res.json();
+        if (!res.ok) throw new Error(js?.error || 'sites_fetch_failed');
+
+        const sites: Site[] = js?.data ?? [];
+        const { id, name } = resolveSiteIdByName(sites, me.local);
+
+        if (id && name) {
+          setSiteId(id);
+          setSiteName(name);
+        } else {
+          setSiteId(null);
+          setSiteName(`${me.local} (no mapeada)`);
+          setToast('Tu sucursal no está mapeada en /sites. Pide a un admin que la cree con ese nombre.');
         }
-        // 2) Fallback: usar me.local como nombre para buscar en sites
-        if (me.local) {
-          const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
-          if (r2.ok) {
-            const j2 = await r2.json();
-            const s2 = Array.isArray(j2?.results) ? j2.results[0] : Array.isArray(j2) ? j2[0] : null;
-            if (s2?.id) {
-              setSiteId(s2.id);
-              setSiteName(s2.name || s2.title || me.local);
-              setResolvingSite(false);
-              return;
-            }
-            // si no match exacto, al menos mostramos el nombre “heredado”
-            setSiteId(null);
-            setSiteName(`${me.local} (no mapeada)`);
-            setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
-            setResolvingSite(false);
-            return;
-          }
-        }
-        setToast('No se pudo resolver tu sucursal asignada');
       } catch {
         setToast('Fallo resolviendo sucursal');
       } finally {
         setResolvingSite(false);
       }
     })();
-  }, [me?.id, me?.local]);
+  }, [me?.local]);
 
-  const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
-  const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
-  const progressPercent = (progress / 4) * 100;
-
-  const handleGetQR = async () => {
-    if (!siteId) { setToast('⚠️ No hay sucursal asignada'); return; }
-    const r = await getQR(siteId!);
-    setQr(r);
-    setToast(`✅ Código QR generado`);
-  };
-
+  /* === Ubicación === */
   const handleGetLocation = async () => {
     setLocLoading(true);
     try {
@@ -185,10 +200,11 @@ export default function AsistenciaPage() {
     }
   };
 
+  /* === Debug distancia (opcional, requiere /api/debug/distance) === */
   const handleMeasureDistance = async () => {
     if (!loc || !siteId) return;
     try {
-      const r = await fetch('/api/debug/distance', {
+       const r = await fetch('/endpoints/debug/distance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ site_id: siteId, lat: loc.lat, lng: loc.lng })
@@ -200,6 +216,18 @@ export default function AsistenciaPage() {
       setToast(e?.message || 'debug_failed');
     }
   };
+
+  /* === QR & Submit === */
+  const handleGetQR = async () => {
+    if (!siteId) { setToast('⚠️ No hay sucursal asignada'); return; }
+    const r = await getQR(siteId);
+    setQr(r);
+    setToast(`✅ Código QR generado`);
+  };
+
+  const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
+  const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
+  const progressPercent = (progress / 4) * 100;
 
   const submit = async () => {
     if (!canSubmit) { setToast('❌ Completa todos los pasos y genera el QR'); return; }
@@ -228,6 +256,7 @@ export default function AsistenciaPage() {
     }
   };
 
+  /* =================== UI =================== */
   return (
     <div style={{
       minHeight: '100dvh',
@@ -277,7 +306,8 @@ export default function AsistenciaPage() {
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
               <div style={{ color:'#94a3b8' }}>Sucursal</div>
-              <div style={{ background:'rgba(15,23,42,.7)', border:'1px solid rgba(148,163,184,.18)', borderRadius:12, padding:'10px 12px', color: siteId ? '#e5e7eb' : '#f59e0b' }}>
+              <div style={{ background:'rgba(15,23,42,.7)', border:'1px solid rgba(148,163,184,.18)', borderRadius:12, padding:'10px 12px',
+                color: siteId ? '#e5e7eb' : '#f59e0b' }}>
                 {resolvingSite ? 'Resolviendo…' : (siteName ?? me?.local ?? 'No asignada')}
               </div>
             </div>
@@ -314,7 +344,7 @@ export default function AsistenciaPage() {
             </div>
           </div>
 
-          {/* Tipo + QR */}
+          {/* Tipo + QR + Acciones */}
           <div style={{ display:'grid', gap:24 }}>
             <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
               <div style={{ textAlign:'center', marginBottom:20 }}>
