@@ -1,27 +1,41 @@
+// En tu archivo: src/app/(auth)/login/LoginClient.tsx
+
 'use client';
 
 import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+// FIX 1: Importar el tipo 'Variants' desde framer-motion
+import { motion, Variants } from 'framer-motion';
 
-const BG = `
-radial-gradient(1200px 600px at 15% 5%, rgba(0,255,163,.12), transparent 55%),
-radial-gradient(900px 500px at 85% 20%, rgba(0,185,255,.10), transparent 55%),
-linear-gradient(180deg,#0a0f1f 0%, #0a0c16 100%)
-`;
+// --- Iconos para UI Mejorada ---
+const UserIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+  </svg>
+);
 
-// HOME por rol (para redirección post-login)
+const LockIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+  </svg>
+);
+
+export const Spinner = () => (
+    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+        <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    </svg>
+);
+
+// --- Lógica de redirección ---
 const HOME: Record<string, string> = {
-  GERENCIA: '/',
-  ADMIN: '/',
-  COORDINADOR: '/',
-  ASESOR: '/',
-  PROMOTOR: '/promotores/registro',
-  VENDEDOR: '/captura',
-  LOGISTICA: '/delivery',
-  USER: '/',
+  GERENCIA: '/', ADMIN: '/', COORDINADOR: '/', ASESOR: '/',
+  PROMOTOR: '/promotores/registro', VENDEDOR: '/captura',
+  LOGISTICA: '/delivery', USER: '/',
 };
 const roleHome = (r?: string) => HOME[String(r || 'USER').toUpperCase()] || HOME.USER;
 
+// --- Componente Cliente del Login ---
 export function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,7 +60,6 @@ export function LoginClient() {
 
     try {
       setLoading(true);
-
       const r = await fetch('/endpoints/auth/basic-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,7 +72,7 @@ export function LoginClient() {
       const dest = searchParams.get('redirectTo') || roleHome(role);
 
       ui.ok('Acceso verificado. Redirigiendo…');
-      setTimeout(() => router.replace(dest), 250);
+      setTimeout(() => router.replace(dest), 300);
     } catch {
       ui.err('Usuario o contraseña incorrectos.');
     } finally {
@@ -67,80 +80,90 @@ export function LoginClient() {
     }
   }
 
+  // FIX 2: Aplicar el tipo 'Variants' a la constante
+  const containerVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+  };
+
   return (
-    <div className="min-h-dvh flex items-center justify-center p-6" style={{ background: BG }}>
-      <div
-        className="w-full max-w-md rounded-2xl p-6 border shadow-2xl"
-        style={{
-          background: 'linear-gradient(180deg, rgba(18,24,46,.55), rgba(12,16,32,.55))',
-          backdropFilter: 'blur(18px)',
-          WebkitBackdropFilter: 'blur(18px)',
-          borderColor: 'rgba(255,255,255,.08)',
-        }}
+    <div className="min-h-dvh flex items-center justify-center p-6 relative overflow-hidden">
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute top-0 left-0 w-full h-full object-cover z-0"
+        src="/1.mp4"
+      />
+      <div className="absolute top-0 left-0 w-full h-full bg-black/60 z-10" />
+
+      <motion.div 
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="relative z-20 w-full max-w-md rounded-2xl p-[1px] shadow-2xl bg-gradient-to-br from-cyan-400/40 via-transparent to-green-400/40"
       >
-        {/* Header */}
-        <div className="mb-6 flex items-center gap-3">
-          <div
-            className="h-10 w-10 rounded-xl grid place-items-center text-white text-lg font-bold"
-            style={{
-              background: 'conic-gradient(from 160deg,#00E0FF,#00FFA3,#00E0FF)',
-              boxShadow: '0 0 28px rgba(0,255,195,.35)',
-            }}
-            aria-label="Fenix"
-          >
-            F
+        <div
+          className="w-full h-full rounded-2xl p-8"
+          style={{
+            background: 'rgba(12, 16, 32, 0.7)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+          }}
+        >
+          <div className="mb-8 flex items-center gap-4">
+            <div
+              className="h-12 w-12 rounded-xl grid place-items-center text-white text-xl font-bold"
+              style={{
+                background: 'conic-gradient(from 160deg,#00E0FF,#00FFA3,#00E0FF)',
+                boxShadow: '0 0 32px rgba(0,255,195,.40)',
+              }}
+            >
+              F
+            </div>
+            <div>
+              <h1 className="text-white text-xl font-semibold tracking-wide">Acceso a la Plataforma</h1>
+              <p className="text-sm text-white/60">Sistema de Gestión Fenix</p>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <h1 className="text-white text-lg font-semibold tracking-wide">Fenix — Acceso</h1>
-            <p className="text-sm text-white/60">Control de asistencia, pedidos y paneles</p>
-          </div>
-        </div>
 
-        {/* Banner */}
-        <div className="mb-4 rounded-xl px-3 py-2 text-sm bg-white/5 text-white/80 border border-white/15">
-          Acceso exclusivo para personal habilitado.
-        </div>
+          {notice && (
+            <div
+              className={`mb-4 rounded-lg px-4 py-2.5 text-sm font-medium ${
+                notice.type === 'error'
+                  ? 'bg-red-500/15 text-red-300 border border-red-500/30'
+                  : notice.type === 'success'
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-white/10 text-white/80 border border-white/15'
+              }`}
+            >
+              {notice.msg}
+            </div>
+          )}
 
-        {/* Notice */}
-        {notice && (
-          <div
-            className={`mb-4 rounded-xl px-3 py-2 text-sm ${
-              notice.type === 'error'
-                ? 'bg-red-500/15 text-red-300 border border-red-500/30'
-                : notice.type === 'success'
-                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                : 'bg-white/10 text-white/80 border border-white/15'
-            }`}
-          >
-            {notice.msg}
-          </div>
-        )}
+          <form onSubmit={handlePassword} className="space-y-5">
+            <div className="relative">
+              <UserIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
+              <input
+                type="text"
+                autoComplete="username"
+                placeholder="Usuario"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full h-12 rounded-lg bg-white/5 border border-white/15 px-10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 transition-all"
+              />
+            </div>
 
-        {/* Form */}
-        <form onSubmit={handlePassword} className="space-y-4">
-          <label className="block">
-            <span className="text-sm text-white/80">Usuario</span>
-            <input
-              type="text"
-              inputMode="text"
-              autoComplete="username"
-              placeholder="ej: leonardo.torres"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 w-full h-11 rounded-xl bg-white/5 border border-white/15 px-3 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-sm text-white/80">Contraseña</span>
-            <div className="mt-1 relative">
+            <div className="relative">
+              <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
               <input
                 type={showPwd ? 'text' : 'password'}
                 autoComplete="current-password"
-                placeholder="••••••••"
+                placeholder="Contraseña"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-11 rounded-xl bg-white/5 border border-white/15 px-3 pr-11 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/50"
+                className="w-full h-12 rounded-lg bg-white/5 border border-white/15 px-10 pr-11 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 transition-all"
               />
               <button
                 type="button"
@@ -151,21 +174,21 @@ export function LoginClient() {
                 {showPwd ? '🙈' : '👁️'}
               </button>
             </div>
-          </label>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-11 rounded-xl font-semibold border border-white/10 text-black bg-white hover:bg-white/90 disabled:opacity-60 disabled:cursor-not-allowed transition"
-          >
-            {loading ? 'Verificando…' : 'Ingresar'}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 flex items-center justify-center rounded-lg font-semibold text-white bg-gradient-to-r from-cyan-500 to-green-500 hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed transition-opacity shadow-lg shadow-cyan-500/20"
+            >
+              {loading ? <Spinner /> : 'Ingresar'}
+            </button>
+          </form>
 
-        <div className="mt-6 text-center text-xs text-white/50">
-          Al continuar aceptas las políticas internas de seguridad y uso de datos de Fenix.
+          <div className="mt-8 text-center text-xs text-white/50">
+            © {new Date().getFullYear()} Fenix Corp. Todos los derechos reservados.
+          </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
