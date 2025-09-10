@@ -309,7 +309,7 @@ export default function SalesReportPageRedesigned() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch('/api/sales-report');
+        const response = await fetch('/endpoints/sales-report');
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'La respuesta de la red no fue exitosa');

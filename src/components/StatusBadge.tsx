@@ -10,17 +10,17 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-// Mapeo mejorado: ahora incluye la etiqueta en español que necesitamos.
+// Mapeo mejorado con estilo Apple: ahora incluye la etiqueta en español que necesitamos.
 const STATUS_INFO: Record<string, { label: string; style: string }> = {
-  pending:          { label: 'Pendiente',         style: 'bg-yellow-500/20 text-yellow-400' },
-  assigned:         { label: 'Asignado',          style: 'bg-blue-500/20 text-blue-400' },
-  out_for_delivery: { label: 'En Ruta',           style: 'bg-indigo-500/20 text-indigo-400' },
-  delivered:        { label: 'Entregado',         style: 'bg-green-500/20 text-green-400' },
-  confirmed:        { label: 'Confirmado',        style: 'bg-teal-500/20 text-teal-400' },
-  cancelled:        { label: 'Cancelado',         style: 'bg-red-500/20 text-red-400' }, // Corregido de "canceled" a "cancelled" si ese es tu tipo
-  returned:         { label: 'Devuelto',          style: 'bg-orange-500/20 text-orange-400' },
-  failed:           { label: 'Fallido',           style: 'bg-rose-500/20 text-rose-400' },
-  default:          { label: 'Desconocido',       style: 'bg-gray-500/20 text-gray-400' },
+  pending:          { label: 'Pendiente',         style: 'status-warning' },
+  assigned:         { label: 'Asignado',          style: 'bg-apple-blue/10 text-apple-blue border border-apple-blue/20 rounded-apple-sm px-3 py-1 text-xs font-medium' },
+  out_for_delivery: { label: 'En Ruta',           style: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-apple-sm px-3 py-1 text-xs font-medium' },
+  delivered:        { label: 'Entregado',         style: 'status-success' },
+  confirmed:        { label: 'Confirmado',        style: 'status-success' },
+  cancelled:        { label: 'Cancelado',         style: 'status-error' },
+  returned:         { label: 'Devuelto',          style: 'bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-apple-sm px-3 py-1 text-xs font-medium' },
+  failed:           { label: 'Fallido',           style: 'status-error' },
+  default:          { label: 'Desconocido',       style: 'status-pending' },
 };
 
 
@@ -32,8 +32,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
-        style,      // Aplicamos los estilos de color
+        'inline-flex items-center transition-all duration-200 ease-in-out',
+        style,      // Aplicamos los estilos de color Apple
         className   // Aplicamos cualquier clase extra que venga en las props
       )}
     >
@@ -41,3 +41,4 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) =
     </span>
   );
 };
+

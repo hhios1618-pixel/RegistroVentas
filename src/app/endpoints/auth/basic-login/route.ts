@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
     // Validación: acepta DEFAULT_PASSWORD global o hash por usuario si existe
     let passOk = password === DEFAULT_PASSWORD;
     if (!passOk && person.password_hash) {
-      try { passOk = await bcrypt.compare(password, person.password_hash); } catch {}
+      try {
+        passOk = await bcrypt.compare(password, person.password_hash);
+      } catch {}
     }
     if (!passOk) {
       return NextResponse.json({ ok: false, error: 'Usuario o contraseña incorrectos' }, { status: 401 });
@@ -75,11 +77,14 @@ export async function POST(req: NextRequest) {
       user: { id: person.id, username: person.username, role },
     });
 
+    // ✅ solo Secure en producción (en dev la cookie no viajaría con http://localhost)
+    const SECURE = process.env.NODE_ENV === 'production';
+
     res.cookies.set({
       name: COOKIE_NAME,
       value: token,
       httpOnly: true,
-      secure: true,
+      secure: SECURE,
       sameSite: 'lax',
       path: '/',
       maxAge: expSec,

@@ -10,22 +10,23 @@ type BaseSize = 'default' | 'sm' | 'lg' | 'icon';
 type ExtendedSize = BaseSize | 'small' | 'medium';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 ring-offset-background disabled:opacity-50 disabled:pointer-events-none',
+  'inline-flex items-center justify-center rounded-apple text-sm font-medium transition-all duration-200 ease-in-out focus-apple disabled:opacity-50 disabled:pointer-events-none',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        link: 'underline underline-offset-4 text-primary hover:no-underline',
+        default: 'bg-apple-blue text-white hover:bg-apple-blue-hover shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
+        destructive: 'bg-destructive text-white hover:bg-destructive/90 shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
+        outline: 'border border-app-border bg-app-card text-app-foreground hover:bg-white/10 hover:border-white/15 backdrop-blur-apple',
+        secondary: 'bg-app-card border border-app-border text-app-foreground hover:bg-white/10 hover:border-white/15 backdrop-blur-apple',
+        ghost: 'text-app-foreground hover:bg-white/10 hover:backdrop-blur-apple',
+        link: 'text-apple-blue hover:text-apple-blue-hover underline-offset-4 hover:underline',
+        success: 'bg-success text-white hover:bg-success/90 shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
       },
       size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 px-3 rounded-md',
-        lg: 'h-11 px-8 rounded-md',
-        icon: 'h-10 w-10',
+        default: 'h-11 px-6 py-3',
+        sm: 'h-9 px-4 py-2 text-xs',
+        lg: 'h-12 px-8 py-3 text-base',
+        icon: 'h-11 w-11',
       },
     },
     defaultVariants: {
@@ -103,3 +104,4 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button';
 
 export { Button, buttonVariants };
+

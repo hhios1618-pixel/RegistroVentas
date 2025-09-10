@@ -46,22 +46,50 @@ export default function PromotoresDetallePage() {
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<ApiResp | null>(null);
 
-  const load = async () => {
+  async function load() {
     setLoading(true);
     setErr(null);
     try {
-      const url = `/api/promoters/sales?from=${from}&to=${to}${q ? `&q=${encodeURIComponent(q)}` : ''}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as ApiResp;
-      setData(json);
+      const url = `/endpoints/promoters/sales?from=${from}&to=${to}${q ? `&q=${encodeURIComponent(q)}` : ''}`;
+      const res = await fetch(url, { cache: 'no-store' });
+
+      // Si no es JSON, mostramos un error limpio (evita pegar HTML en la tabla)
+      const ctype = res.headers.get('content-type') || '';
+      if (!ctype.includes('application/json')) {
+        const text = await res.text();
+        throw new Error(
+          res.ok
+            ? 'Respuesta inesperada del servidor (no JSON).'
+            : `Error ${res.status}: ${text.slice(0, 140)}…`
+        );
+      }
+
+      const json = (await res.json()) as Partial<ApiResp> & { error?: string };
+      if (!res.ok || json?.error) {
+        throw new Error(json?.error || `Error ${res.status}`);
+      }
+
+      // Normaliza estructura mínima
+      setData({
+        rows: Array.isArray(json.rows) ? json.rows : [],
+        summary: Array.isArray(json.summary) ? json.summary : [],
+        totalRows: Number(json.totalRows || 0),
+        totalItems: Number(json.totalItems || 0),
+        totalBs: Number(json.totalBs || 0),
+      });
     } catch (e: any) {
-      setErr(e?.message || 'Error');
-      setData(null);
+      setErr(e?.message || 'Error al cargar datos');
+      setData({
+        rows: [],
+        summary: [],
+        totalRows: 0,
+        totalItems: 0,
+        totalBs: 0,
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
     load();
@@ -104,6 +132,15 @@ export default function PromotoresDetallePage() {
 
   const handlePrint = () => window.print();
 
+  const clearFilters = () => {
+    const t = new Date();
+    const s = new Date(t);
+    s.setDate(s.getDate() - 30);
+    setFrom(toYmd(s));
+    setTo(toYmd(t));
+    setQ('');
+  };
+
   return (
     <main className="min-h-screen bg-[#0b0f17] text-white p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -125,7 +162,7 @@ export default function PromotoresDetallePage() {
         </header>
 
         {/* Filtros */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-[#0f1420] border border-gray-800 rounded-xl p-4">
             <label className="text-sm text-gray-400">Desde</label>
             <input
@@ -144,7 +181,7 @@ export default function PromotoresDetallePage() {
               className="mt-1 w-full bg-[#0b101a] border border-gray-700 rounded-lg px-3 py-2 outline-none"
             />
           </div>
-          <div className="bg-[#0f1420] border border-gray-800 rounded-xl p-4">
+          <div className="bg-[#0f1420] border border-gray-800 rounded-xl p-4 md:col-span-2">
             <label className="text-sm text-gray-400">Buscar</label>
             <input
               placeholder="promotor, producto, cliente, origen…"
@@ -153,18 +190,24 @@ export default function PromotoresDetallePage() {
               onKeyDown={(e) => { if (e.key === 'Enter') load(); }}
               className="mt-1 w-full bg-[#0b101a] border border-gray-700 rounded-lg px-3 py-2 outline-none"
             />
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={load}
+                disabled={loading}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm"
+              >
+                {loading ? 'Cargando…' : 'Aplicar filtros'}
+              </button>
+              <button
+                onClick={() => { clearFilters(); setTimeout(load, 0); }}
+                disabled={loading}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-sm"
+              >
+                Limpiar
+              </button>
+            </div>
           </div>
         </section>
-
-        <div className="flex justify-end">
-          <button
-            onClick={load}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm"
-          >
-            {loading ? 'Cargando…' : 'Aplicar filtros'}
-          </button>
-        </div>
 
         {/* Totales del filtro */}
         <section className="bg-[#0f1420] border border-gray-800 rounded-xl p-4">
@@ -175,6 +218,7 @@ export default function PromotoresDetallePage() {
                 {fmt.format(data?.totalItems || 0)} ítem(s) · Bs {fmt.format(Math.round(data?.totalBs || 0))}
               </p>
             </div>
+            {loading && <div className="text-sm text-gray-400">Cargando…</div>}
           </div>
         </section>
 
@@ -200,7 +244,9 @@ export default function PromotoresDetallePage() {
                 ))}
                 <tr>
                   <td className="py-2 font-semibold">Total</td>
-                  <td className="py-2 text-right font-semibold">{fmt.format(totals.reduce((s, x) => s + x.items, 0))}</td>
+                  <td className="py-2 text-right font-semibold">
+                    {fmt.format(totals.reduce((s, x) => s + x.items, 0))}
+                  </td>
                   <td className="py-2 text-right font-semibold">
                     Bs {fmt.format(Math.round(totals.reduce((s, x) => s + x.total_bs, 0)))}
                   </td>
@@ -212,7 +258,9 @@ export default function PromotoresDetallePage() {
 
         {/* Tabla detalle */}
         <section className="bg-[#0f1420] border border-gray-800 rounded-xl p-4">
-          <p className="text-sm text-gray-400 mb-3">Vista pensada para auditar y calcular comisiones.</p>
+          <p className="text-sm text-gray-400 mb-3">
+            Vista pensada para auditar y calcular comisiones.
+          </p>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-gray-400">
@@ -258,7 +306,9 @@ export default function PromotoresDetallePage() {
                     <td className="py-2">{r.product_id || ''}</td>
                     <td className="py-2 text-right">{fmt.format(r.quantity)}</td>
                     <td className="py-2 text-right">{fmt.format(r.unit_price)}</td>
-                    <td className="py-2 text-right">{fmt.format(Math.round(r.quantity * r.unit_price))}</td>
+                    <td className="py-2 text-right">
+                      {fmt.format(Math.round(r.quantity * r.unit_price))}
+                    </td>
                     <td className="py-2">{r.customer_name || ''}</td>
                     <td className="py-2">{r.customer_phone || ''}</td>
                     <td className="py-2">{r.notes || ''}</td>

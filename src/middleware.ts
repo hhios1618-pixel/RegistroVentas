@@ -1,5 +1,6 @@
 // src/middleware.ts
-import { NextResponse, NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME || 'fenix_session';
 
@@ -31,7 +32,7 @@ function isStaticAsset(pathname: string) {
   );
 }
 
-// Decodifica el payload del JWT de la cookie (sin verificación criptográfica)
+// Decodifica el payload del JWT (sin verificación) para leer el rol
 function readRoleFromCookie(req: NextRequest): string | null {
   const raw = req.cookies.get(SESSION_COOKIE)?.value;
   if (!raw) return null;
@@ -50,19 +51,32 @@ function readRoleFromCookie(req: NextRequest): string | null {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Dejar pasar público y assets
-  if (isPublic(pathname) || isStaticAsset(pathname)) return NextResponse.next();
+  // Deja pasar público, assets y preflight
+  if (req.method === 'OPTIONS' || isPublic(pathname) || isStaticAsset(pathname)) {
+    return NextResponse.next();
+  }
 
-  // Requiere sesión (cookie)
   const token = req.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
+  const hasSession = Boolean(token);
+
+  // 1) Endpoints internos: NO redirigir nunca. Responder JSON 401 si falta sesión.
+  if (pathname.startsWith('/endpoints/')) {
+    if (!hasSession) {
+      return NextResponse.json({ ok: false, error: 'no_session' }, { status: 401 });
+    }
+    // (si quieres, puedes aplicar RBAC por endpoint aquí con readRoleFromCookie)
+    return NextResponse.next();
+  }
+
+  // 2) Páginas: si no hay sesión => redirect a /login
+  if (!hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectTo', pathname + (req.nextUrl.search || ''));
     return NextResponse.redirect(url);
   }
 
-  // RBAC básico por rol
+  // 3) RBAC básico SOLO para páginas (no afecta endpoints)
   const role = readRoleFromCookie(req);
 
   // PROMOTOR → /promotores/registro

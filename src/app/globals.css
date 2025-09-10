@@ -1,80 +1,153 @@
-/* -------------------------------- */
-/* Tailwind base setup              */
-/* -------------------------------- */
+/* ----------------------------- */
+/* Tailwind base                 */
+/* ----------------------------- */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* -------------------------------- */
-/* Leaflet styles                   */
-/* -------------------------------- */
+/* ----------------------------- */
+/* Fondo global tipo Apple       */
+/* ----------------------------- */
+:root{
+  --app-bg:
+    radial-gradient(1200px 600px at 8% -10%, rgba(0,255,163,.06), transparent 45%),
+    radial-gradient(900px 500px at 95% 10%, rgba(0,185,255,.06), transparent 50%),
+    linear-gradient(180deg,#0b0f17 0%, #0a0c16 100%);
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ----------------------------- */
+/* Scrollbar sutil               */
+/* ----------------------------- */
+::-webkit-scrollbar{ width:8px; height:8px; }
+::-webkit-scrollbar-thumb{ background: rgba(255,255,255,.15); border-radius:4px; }
+::-webkit-scrollbar-track{ background: rgba(255,255,255,.06); }
+
+/* ----------------------------- */
+/* Componentes y utilidades UI   */
+/* (solo usa clases que existen) */
+/* ----------------------------- */
+@layer components {
+  /* Contenedor “glass” genérico */
+  .glass { @apply backdrop-blur-apple bg-app-card border border-app-border; }
+
+  /* Cards principales */
+  .card {
+    @apply rounded-apple glass shadow-glass px-6 py-5;
+  }
+  .card-tight {
+    @apply rounded-apple bg-app-card border border-app-border backdrop-blur-apple shadow-apple-sm px-4 py-3;
+  }
+
+  /* Títulos jerárquicos (tamaños de config) */
+  .h1 { @apply text-apple-h1 tracking-apple-tight font-semibold; }
+  .h2 { @apply text-apple-h2 tracking-apple-normal font-semibold; }
+  .h3 { @apply text-apple-h3 tracking-apple-normal font-medium; }
+
+  /* Texto atenuado coherente */
+  .muted { @apply text-app-muted; }
+
+  /* Inputs */
+  .field {
+    @apply w-full rounded-apple bg-neutral-900/50 border border-app-border px-3 py-2 text-apple-body
+           outline-none transition duration-200 ease-apple;
+  }
+  .field:focus {
+    @apply border-apple-blue ring-1 ring-apple-blue/30;
+  }
+  .field::placeholder { @apply text-neutral-400; }
+
+  /* Botones */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-apple border border-app-border
+           text-apple-body transition duration-200 ease-apple select-none;
+  }
+  .btn-primary { @apply btn bg-white text-black hover:bg-white/90 shadow-apple-sm; }
+  .btn-ghost   { @apply btn bg-white/10 hover:bg-white/15 text-app-foreground; }
+  .btn-danger  { @apply btn bg-destructive/90 hover:bg-destructive text-white; }
+  .btn-disabled{ @apply opacity-60 cursor-not-allowed; }
+
+  /* Topbar coherente (logout bar) */
+  .topbar { @apply w-full flex justify-end p-4 border-b border-app-border bg-black/30 backdrop-blur-apple; }
+
+  /* Tabla limpia estilo Apple */
+  .table-clean { @apply w-full text-apple-body; border-collapse: separate; border-spacing: 0 8px; }
+  .table-clean thead th {
+    @apply text-xs uppercase tracking-wider text-app-muted font-medium;
+    padding: 8px 12px; border-bottom: 1px solid theme('colors.app.border');
+  }
+  .table-clean tbody tr { @apply bg-neutral-900/50 border border-app-border rounded-apple; }
+  .table-clean tbody td { padding: 10px 12px; }
+  .table-clean tbody tr:hover { @apply bg-neutral-900/70; }
+
+  /* Números tabulares para columnas numéricas */
+  .num { font-feature-settings: "tnum" 1, "lnum" 1; font-variant-numeric: tabular-nums lining-nums; }
+
+  /* Secciones con padding coherente */
+  .section { @apply max-w-7xl mx-auto p-6; }
+}
+
+/* ----------------------------- */
+/* Leaflet (dejamos tus fixes)   */
+/* ----------------------------- */
 @import "leaflet/dist/leaflet.css";
 
-/* 🔧 Parche crítico: evitar que los tiles se estiren o se corten */
 .leaflet-container img,
 .leaflet-container .leaflet-tile {
   max-width: none !important;
 }
-
-/* Fuerza tamaño correcto de los tiles */
 .leaflet-container .leaflet-tile {
   width: 256px !important;
   height: 256px !important;
-  image-rendering: auto; /* mejora nitidez */
-  filter: none;          /* evita que un reset global meta blur o grayscale */
+  image-rendering: auto;
+  filter: none;
 }
+.leaflet-container { background:#111; }
 
-/* -------------------------------- */
-/* Estilos globales opcionales      */
-/* -------------------------------- */
+/* ---------- APPLE DESIGN SHIMS PARA DASHBOARD ---------- */
+@layer components {
+  /* Contenedor y sección */
+  .apple-container { @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8; }
+  .apple-section   { @apply mb-8; }
 
-/* Scrollbars oscuros (opcional, más limpio con tu UI) */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  /* Tarjetas glass */
+  .glass           { @apply bg-white/5 backdrop-blur-md border border-white/10; }
+  .glass-panel     { @apply bg-white/5 backdrop-blur-md border border-white/10; }
+  .glass-card      { @apply glass rounded-apple p-apple shadow-apple; }
+  .card            { @apply glass rounded-apple p-apple shadow-apple; } /* por compat */
+
+  /* Tipografía y tonos */
+  .apple-h1        { @apply text-apple-h1 font-semibold tracking-apple-tight; }
+  .apple-h2        { @apply text-apple-h2 font-semibold tracking-apple-normal; }
+  .apple-h3        { @apply text-apple-h3 font-medium  tracking-apple-normal; }
+  .apple-body      { @apply text-apple-body; }
+  .apple-mono      { @apply font-mono; }
+  .apple-muted     { color: theme(colors.app.muted); }
+
+  /* Bordes y radios */
+  .rounded-apple      { border-radius: theme(borderRadius.apple); }
+  .rounded-apple-sm   { border-radius: theme(borderRadius.apple-sm); }
+  .rounded-apple-lg   { border-radius: theme(borderRadius.apple-lg); }
+
+  /* Grid de tarjetas */
+  .apple-grid { @apply grid gap-6; }
+
+  /* Animación sutil */
+  .apple-fade-in { animation: _appleFade .35s cubic-bezier(0.25,0.46,0.45,0.94) both; }
 }
-::-webkit-scrollbar-track {
-  background: #1f2937; /* gris oscuro */
-}
-::-webkit-scrollbar-thumb {
-  background-color: #4b5563; /* gris medio */
-  border-radius: 4px;
-}
+@keyframes _appleFade { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }
 
-/* Para asegurar que el body herede tu esquema oscuro */
-html, body {
-  @apply bg-gray-900 text-gray-200;
-  height: 100%;
-  margin: 0;
-  padding: 0;
+/* Fondo Apple coherente (si no lo tenías) */
+:root {
+  --app-bg: radial-gradient(1200px 600px at 8% -10%, rgba(0,255,163,.06), transparent 45%),
+            radial-gradient(900px 500px at 95% 10%, rgba(0,185,255,.06), transparent 50%),
+            linear-gradient(180deg,#0b0f17 0%, #0a0c16 100%);
 }
-
-/* Fix de modal full height con mapa */
-.leaflet-container {
-  background: #111; /* color de fondo por si los tiles tardan en cargar */
-}
-
-
-/* ---------------------------------------------------- */
-/* ✅ ESTILOS AÑADIDOS PARA EL DASHBOARD DE FENIX       */
-/* (Estos son seguros y no afectarán otras páginas)     */
-/* ---------------------------------------------------- */
-@keyframes pulse-slow {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.2;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 0.3;
-  }
-}
-
-.animate-pulse-slow {
-  animation: pulse-slow 10s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-
+html, body { height: 100%; }
+body { background: var(--app-bg); }

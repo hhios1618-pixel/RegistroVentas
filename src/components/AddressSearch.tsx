@@ -32,7 +32,7 @@ export const AddressSearch: React.FC<AddressSearchProps> = ({
       setLoading(true); setError(null);
       abortRef.current?.abort();
       abortRef.current = new AbortController();
-      const url = `/api/geocode?q=${encodeURIComponent(q)}&limit=8`;
+      const url = `/endpoints/geocode?q=${encodeURIComponent(q)}&limit=8`;
       const res = await fetch(url, { signal: abortRef.current.signal, headers: { 'Content-Type': 'application/json' } });
       if (!res.ok) throw new Error(`Error ${res.status}: ${await res.text()}`);
       const data = (await res.json()) as AddressSuggestion[];

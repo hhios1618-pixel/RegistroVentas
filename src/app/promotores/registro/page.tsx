@@ -1,19 +1,11 @@
+// src/app/promotores/registro/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { SVGProps } from 'react';
-import { motion } from 'framer-motion';
 
-type IconProps = SVGProps<SVGSVGElement>;
-
-type ProductRow = {
-  id: string;                // usamos code como id
-  code: string | null;
-  name: string;
-  category: string | null;
-  stock: number | null;
-};
-
+/* =======================================================
+   Tipos
+   ======================================================= */
 type OriginKey =
   | 'cochabamba'
   | 'lapaz'
@@ -22,26 +14,38 @@ type OriginKey =
   | 'sucre'
   | 'encomienda'
   | 'tienda';
-
 type WarehouseKey = Exclude<OriginKey, 'encomienda'>;
+
+type ProductRow = {
+  id: string;           // usamos code como id
+  code: string | null;
+  name: string;
+  category: string | null;
+  stock: number | null;
+};
 
 type SaleLine = {
   id: string;
   origin: OriginKey;
   warehouseOrigin?: WarehouseKey | null; // si origin = encomienda
   district?: string;                      // si origin ≠ encomienda
-  productId?: string | null;              // guardamos code aquí
+  productId?: string | null;              // guardamos code si viene del catálogo
   productName: string;
   quantity: number;
   unitPrice: number;
   customerName: string;
   customerPhone: string;
   notes?: string;
-  phoneError?: string | null;             // UI-only
+  phoneError?: string | null;             // solo UI
 };
 
-// Catálogo de distritos por ciudad (ajústalo a tu realidad)
-const DISTRICTS_BY_CITY: Record<Exclude<OriginKey, 'encomienda' | 'tienda'>, string[]> = {
+/* =======================================================
+   Catálogos de UI
+   ======================================================= */
+const DISTRICTS_BY_CITY: Record<
+  Exclude<OriginKey, 'encomienda' | 'tienda'>,
+  string[]
+> = {
   cochabamba: [
     'Centro','Queru Queru','Temporal','Sarco','Tiquipaya','Colcapirhua',
     'Quillacollo','Sacaba','Cala Cala','Huañani','Otro',
@@ -76,7 +80,9 @@ const ORIGINS: { key: OriginKey; label: string }[] = [
 const WAREHOUSES: { key: WarehouseKey; label: string }[] =
   ORIGINS.filter(o => o.key !== 'encomienda').map(o => ({ key: o.key as WarehouseKey, label: o.label }));
 
-// ----------------- utils -----------------
+/* =======================================================
+   Helpers (utilidades)
+   ======================================================= */
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 function emptyLine(): SaleLine {
@@ -114,76 +120,80 @@ function useDebounce<T>(value: T, delay = 300) {
   }, [value, delay]);
   return debounced;
 }
-
 // Normaliza a +591######## si es posible; devuelve {val, error}
 function normalizeBoPhone(raw: string): { val: string; error: string | null } {
   const only = raw.replace(/[^\d+]/g, '');
   if (!only) return { val: '', error: 'Requerido' };
-
   let f = only;
-
-  // Quitar + si es doble
   if (f.startsWith('++')) f = f.replace(/^\++/, '+');
-
-  // Si empieza con 591 (sin +), agrégalo
   if (!f.startsWith('+') && f.startsWith('591')) f = '+' + f;
-
-  // Si son 8 dígitos, asume móvil Bolivia -> +591
   const onlyDigits = f.replace(/\D/g, '');
   if (!f.startsWith('+') && (onlyDigits.length === 8 || onlyDigits.length === 7)) {
-    // Para WhatsApp pedimos móvil: 8 dígitos empezando 6/7
     f = `+591${onlyDigits}`;
   }
-
-  // Validación final móvil BO: +591[67]\d{7}
   const ok = /^\+591[67]\d{7}$/.test(f);
   return ok ? { val: f, error: null } : { val: f, error: 'Debe ser +591 y 8 dígitos (móvil 6/7)' };
 }
 
-// ----------------- page -----------------
+/** fetch defensivo: si el servidor devuelve HTML (redirect/login/error), no rompe el JSON */
+async function fetchJSON(url: string, init?: RequestInit) {
+  const res = await fetch(url, {
+    ...init,
+    cache: 'no-store',
+    headers: { Accept: 'application/json', ...(init?.headers || {}) },
+  });
+  const raw = await res.text();
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    const snippet = raw.slice(0, 140).replace(/\s+/g, ' ').trim();
+    throw new Error(`Respuesta no JSON (${res.status}). Posible redirect/no auth. Snippet: ${snippet}`);
+  }
+  const data = JSON.parse(raw);
+  if (!res.ok) {
+    throw new Error((data && (data.error || data.message)) || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+/* =======================================================
+   PAGE
+   ======================================================= */
 export default function PromotoresRegistroPage() {
-  // Lista real de promotores desde DB (solo nombre)
-  const [promoters, setPromoters] = useState<{ name: string }[]>([]);
-  const [promotersLoading, setPromotersLoading] = useState(true);
+  // 1) Me (nombre del promotor autenticado)
+  const [meLoading, setMeLoading] = useState(true);
+  const [meError, setMeError] = useState<string | null>(null);
+  const [promoterName, setPromoterName] = useState<string>('');
 
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       try {
-        const res = await fetch('/api/promoters/list', { cache: 'no-store' });
-        const data = await res.json();
-        setPromoters(Array.isArray(data.items) ? data.items : []);
-      } catch {
-        setPromoters([]);
+        setMeLoading(true);
+        const me = await fetchJSON(`/endpoints/me?ts=${Date.now()}`);
+        const name = String(me.full_name || '').trim();
+        if (!name) throw new Error('El usuario no tiene full_name');
+        setPromoterName(name);
+        setMeError(null);
+      } catch (e: any) {
+        console.debug('[me] error', e?.message);
+        setMeError(e?.message || 'No se pudo cargar el usuario');
       } finally {
-        setPromotersLoading(false);
+        setMeLoading(false);
       }
-    };
-    load();
+    })();
   }, []);
 
-  // Meta
-  const [promoterName, setPromoterName] = useState<string>('');
-  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10)); // yyyy-mm-dd
+  // 2) Fecha
+  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().slice(0, 10));
 
-  // Setear el primero cuando lleguen
-  useEffect(() => {
-    if (!promoterName && promoters.length) {
-      setPromoterName(promoters[0].name);
-    }
-  }, [promoters, promoterName]);
-
-  // Líneas
+  // 3) Líneas
   const [lines, setLines] = useState<SaleLine[]>([emptyLine()]);
 
-  // Búsqueda por línea
+  // 4) Autocomplete de productos por línea contra /endpoints/products/search
   const [queryByLine, setQueryByLine] = useState<Record<string, string>>({});
   const debouncedQueryByLine = useDebounce(queryByLine, 300);
   const [resultsByLine, setResultsByLine] = useState<Record<string, ProductRow[]>>({});
-
-  // Control del dropdown por línea
   const [openSuggest, setOpenSuggest] = useState<Record<string, boolean>>({});
 
-  // Autocomplete productos (busca por nombre/código; 3+ letras)
   useEffect(() => {
     const run = async () => {
       const newResults: Record<string, ProductRow[]> = {};
@@ -195,22 +205,19 @@ export default function PromotoresRegistroPage() {
             return;
           }
           try {
-            const res = await fetch(`/api/products/search?q=${encodeURIComponent(q)}&limit=10`, {
-              method: 'GET',
-              headers: { Accept: 'application/json' },
+            const res = await fetch(`/endpoints/products/search?q=${encodeURIComponent(q)}&limit=10`, {
               cache: 'no-store',
+              headers: { Accept: 'application/json' },
             });
-            if (!res.ok) throw new Error('API search error');
-            const data = await res.json();
-            newResults[line.id] = (data.items || []) as ProductRow[];
+            const data = await res.json().catch(() => ({ items: [] }));
+            newResults[line.id] = Array.isArray(data.items) ? data.items as ProductRow[] : [];
           } catch {
             newResults[line.id] = [];
           }
         })
       );
       setResultsByLine(newResults);
-
-      // Abre/cierra según haya resultados y query >= 3
+      // abre/cierra sugerencias según haya resultados
       setOpenSuggest((prev) => {
         const next = { ...prev };
         lines.forEach((line) => {
@@ -223,16 +230,10 @@ export default function PromotoresRegistroPage() {
     run();
   }, [debouncedQueryByLine, lines]);
 
-  // Totales visuales
+  // 5) Totales
   const totals = useMemo(() => {
     const countByOrigin: Record<OriginKey, number> = {
-      cochabamba: 0,
-      lapaz: 0,
-      elalto: 0,
-      santacruz: 0,
-      sucre: 0,
-      encomienda: 0,
-      tienda: 0,
+      cochabamba: 0, lapaz: 0, elalto: 0, santacruz: 0, sucre: 0, encomienda: 0, tienda: 0,
     };
     let items = 0;
     let totalBs = 0;
@@ -244,25 +245,27 @@ export default function PromotoresRegistroPage() {
     return { countByOrigin, items, totalBs };
   }, [lines]);
 
-  // Guardar
+  // 6) Guardar
   const [saving, setSaving] = useState(false);
   const [savedOk, setSavedOk] = useState<null | 'ok' | 'err'>(null);
 
   const handleSave = async () => {
-    if (!promoterName?.trim()) return alert('Selecciona el promotor/a');
+    if (!promoterName?.trim()) return alert('No se pudo identificar al promotor/a');
     if (!saleDate) return alert('Selecciona la fecha de la venta');
 
-    // Validaciones de cada línea
+    // Validaciones línea a línea
     for (const [i, l] of lines.entries()) {
       if (!l.productName.trim()) return alert(`Falta producto en línea ${i + 1}`);
       if (l.quantity <= 0) return alert(`Cantidad inválida en línea ${i + 1}`);
       if (l.unitPrice < 0) return alert(`Precio inválido en línea ${i + 1}`);
-      if (l.origin === 'encomienda' && !l.warehouseOrigin) return alert(`Falta bodega (encomienda) en línea ${i + 1}`);
+      if (l.origin === 'encomienda' && !l.warehouseOrigin)
+        return alert(`Falta bodega (encomienda) en línea ${i + 1}`);
       if (l.origin !== 'encomienda' && l.origin !== 'tienda') {
-        if (!l.district || !l.district.trim()) return alert(`Falta distrito/zona en línea ${i + 1}`);
-        if (l.district === 'Otro' && !l.notes?.trim()) return alert(`Especifica zona en “Notas” (línea ${i + 1})`);
+        if (!l.district || !l.district.trim())
+          return alert(`Falta distrito/zona en línea ${i + 1}`);
+        if (l.district === 'Otro' && !l.notes?.trim())
+          return alert(`Especifica zona en “Notas” (línea ${i + 1})`);
       }
-      // Teléfono
       const { val, error } = normalizeBoPhone(l.customerPhone || '');
       if (error) {
         updateLine(l.id, { phoneError: error });
@@ -275,38 +278,43 @@ export default function PromotoresRegistroPage() {
     setSaving(true);
     setSavedOk(null);
     try {
-      const rows = lines.map(l => ({
+      const rows = lines.map((l) => ({
         origin: l.origin,
         warehouseOrigin: l.origin === 'encomienda' ? (l.warehouseOrigin as WarehouseKey) : null,
         district: l.origin !== 'encomienda' ? (l.district?.trim() || null) : null,
-        productId: l.productId ?? null, // code si vino del autocomplete
+        productId: l.productId ?? null,
         productName: l.productName,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
         customerName: l.customerName,
-        customerPhone: l.customerPhone, // ya normalizado
+        customerPhone: l.customerPhone,
         notes: l.notes,
       }));
 
-      const res = await fetch('/api/promoters/sales', {
+      const res = await fetch('/endpoints/promoters/sales', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ promoterName, saleDate, lines: rows }),
       });
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Error al guardar');
       }
+
       setSavedOk('ok');
       setLines([emptyLine()]);
     } catch (e) {
-      console.error(e);
+      console.error('[save] error', e);
       setSavedOk('err');
     } finally {
       setSaving(false);
     }
   };
 
+  /* =======================================================
+     Render
+     ======================================================= */
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-white">
       <div className="relative max-w-7xl mx-auto p-6 space-y-8">
@@ -315,29 +323,31 @@ export default function PromotoresRegistroPage() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent">
               Registro de Ventas – Promotores
             </h1>
-            <span className="text-xs uppercase tracking-widest text-gray-400">v1.8</span>
+            <span className="text-xs uppercase tracking-widest text-gray-400">v2.0</span>
           </div>
         </header>
 
-        {/* Meta */}
+        {/* Meta (usuario + fecha) */}
         <section className="grid md:grid-cols-3 gap-4">
-          {/* Promotor */}
+          {/* Promotor: solo lectura, viene de /endpoints/me */}
           <div className="bg-gray-900/70 border border-gray-700/40 rounded-xl p-4">
             <label className="block text-xs text-gray-400 mb-1">Promotor/a</label>
-            <select
-              value={promoterName}
-              onChange={(e) => setPromoterName(e.target.value)}
-              disabled={promotersLoading}
-              className="w-full bg-black/30 border border-gray-700/40 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60"
-            >
-              {promoters.map((p) => (
-                <option key={p.name} value={p.name}>{p.name}</option>
-              ))}
-              {!promoters.length && <option value="">(Sin datos)</option>}
-            </select>
-            {!promotersLoading && !promoters.length && (
+            <input
+              readOnly
+              value={
+                meLoading
+                  ? 'Cargando…'
+                  : promoterName || (meError ? '(error al cargar)' : '(sin nombre)')
+              }
+              className="w-full bg-black/30 border border-gray-700/40 rounded-lg px-3 py-2 text-sm outline-none"
+            />
+            {meError ? (
               <div className="text-[11px] text-amber-400 mt-2">
-                No se encontraron promotores activos en <code>public.people</code>.
+                {meError}. No se podrá guardar hasta recuperar el nombre.
+              </div>
+            ) : (
+              <div className="text-[11px] text-gray-500 mt-2">
+                Usamos el usuario autenticado (vía <code>/endpoints/me</code>).
               </div>
             )}
           </div>
@@ -353,6 +363,7 @@ export default function PromotoresRegistroPage() {
             />
           </div>
 
+          {/* Resumen */}
           <SummaryCard totalBs={totals.totalBs} items={totals.items} />
         </section>
 
@@ -365,7 +376,7 @@ export default function PromotoresRegistroPage() {
             const cityDistricts = needsDistrict ? (DISTRICTS_BY_CITY[cityKey] || []) : [];
 
             return (
-              <motion.div key={line.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-900/70 border border-gray-700/40 rounded-xl p-4">
+              <div key={line.id} className="bg-gray-900/70 border border-gray-700/40 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-sm text-gray-400">Venta #{idx + 1}</div>
                   <button
@@ -450,7 +461,7 @@ export default function PromotoresRegistroPage() {
                     </>
                   )}
 
-                  {/* Producto */}
+                  {/* Producto + Autocomplete */}
                   <div className="md:col-span-4 relative">
                     <label className="block text-xs text-gray-400 mb-1">Producto</label>
                     <input
@@ -469,13 +480,7 @@ export default function PromotoresRegistroPage() {
                       onBlur={() => {
                         setTimeout(() => setOpenSuggest((p) => ({ ...p, [line.id]: false })), 120);
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                          setOpenSuggest((p) => ({ ...p, [line.id]: false }));
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      placeholder="Escribe 3+ letras (ej. Aromatizante Avión)…"
+                      placeholder="Escribe 3+ letras…"
                       className="w-full bg-black/30 border border-gray-700/40 rounded-t-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
                     />
 
@@ -488,7 +493,6 @@ export default function PromotoresRegistroPage() {
                             onMouseDown={(e) => {
                               e.preventDefault(); // evita blur antes de seleccionar
                               updateLine(line.id, { productId: p.id, productName: p.name });
-                              // Cerrar y "matar" la query para que no vuelva a abrir
                               setQueryByLine((prev) => ({ ...prev, [line.id]: '' }));
                               setResultsByLine((prev) => ({ ...prev, [line.id]: [] }));
                               setOpenSuggest((prev) => ({ ...prev, [line.id]: false }));
@@ -510,7 +514,7 @@ export default function PromotoresRegistroPage() {
                     )}
 
                     <div className="text-[11px] text-gray-500 mt-1">
-                      Si no aparece, déjalo escrito manual. No traemos precio desde la base.
+                      Si no aparece, déjalo escrito manual.
                     </div>
                   </div>
 
@@ -555,7 +559,6 @@ export default function PromotoresRegistroPage() {
                       inputMode="tel"
                       value={line.customerPhone}
                       onChange={(e) => {
-                        // Permitimos solo dígitos y +
                         const raw = e.target.value.replace(/[^\d+]/g, '');
                         updateLine(line.id, { customerPhone: raw, phoneError: null });
                       }}
@@ -577,12 +580,12 @@ export default function PromotoresRegistroPage() {
                     <input
                       value={line.notes || ''}
                       onChange={(e) => updateLine(line.id, { notes: e.target.value })}
-                      placeholder="Referencia, color (rojo), etc."
+                      placeholder="Referencia, color, etc."
                       className="w-full bg-black/30 border border-gray-700/40 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/30"
                     />
                   </div>
                 </div>
-              </motion.div>
+              </div>
             );
           })}
 
@@ -597,9 +600,9 @@ export default function PromotoresRegistroPage() {
               onClick={handleSave}
               disabled={
                 saving ||
-                promotersLoading ||
-                !promoterName ||
-                lines.some(l => !!l.phoneError) // bloquea si hay error visible
+                meLoading ||
+                !promoterName?.trim() ||
+                lines.some(l => !!l.phoneError)
               }
               className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-60"
             >
@@ -624,18 +627,17 @@ export default function PromotoresRegistroPage() {
             </div>
           </div>
 
-          <div className="bg-gray-900/70 border border-gray-700/40 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-white/90 mb-1">Totales</h3>
-            <div className="text-2xl font-semibold text-white">{totals.items} ítem(s)</div>
-            <div className="text-sm text-gray-300">TOTAL Bs {formatMoney(totals.totalBs)}</div>
-          </div>
+          <SummaryCard totalBs={totals.totalBs} items={totals.items} />
         </section>
 
-        <footer className="text-center text-gray-500 text-xs pt-4">Foco: registro limpio para cálculo posterior de comisiones.</footer>
+        <footer className="text-center text-gray-500 text-xs pt-4">
+          Foco: registro limpio para cálculo posterior de comisiones.
+        </footer>
       </div>
     </main>
   );
 
+  // helpers de estado
   function updateLine(id: string, patch: Partial<SaleLine>) {
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   }
@@ -644,6 +646,9 @@ export default function PromotoresRegistroPage() {
   }
 }
 
+/* =======================================================
+   Componente de resumen
+   ======================================================= */
 function SummaryCard({ totalBs, items }: { totalBs: number; items: number }) {
   return (
     <div className="bg-gradient-to-br from-blue-600/10 to-purple-600/10 border border-gray-700/40 rounded-xl p-4">
