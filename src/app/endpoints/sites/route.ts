@@ -7,7 +7,13 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'fenix_session';
-const JWT_SECRET  = process.env.JWT_SECRET || 'dev-secret';
+
+// ==============================================================================
+//  PUENTEO TEMPORAL: Pega tu secreto directamente aquí para la prueba
+// ==============================================================================
+const JWT_SECRET  = "SDlXnXRRxwAg04YmjXXGEwm/H4Ll69jdo0w2ysfAATo="; 
+// ==============================================================================
+
 
 const ALIASES: Record<string, string[]> = {
   'santa cruz': ['scz', 'sta cruz', 'sta. cruz', 'santacruz', 'santa-cruz'],
@@ -39,7 +45,6 @@ export async function GET(req: NextRequest) {
   const name = searchParams.get('name');
   const debug = searchParams.get('debug') === '1';
 
-  // BÚSQUEDA LIBRE POR NOMBRE
   if (name && !assignedTo) {
     const { data, error } = await supabaseAdmin
       .from('sites')
@@ -51,8 +56,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ results: data ?? [] });
   }
 
-  // RESOLVER SEDE DEL USUARIO (Lógica Final Corregida)
   if (assignedTo === 'me') {
+    if (JWT_SECRET === "SDlXnXRRxwAg04YmjXXGEwm/H4Ll69jdo0w2ysfAATo=") {
+        console.error("ALERTA: JWT_SECRET no ha sido reemplazado en el código.");
+        return NextResponse.json({ error: "JWT_SECRET not configured in code" }, { status: 500 });
+    }
     const rawCookie = req.cookies.get(COOKIE_NAME)?.value;
     if (!rawCookie) return NextResponse.json({ results: [], debug: debug ? { reason: 'no_cookie' } : undefined });
 
@@ -75,18 +83,14 @@ export async function GET(req: NextRequest) {
 
     const needleRaw = person.local.trim();
 
-    // --- LÓGICA CORREGIDA DE BÚSQUEDA EN 2 PASOS ---
-
-    // 1. Intento de Coincidencia Exacta (prioridad #1)
     const { data: exactMatch, error: exactError } = await supabaseAdmin
       .from('sites')
       .select('id, name, lat, lng, radius_m, is_active')
       .eq('is_active', true)
-      .eq('name', needleRaw) // Búsqueda exacta y sensible a mayúsculas/minúsculas
+      .eq('name', needleRaw)
       .limit(1);
 
     if (exactError) {
-      // No detenerse por un error aquí, podemos intentar el fallback
       console.error("Error en búsqueda exacta:", exactError);
     }
     
@@ -97,7 +101,6 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 2. Fallback a Búsqueda Amplia (ILIKE + alias) si no hubo coincidencia exacta
     const filter = buildSiteSearchFilter(needleRaw);
     const { data: fuzzyMatch, error: fuzzyError } = await supabaseAdmin
       .from('sites')
@@ -116,7 +119,6 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // LISTADO GENERAL
   const { data, error } = await supabaseAdmin
     .from('sites')
     .select('id, name, lat, lng, radius_m, is_active')
