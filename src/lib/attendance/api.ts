@@ -1,4 +1,3 @@
-// src/lib/attendance/api.ts
 // Lib de asistencia: tipos + llamadas a Edge Functions (qr, checkin)
 
 export type CheckType = 'in' | 'out' | 'lunch_in' | 'lunch_out';
