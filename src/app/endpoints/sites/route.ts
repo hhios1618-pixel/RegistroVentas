@@ -8,12 +8,8 @@ export const revalidate = 0;
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'fenix_session';
 
-// ==============================================================================
-//  PUENTEO TEMPORAL: Pega tu secreto directamente aquí para la prueba
-// ==============================================================================
+// Secreto puesto directamente para la prueba definitiva en Vercel
 const JWT_SECRET  = "SDlXnXRRxwAg04YmjXXGEwm/H4Ll69jdo0w2ysfAATo="; 
-// ==============================================================================
-
 
 const ALIASES: Record<string, string[]> = {
   'santa cruz': ['scz', 'sta cruz', 'sta. cruz', 'santacruz', 'santa-cruz'],
@@ -57,10 +53,6 @@ export async function GET(req: NextRequest) {
   }
 
   if (assignedTo === 'me') {
-    if (JWT_SECRET === "SDlXnXRRxwAg04YmjXXGEwm/H4Ll69jdo0w2ysfAATo=") {
-        console.error("ALERTA: JWT_SECRET no ha sido reemplazado en el código.");
-        return NextResponse.json({ error: "JWT_SECRET not configured in code" }, { status: 500 });
-    }
     const rawCookie = req.cookies.get(COOKIE_NAME)?.value;
     if (!rawCookie) return NextResponse.json({ results: [], debug: debug ? { reason: 'no_cookie' } : undefined });
 
@@ -83,6 +75,7 @@ export async function GET(req: NextRequest) {
 
     const needleRaw = person.local.trim();
 
+    // 1. Intento de Coincidencia Exacta (prioridad #1)
     const { data: exactMatch, error: exactError } = await supabaseAdmin
       .from('sites')
       .select('id, name, lat, lng, radius_m, is_active')
@@ -101,6 +94,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // 2. Fallback a Búsqueda Amplia (ILIKE + alias) si no hubo coincidencia exacta
     const filter = buildSiteSearchFilter(needleRaw);
     const { data: fuzzyMatch, error: fuzzyError } = await supabaseAdmin
       .from('sites')
