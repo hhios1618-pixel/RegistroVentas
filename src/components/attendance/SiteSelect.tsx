@@ -33,7 +33,7 @@ export default function SiteSelect({
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch('/api/sites', { cache: 'no-store', headers: { Accept: 'application/json' } });
+        const res = await fetch('/endpoints/sites', { cache: 'no-store', headers: { Accept: 'application/json' } });
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'sites_fetch_failed');
         if (alive) setSites(Array.isArray(json.data) ? json.data : []);

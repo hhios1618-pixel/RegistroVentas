@@ -1,4 +1,4 @@
-// app/api/promoters/sales/route.ts
+// app/endpoints/promoters/sales/route.ts
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 

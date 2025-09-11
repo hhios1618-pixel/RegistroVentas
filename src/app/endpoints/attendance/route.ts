@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseService } from "@/lib/supabaseClient";
 
-// GET /api/attendance?start=YYYY-MM-DD&end=YYYY-MM-DD&site_id=...&q=texto
+// GET /endpoints/attendance?start=YYYY-MM-DD&end=YYYY-MM-DD&site_id=...&q=texto
 // Devuelve marcas con persona, sucursal y métricas basicas
 export async function GET(req: Request) {
   const supabase = supabaseService();
@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("[API/attendance] error:", error);
+    console.error("[endpoints/attendance] error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -1,4 +1,4 @@
-// src/app/api/orders/route.ts
+// src/app/endpoints/orders/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { geocodeFirstOSM, normalizeAddressForSantaCruz } from '@/lib/geocode';

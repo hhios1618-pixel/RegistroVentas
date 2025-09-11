@@ -1,155 +1,278 @@
 // --- ARCHIVO COMPLETO: src/app/asesoras/page.tsx ---
 'use client';
 
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import useSWR from 'swr';
 
-type Me = { ok: boolean; role?: string; full_name?: string };
+/* ================================
+   Utils
+==================================*/
+const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then(r => r.json());
+const monthIso = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+const capRole = (r?: string) => (r || '').trim().toUpperCase();
 
-export default function AsesorasHome() {
-  const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
+/* ================================
+   Page
+==================================*/
+export default function AsesorPromotorHome() {
+  // identidad
+  const { data: me, isLoading: meLoading } = useSWR('/endpoints/me', fetcher);
+  const role = capRole(me?.role);
+  const allowed = !!me?.ok && (role === 'ASESOR' || role === 'PROMOTOR' || role === 'ADMIN');
 
-  // Carga /endpoints/me
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch('/endpoints/me', { cache: 'no-store' });
-        const j = await r.json();
-        setMe(j);
-      } catch (e) {
-        console.error('Error /endpoints/me', e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const role = (me?.role ?? '').toUpperCase();
-  const allowed = !!me?.ok && (role === 'ASESOR' || role === 'ADMIN');
-
-  return (
-    <main className="min-h-screen bg-gray-950 text-white">
-      {/* Fondo que NO bloquea */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px]" />
-      </div>
-
-      <div className="relative z-10 max-w-6xl mx-auto p-6 space-y-8">
-        <header className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">FENIX — Asesoras</h1>
-          <a href="/" className="text-sm text-gray-300 hover:text-white border border-white/10 bg-white/5 px-3 py-1.5 rounded-lg">
-            ← Ir al inicio
-          </a>
-        </header>
-
-        {/* --- BLOQUE DE PRUEBA A PRUEBA DE BALAS (fuera de todo) --- */}
-        {allowed && (
-          <nav
-            className="z-[9999] relative border border-emerald-700/40 bg-emerald-900/20 rounded-lg p-3"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <div className="text-xs text-emerald-200 mb-2">Navegación directa (debug):</div>
-            <div className="flex flex-wrap gap-3">
-              <a className="px-3 py-1 rounded bg-white/10 hover:bg-white/20" href="/playbook-whatsapp">/playbook-whatsapp</a>
-              <a className="px-3 py-1 rounded bg-white/10 hover:bg-white/20" href="/dashboard/captura">/dashboard/captura</a>
-              <a className="px-3 py-1 rounded bg-white/10 hover:bg-white/20" href="/asistencia">/asistencia</a>
-              <a className="px-3 py-1 rounded bg-white/10 hover:bg-white/20" href="/dashboard/devoluciones">/dashboard/devoluciones</a>
-            </div>
-          </nav>
-        )}
-
-        {/* Guard */}
-        {!loading && !allowed && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
-            No tienes permisos para esta vista.
-          </div>
-        )}
-
-        {/* Grid de tiles (estético) */}
-        {allowed && (
-          <section
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 relative z-[100]"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <Tile href="/playbook-whatsapp" title="Playbook WhatsApp" desc="Guiones oficiales y mejores prácticas." kbd="P" />
-            <Tile href="/dashboard/captura" title="Captura" desc="Carga/edición rápida de leads y pedidos." kbd="C" />
-            <Tile href="/asistencia" title="Asistencia" desc="Marca de entrada/salida y geolocalización." kbd="A" />
-            <Tile href="/dashboard/devoluciones" title="Devoluciones" desc="Gestión de casos y seguimiento." kbd="D" />
-          </section>
-        )}
-      </div>
-
-      {/* Doctor: detecta y desactiva overlays que interceptan el click */}
-      <ClickDoctor />
-    </main>
+  // datos personales del mes
+  const [month, setMonth] = useState(monthIso());
+  const { data: att, isLoading: attLoading } = useSWR(
+    allowed ? `/endpoints/my/attendance?month=${month}` : null, fetcher
   );
-}
-
-/** Tile minimalista con <a> nativo (sin Link, sin motion) */
-function Tile({ href, title, desc, kbd }: { href: string; title: string; desc: string; kbd?: string }) {
-  return (
-    <a
-      href={href}
-      className="block relative rounded-xl border border-white/10 bg-white/5 hover:bg-white/8 transition p-6 cursor-pointer pointer-events-auto focus:outline-none focus:ring-2 focus:ring-emerald-400"
-      style={{ zIndex: 110 }}
-      aria-label={title}
-      data-href={href}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {kbd && <span className="text-xs font-mono px-2 py-1 rounded border border-white/15 bg-white/5">{kbd}</span>}
-      </div>
-      <p className="text-sm text-white/70">{desc}</p>
-      <div className="mt-4 text-emerald-300 text-sm font-medium">Abrir →</div>
-    </a>
+  const { data: sal, isLoading: salLoading } = useSWR(
+    allowed ? `/endpoints/my/sales?month=${month}` : null, fetcher
   );
-}
 
-/** Desactiva automáticamente el primer overlay que esté tapando los clicks. */
-function ClickDoctor() {
+  // hotkeys
   useEffect(() => {
-    // 1) Loggea cualquier click y muestra quién recibe el evento
-    const onAnyClick = (e: MouseEvent) => {
-      // @ts-ignore
-      const cls = e.target?.className?.toString?.() ?? '';
-      console.log('CLICK TARGET →', e.target, cls);
+    const onKey = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key.toLowerCase() === 'a') window.location.href = '/asistencia';
+      if (e.key.toLowerCase() === 'r') window.location.href = '/promotores/registro';
+      if (e.key.toLowerCase() === 'm') window.location.href = '/mi/resumen';
     };
-    window.addEventListener('click', onAnyClick, true);
-
-    // 2) Busca el elemento que está encima del centro y quítale los eventos
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
-    const topEl = document.elementFromPoint(cx, cy) as HTMLElement | null;
-    if (topEl) {
-      const name = (topEl.className && topEl.className.toString()) || topEl.id || topEl.tagName;
-      console.log('[ClickDoctor] elementFromPoint(center):', name, topEl);
-      // Si NO es nuestro main, nav o un <a>, lo desarmamos como posible overlay
-      if (!(topEl.closest('main') && (topEl.tagName === 'A' || topEl.closest('a')))) {
-        topEl.style.pointerEvents = 'none';
-        topEl.style.zIndex = '0';
-        console.warn('[ClickDoctor] Overlay neutralizado:', name);
-      }
-    }
-
-    // 3) Kill-list para overlays conocidos de Next Dev Tools (por si acaso)
-    const suspects = [
-      '#nextjs-devtools',          // panel nuevo Next DevTools
-      '#nextjs-toast',             // toasts devtools
-      '#nextjs-portal',            // portales
-      '#nextjs-container',         // overlay container
-      '[data-nextjs-toast]',
-      '[data-nextjs-overlay]',
-    ];
-    suspects.forEach((sel) => {
-      document.querySelectorAll(sel).forEach((el) => {
-        (el as HTMLElement).style.pointerEvents = 'none';
-        (el as HTMLElement).style.zIndex = '0';
-        console.warn('[ClickDoctor] Neutralizado selector:', sel, el);
-      });
-    });
-
-    return () => window.removeEventListener('click', onAnyClick, true);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  return null;
+  // KPIs
+  const attK = att?.kpis ?? { dias_con_marca: 0, entradas: 0, salidas: 0, pct_geocerca_ok: 0 };
+  const salK = sal?.kpis ?? { ventas: 0, pedidos: 0, total: 0 };
+
+  // listas
+  const ventas = sal?.list ?? [];
+  const ventasRecientes = ventas.slice(-8).reverse();
+  const dias = (att?.days ?? []).slice(-6).reverse(); // últimos 6 días
+
+  return (
+    <div className="min-h-screen bg-[#0D1117] text-[#C9D1D9]">
+      {/* Header fijo */}
+      <header className="sticky top-0 z-40 backdrop-blur bg-[#0D1117]/80 border-b border-[#30363D]">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-400 to-fuchsia-500 flex items-center justify-center font-extrabold text-black">
+              {(me?.full_name || 'U')[0]}
+            </div>
+            <div>
+              <div className="font-semibold text-white leading-tight">
+                Hola, {me?.full_name?.split(' ')[0] ?? '…'}
+              </div>
+              <div className="text-xs text-[#8B949E] -mt-0.5">Panel personal — {role || '—'}</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-[#8B949E]">Mes</label>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="bg-[#161B22] text-white border border-[#30363D] rounded-md px-2.5 py-1.5 text-sm outline-none"
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* Layout con sidebar */}
+      <div className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
+        {/* Sidebar */}
+        <nav className="glass rounded-xl p-4 h-fit">
+          <h3 className="text-xs uppercase tracking-wider text-[#8B949E] mb-2">
+            Navegación
+          </h3>
+          <ul className="space-y-1">
+            <Li href="/promotores/registro" kbd="R" label="Registrar venta" />
+            <Li href="/asistencia" kbd="A" label="Marcar asistencia" />
+            <Li href="/mi/resumen" kbd="M" label="Mi resumen" />
+            <Li href="/dashboard/captura" label="Captura / Embudo" />
+            <Li href="/playbook-whatsapp" label="Playbook WhatsApp" />
+          </ul>
+
+          <div className="border-t border-[#30363D] mt-4 pt-4">
+            <h3 className="text-xs uppercase tracking-wider text-[#8B949E] mb-2">Ayuda</h3>
+            <ul className="space-y-1">
+              <Li href="/" label="Inicio" />
+              <Li href="/dashboard/usuarios" label="Mi perfil" />
+            </ul>
+          </div>
+        </nav>
+
+        {/* Contenido */}
+        <main>
+          {/* Acciones rápidas */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+            <QuickAction
+              title="Registrar venta"
+              desc="Carga rápida con validaciones"
+              href="/promotores/registro"
+              icon="💸"
+              gradient="from-emerald-400 to-teal-500"
+              kbd="R"
+            />
+            <QuickAction
+              title="Marcar asistencia"
+              desc="Selfie + GPS + QR"
+              href="/asistencia"
+              icon="⏱️"
+              gradient="from-cyan-400 to-blue-500"
+              kbd="A"
+            />
+            <QuickAction
+              title="Mi resumen"
+              desc="KPIs de ventas y asistencia"
+              href="/mi/resumen"
+              icon="📊"
+              gradient="from-fuchsia-400 to-pink-500"
+              kbd="M"
+            />
+          </section>
+
+          {/* KPIs del mes */}
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+            <KpiCard title="Ventas" value={salK.ventas} />
+            <KpiCard title="Pedidos" value={salK.pedidos} />
+            <KpiCard title="Total (Bs)" value={salK.total} money />
+            <KpiCard title="% Geo OK" value={attK.pct_geocerca_ok} suffix="%" />
+          </section>
+
+          {/* Grids principales */}
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Últimas ventas */}
+            <div className="glass rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-white">Últimas ventas</h3>
+                <div className="text-xs text-[#8B949E]">{salLoading ? 'Cargando…' : `${ventasRecientes.length} registros`}</div>
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead className="text-[#8B949E] border-b border-[#30363D]">
+                    <tr>
+                      <Th>Fecha</Th>
+                      <Th>Pedido</Th>
+                      <Th>Producto</Th>
+                      <Th className="text-right">Cant</Th>
+                      <Th className="text-right">Total</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {salLoading && (
+                      <tr><Td colSpan={5}>Cargando…</Td></tr>
+                    )}
+                    {!salLoading && ventasRecientes.map((r: any) => (
+                      <tr key={r.id} className="border-b border-[#1F242B]">
+                        <Td>{r.order_date?.slice(0,10)}</Td>
+                        <Td className="font-mono">{r.order_id}</Td>
+                        <Td>{r.product_name}</Td>
+                        <Td className="text-right">{r.qty}</Td>
+                        <Td className="text-right">Bs {Number(r.total||0).toLocaleString('es-BO')}</Td>
+                      </tr>
+                    ))}
+                    {!salLoading && ventasRecientes.length === 0 && (
+                      <tr><Td colSpan={5} className="text-[#8B949E]">No hay ventas registradas este mes.</Td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Asistencia reciente */}
+            <div className="glass rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-white">Asistencia reciente</h3>
+                <div className="text-xs text-[#8B949E]">{attLoading ? 'Cargando…' : `${dias.length} días`}</div>
+              </div>
+
+              <div className="space-y-3">
+                {attLoading && <div className="text-sm text-[#8B949E]">Cargando…</div>}
+                {!attLoading && dias.map((d: any) => (
+                  <div key={d.date} className="rounded-lg border border-[#30363D] bg-[#161B22] p-3">
+                    <div className="text-sm font-semibold text-white mb-2">{d.date}</div>
+                    <div className="flex flex-wrap gap-6 text-sm">
+                      {d.marks.map((m: any) => (
+                        <div key={m.id} className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-md text-xs ${m.type === 'in' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                            {m.type.toUpperCase()}
+                          </span>
+                          <span className="text-[#8B949E]">
+                            {new Date(m.taken_at).toLocaleTimeString('es-BO',{hour:'2-digit',minute:'2-digit'})}
+                            {typeof m.distance_m === 'number' && <> · {Math.round(m.distance_m)} m</>}
+                            {m.site_name && <> · {m.site_name}</>}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {!attLoading && dias.length === 0 && (
+                  <div className="text-sm text-[#8B949E]">Aún no hay marcas este mes.</div>
+                )}
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <style jsx global>{`
+        .glass { background-color: rgba(22, 27, 34, 0.55); border: 1px solid #30363D; }
+      `}</style>
+    </div>
+  );
+}
+
+/* ================================
+   Subcomponentes
+==================================*/
+function Li({ href, label, kbd }: { href: string; label: string; kbd?: string }) {
+  return (
+    <li>
+      <Link href={href} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-[#161B22] border border-transparent hover:border-[#30363D]">
+        <span>{label}</span>
+        {kbd && <span className="text-[10px] font-mono text-[#8B949E] border border-[#30363D] rounded px-1.5 py-0.5">{kbd}</span>}
+      </Link>
+    </li>
+  );
+}
+
+function QuickAction({
+  title, desc, href, icon, gradient, kbd,
+}: { title: string; desc: string; href: string; icon: string; gradient: string; kbd?: string }) {
+  return (
+    <Link href={href} className="group rounded-xl border border-[#30363D] bg-[#161B22] p-4 hover:shadow-lg hover:shadow-cyan-500/10 transition">
+      <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center text-black font-bold text-lg`}>
+        {icon}
+      </div>
+      <div className="mt-3">
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold text-white">{title}</h4>
+          {kbd && <span className="text-[10px] font-mono text-[#8B949E] border border-[#30363D] rounded px-1.5 py-0.5">{kbd}</span>}
+        </div>
+        <p className="text-sm text-[#8B949E]">{desc}</p>
+      </div>
+    </Link>
+  );
+}
+
+function KpiCard({ title, value, suffix = '', money = false }:{ title:string; value:number; suffix?:string; money?:boolean }) {
+  return (
+    <div className="rounded-xl border border-[#30363D] bg-[#161B22] p-4">
+      <div className="text-sm text-[#8B949E]">{title}</div>
+      <div className="text-2xl font-extrabold text-white mt-1">
+        {money ? 'Bs ' : ''}{Number(value || 0).toLocaleString('es-BO')}{suffix}
+      </div>
+    </div>
+  );
+}
+
+function Th({ children, className = '' }: any) {
+  return <th className={`text-left px-2 py-2 ${className}`}>{children}</th>;
+}
+function Td({ children, className = '', colSpan }: any) {
+  return <td colSpan={colSpan} className={`px-2 py-2 align-top ${className}`}>{children}</td>;
 }

@@ -1,4 +1,4 @@
-// RUTA: src/app/api/vendedores/reporte/route.ts
+// RUTA: src/app/endpoints/vendedores/reporte/route.ts
 
 import { NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';

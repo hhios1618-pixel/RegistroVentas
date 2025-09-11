@@ -228,7 +228,7 @@ export default function AsistenciaPage() {
   const handleMeasureDistance = async () => {
     if (!loc || !siteId) return;
     try {
-      const r = await fetch('/api/debug/distance', {
+      const r = await fetch('/endpoints/debug/distance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ site_id: siteId, lat: loc.lat, lng: loc.lng })

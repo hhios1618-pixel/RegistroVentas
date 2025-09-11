@@ -1,4 +1,4 @@
-// app/api/products/route.ts  (misma funcionalidad; solo lazy init + runtime node)
+// app/endpoints/products/route.ts  (misma funcionalidad; solo lazy init + runtime node)
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 

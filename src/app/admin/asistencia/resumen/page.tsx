@@ -64,7 +64,7 @@ export default function AsistenciaResumenPage() {
 
   useEffect(() => {
     (async () => {
-      const r = await fetch('/api/sites', { cache: 'no-store' });
+      const r = await fetch('/endpoints/sites', { cache: 'no-store' });
       const j = await r.json();
       if (r.ok) setSites(j.data || []);
     })();
@@ -80,7 +80,7 @@ export default function AsistenciaResumenPage() {
       if (siteId) params.set('site_id', siteId);
       if (q) params.set('q', q);
 
-      const r = await fetch(`/api/attendance/summary?${params.toString()}`, { cache: 'no-store' });
+      const r = await fetch(`/endpoints/attendance/summary?${params.toString()}`, { cache: 'no-store' });
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || 'summary_fetch_failed');
       setRows(j.data || []);

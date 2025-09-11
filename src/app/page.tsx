@@ -25,17 +25,13 @@ const DynamicGlobalStyles = () => (
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    .fade-in-animation {
-      animation: fade-in 0.5s ease-out forwards;
-    }
+    .fade-in-animation { animation: fade-in 0.5s ease-out forwards; }
     .glass-pane {
-      background-color: rgba(22, 27, 34, 0.5); /* bg-medium with transparency */
+      background-color: rgba(22, 27, 34, 0.5);
       backdrop-filter: blur(12px);
       border: 1px solid var(--border-color);
     }
-    .chart-bar:hover {
-      fill: var(--accent-cyan);
-    }
+    .chart-bar:hover { fill: var(--accent-cyan); }
   `}</style>
 );
 
@@ -48,20 +44,14 @@ type Cap =
   | 'view:promotores:registro' | 'view:promotores:resumen' | 'view:kpis' | 'view:users-admin'
   | 'view:asistencia' | 'view:captura-embudo';
 
-type NavLinkItem = {
-    cap: Cap;
-    href: string;
-    icon: ReactNode;
-    label: string;
-    shortcut: string;
-};
+type NavLinkItem = { cap: Cap; href: string; icon: ReactNode; label: string; shortcut: string; };
 
 const ROLE_CAPS: Record<Role, Cap[]> = {
-  admin: ['view:kpis', 'view:logistica', 'view:sales-report', 'view:vendedores', 'view:returns', 'view:promotores:registro', 'view:promotores:resumen', 'view:asistencia', 'view:captura-embudo', 'view:users-admin', 'view:playbook'],
+  admin: ['view:kpis','view:logistica','view:sales-report','view:vendedores','view:returns','view:promotores:registro','view:promotores:resumen','view:asistencia','view:captura-embudo','view:users-admin','view:playbook'],
   promotor: ['view:promotores:registro'],
-  coordinador: ['view:kpis', 'view:logistica', 'view:asistencia', 'view:captura-embudo', 'view:playbook'],
-  lider: ['view:kpis', 'view:vendedores', 'view:promotores:resumen', 'view:asistencia', 'view:captura-embudo', 'view:playbook'],
-  asesor: ['view:sales-report', 'view:captura-embudo', 'view:playbook'],
+  coordinador: ['view:kpis','view:logistica','view:asistencia','view:captura-embudo','view:playbook'],
+  lider: ['view:kpis','view:vendedores','view:promotores:resumen','view:asistencia','view:captura-embudo','view:playbook'],
+  asesor: ['view:sales-report','view:captura-embudo','view:playbook'],
   unknown: [],
 };
 
@@ -69,11 +59,11 @@ const can = (role: Role, cap: Cap) => (ROLE_CAPS[role] ?? []).includes(cap);
 const fetcher = (url: string) => fetch(url).then((res) => res.ok ? res.json() : Promise.reject(new Error('Error al cargar datos.')));
 const normalizeRole = (rawRole?: string): Role => {
   const r = (rawRole || '').trim().toUpperCase();
-  if (['GERENCIA', 'ADMIN', 'ADMINISTRADOR'].includes(r)) return 'admin';
-  if (['PROMOTOR', 'PROMOTORA'].includes(r)) return 'promotor';
-  if (['COORDINADOR', 'COORDINADORA', 'COORDINACION'].includes(r)) return 'coordinador';
-  if (['LIDER', 'JEFE', 'SUPERVISOR'].includes(r)) return 'lider';
-  if (['ASESOR', 'VENDEDOR', 'VENDEDORA'].includes(r)) return 'asesor';
+  if (['GERENCIA','ADMIN','ADMINISTRADOR'].includes(r)) return 'admin';
+  if (['PROMOTOR','PROMOTORA'].includes(r)) return 'promotor';
+  if (['COORDINADOR','COORDINADORA','COORDINACION'].includes(r)) return 'coordinador';
+  if (['LIDER','JEFE','SUPERVISOR'].includes(r)) return 'lider';
+  if (['ASESOR','VENDEDOR','VENDEDORA'].includes(r)) return 'asesor';
   return 'unknown';
 };
 
@@ -81,211 +71,221 @@ const normalizeRole = (rawRole?: string): Role => {
    UI: CORE LAYOUT COMPONENTS
    ======================================================================== */
 const NavLink: FC<{ link: NavLinkItem; isActive?: boolean }> = ({ link, isActive = false }) => (
-    <Link href={link.href} className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors group relative ${isActive ? 'bg-bg-medium text-white' : 'text-text-primary hover:bg-bg-medium'}`}>
-        {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 bg-cyan-400 rounded-r-full"></div>}
-        <span className={`transition-colors ${isActive ? 'text-cyan-400' : 'text-text-secondary group-hover:text-cyan-400'}`}>{link.icon}</span>
-        <span className="ml-4 flex-1">{link.label}</span>
-        <span className="text-xs font-mono text-gray-500 border border-gray-700 rounded px-1.5 py-0.5">{link.shortcut}</span>
-    </Link>
+  <Link href={link.href} className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors group relative ${isActive ? 'bg-bg-medium text-white' : 'text-text-primary hover:bg-bg-medium'}`}>
+    {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 bg-cyan-400 rounded-r-full"></div>}
+    <span className={`transition-colors ${isActive ? 'text-cyan-400' : 'text-text-secondary group-hover:text-cyan-400'}`}>{link.icon}</span>
+    <span className="ml-4 flex-1">{link.label}</span>
+    <span className="text-xs font-mono text-gray-500 border border-gray-700 rounded px-1.5 py-0.5">{link.shortcut}</span>
+  </Link>
 );
 
 const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, userName }) => {
-    const navSections = [
-        {
-            title: 'Análisis y Reportes',
-            links: [
-                { cap: 'view:sales-report', href: '/dashboard/sales-report', icon: <IconSalesReport className="w-5 h-5" />, label: 'Reporte de Ventas', shortcut: '2' },
-                { cap: 'view:vendedores', href: '/dashboard/vendedores', icon: <IconVendedores className="w-5 h-5" />, label: 'Vendedores', shortcut: '3' },
-                { cap: 'view:promotores:resumen', href: '/promotores/resumen', icon: <IconResumen className="w-5 h-5" />, label: 'Resumen Promotores', shortcut: '7' },
-            ]
-        },
-        {
-            title: 'Operaciones y Captura',
-            links: [
-                { cap: 'view:logistica', href: '/logistica', icon: <IconTruck className="w-5 h-5" />, label: 'Logística', shortcut: '1' },
-                { cap: 'view:returns', href: '/dashboard/devoluciones', icon: <IconReturn className="w-5 h-5" />, label: 'Devoluciones', shortcut: '4' },
-                { cap: 'view:promotores:registro', href: '/promotores/registro', icon: <IconRegistro className="w-5 h-5" />, label: 'Registro Ventas', shortcut: '6' },
-                { cap: 'view:captura-embudo', href: '/dashboard/captura', icon: <IconEmbudo className="w-5 h-5" />, label: 'Captura / Embudo', shortcut: 'C' },
-                { cap: 'view:asistencia', href: '/asistencia', icon: <IconAsistencia className="w-5 h-5" />, label: 'Asistencia', shortcut: 'A' },
-            ]
-        },
-        {
-            title: 'Administración',
-            links: [
-                { cap: 'view:playbook', href: '/playbook-whatsapp', icon: <IconPlaybook className="w-5 h-5" />, label: 'Playbook', shortcut: '5' },
-                { cap: 'view:users-admin', href: '/dashboard/usuarios', icon: <IconUsersAdmin className="w-5 h-5" />, label: 'Admin Usuarios', shortcut: '8' },
-            ]
-        }
-    ];
+  const navSections = [
+    {
+      title: 'Análisis y Reportes',
+      links: [
+        { cap: 'view:sales-report', href: '/dashboard/sales-report', icon: <IconSalesReport className="w-5 h-5" />, label: 'Reporte de Ventas', shortcut: '2' },
+        { cap: 'view:vendedores', href: '/dashboard/vendedores', icon: <IconVendedores className="w-5 h-5" />, label: 'Vendedores', shortcut: '3' },
+        { cap: 'view:promotores:resumen', href: '/promotores/resumen', icon: <IconResumen className="w-5 h-5" />, label: 'Resumen Promotores', shortcut: '7' },
+      ]
+    },
+    {
+      title: 'Operaciones y Captura',
+      links: [
+        { cap: 'view:logistica', href: '/logistica', icon: <IconTruck className="w-5 h-5" />, label: 'Logística', shortcut: '1' },
+        { cap: 'view:returns', href: '/dashboard/devoluciones', icon: <IconReturn className="w-5 h-5" />, label: 'Devoluciones', shortcut: '4' },
+        { cap: 'view:promotores:registro', href: '/promotores/registro', icon: <IconRegistro className="w-5 h-5" />, label: 'Registro Ventas', shortcut: '6' },
+        { cap: 'view:captura-embudo', href: '/dashboard/captura', icon: <IconEmbudo className="w-5 h-5" />, label: 'Captura / Embudo', shortcut: 'C' },
+        { cap: 'view:asistencia', href: '/asistencia', icon: <IconAsistencia className="w-5 h-5" />, label: 'Asistencia', shortcut: 'A' },
+      ]
+    },
+    {
+      title: 'Administración',
+      links: [
+        { cap: 'view:playbook', href: '/playbook-whatsapp', icon: <IconPlaybook className="w-5 h-5" />, label: 'Playbook', shortcut: '5' },
 
-    return (
-        <aside className="w-64 fixed top-16 left-0 h-[calc(100vh-4rem)] bg-dark flex flex-col border-r border-border-color z-30">
-            <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                <NavLink link={{ cap: 'view:kpis', href: '/', icon: <IconDashboard className="w-5 h-5" />, label: 'Dashboard', shortcut: 'H' }} isActive />
-                
-                {navSections.map(section => {
-                    const accessibleLinks = section.links.filter(link => can(userRole, link.cap as Cap));
-                    if (accessibleLinks.length === 0) return null;
-                    
-                    return (
-                        <div key={section.title} className="pt-4">
-                            <h3 className="px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">{section.title}</h3>
-                            {accessibleLinks.map(link => <NavLink key={link.href} link={link as NavLinkItem} />)}
-                        </div>
-                    );
-                })}
-            </nav>
-            <div className="p-4 border-t border-border-color">
-                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-bg-medium flex items-center justify-center font-bold text-cyan-400">{userName.charAt(0)}</div>
-                    <div>
-                        <p className="text-sm font-semibold text-white">{userName}</p>
-                        <p className="text-xs text-text-secondary capitalize">{userRole}</p>
-                    </div>
-                 </div>
+        // NUEVO: resumen de asistencia (admin)
+        { cap: 'view:asistencia', href: '/admin/asistencia/resumen', icon: <IconAsistencia className="w-5 h-5" />, label: 'Resumen Asistencia', shortcut: 'R' },
+
+        { cap: 'view:users-admin', href: '/dashboard/usuarios', icon: <IconUsersAdmin className="w-5 h-5" />, label: 'Admin Usuarios', shortcut: '8' },
+      ]
+    }
+  ];
+
+  return (
+    <aside className="w-64 fixed top-16 left-0 h-[calc(100vh-4rem)] bg-dark flex flex-col border-r border-border-color z-30">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <NavLink link={{ cap: 'view:kpis', href: '/', icon: <IconDashboard className="w-5 h-5" />, label: 'Dashboard', shortcut: 'H' }} isActive />
+        {navSections.map(section => {
+          const accessibleLinks = section.links.filter(link => can(userRole, link.cap as Cap));
+          if (accessibleLinks.length === 0) return null;
+          return (
+            <div key={section.title} className="pt-4">
+              <h3 className="px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">{section.title}</h3>
+              {accessibleLinks.map(link => <NavLink key={link.href} link={link as NavLinkItem} />)}
             </div>
-        </aside>
-    );
+          );
+        })}
+      </nav>
+      <div className="p-4 border-t border-border-color">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-bg-medium flex items-center justify-center font-bold text-cyan-400">{userName.charAt(0)}</div>
+          <div>
+            <p className="text-sm font-semibold text-white">{userName}</p>
+            <p className="text-xs text-text-secondary capitalize">{userRole}</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
 };
 
 const HeaderBar: FC<{ greeting: string; userName: string; }> = ({ greeting, userName }) => {
-    const [time, setTime] = useState(new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' }));
-
-    useEffect(() => {
-        const timerId = setInterval(() => setTime(new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })), 60000);
-        return () => clearInterval(timerId);
-    }, []);
-
-    return (
-        <header className="flex items-center justify-between">
-            <div>
-                <h2 className="text-xl font-semibold text-white">{greeting}, {userName}</h2>
-                <p className="text-sm text-text-secondary">Bienvenido al panel de control.</p>
-            </div>
-            <div className="flex items-center gap-6">
-                <div className="text-right">
-                    <div className="font-mono text-lg text-white">{time}</div>
-                    <div className="text-xs text-text-secondary capitalize">{new Date().toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-medium text-green-400 bg-green-500/10 px-3 py-1.5 rounded-full">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    Sistema Activo
-                </div>
-            </div>
-        </header>
-    );
+  const [time, setTime] = useState(new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' }));
+  useEffect(() => {
+    const timerId = setInterval(() => setTime(new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })), 60000);
+    return () => clearInterval(timerId);
+  }, []);
+  return (
+    <header className="flex items-center justify-between">
+      <div>
+        <h2 className="text-xl font-semibold text-white">{greeting}, {userName}</h2>
+        <p className="text-sm text-text-secondary">Bienvenido al panel de control.</p>
+      </div>
+      <div className="flex items-center gap-6">
+        <div className="text-right">
+          <div className="font-mono text-lg text-white">{time}</div>
+          <div className="text-xs text-text-secondary capitalize">{new Date().toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-medium text-green-400 bg-green-500/10 px-3 py-1.5 rounded-full">
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          Sistema Activo
+        </div>
+      </div>
+    </header>
+  );
 };
 
 /* ========================================================================
    UI: DASHBOARD WIDGETS
    ======================================================================== */
 const AnimatedValue: FC<{ value: number; isCurrency?: boolean }> = ({ value, isCurrency = false }) => {
-    const ref = useRef<HTMLSpanElement>(null);
-    useEffect(() => {
-        const element = ref.current; if (!element) return;
-        const initialValue = parseFloat(element.textContent?.replace(/[^\d,-]/g, '').replace(',', '.') || '0');
-        let startTime: number; const duration = 1000;
-        const frame = (timestamp: number) => {
-            if (!startTime) startTime = timestamp;
-            const progress = Math.min((timestamp - startTime) / duration, 1);
-            const easedProgress = 1 - Math.pow(1 - progress, 4);
-            const currentValue = initialValue + (value - initialValue) * easedProgress;
-            element.textContent = currentValue.toLocaleString('es-BO', { minimumFractionDigits: isCurrency ? 2 : 0, maximumFractionDigits: isCurrency ? 2 : 0 });
-            if (progress < 1) requestAnimationFrame(frame);
-        };
-        requestAnimationFrame(frame);
-    }, [value, isCurrency]);
-    return <span ref={ref}>0</span>;
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const initialValue = parseFloat(el.textContent?.replace(/[^\d,-]/g, '').replace(',', '.') || '0');
+    let startTime: number; const duration = 1000;
+    const frame = (t: number) => {
+      if (!startTime) startTime = t;
+      const progress = Math.min((t - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 4);
+      const current = initialValue + (value - initialValue) * eased;
+      el.textContent = current.toLocaleString('es-BO', { minimumFractionDigits: isCurrency ? 2 : 0, maximumFractionDigits: isCurrency ? 2 : 0 });
+      if (progress < 1) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }, [value, isCurrency]);
+  return <span ref={ref}>0</span>;
 };
 
-const KpiCard: FC<{ icon: ReactNode; title: string; value: number; trend: string; isCurrency?: boolean; delay?: number; }> = ({ icon, title, value, trend, isCurrency = false, delay = 0 }) => (
-    <div className="p-5 glass-pane rounded-lg fade-in-animation flex items-center" style={{ animationDelay: `${delay}ms` }}>
-        <div className="w-10 h-10 flex items-center justify-center bg-bg-medium rounded-lg mr-4 text-cyan-400">{icon}</div>
-        <div className="flex-1">
-            <h3 className="text-sm text-text-secondary font-medium">{title}</h3>
-            <div className="flex items-baseline gap-2">
-                 <p className="text-2xl font-semibold text-white">
-                    {isCurrency && <span className="text-lg text-text-secondary mr-1">Bs</span>}
-                    <AnimatedValue value={value} isCurrency={isCurrency} />
-                </p>
-                <span className={`text-xs font-semibold ${trend.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>{trend}</span>
-            </div>
-        </div>
+const KpiCard: FC<{ icon: ReactNode; title: string; value: number; trend: string; isCurrency?: boolean; delay?: number; }> =
+  ({ icon, title, value, trend, isCurrency = false, delay = 0 }) => (
+  <div className="p-5 glass-pane rounded-lg fade-in-animation flex items-center" style={{ animationDelay: `${delay}ms` }}>
+    <div className="w-10 h-10 flex items-center justify-center bg-bg-medium rounded-lg mr-4 text-cyan-400">{icon}</div>
+    <div className="flex-1">
+      <h3 className="text-sm text-text-secondary font-medium">{title}</h3>
+      <div className="flex items-baseline gap-2">
+        <p className="text-2xl font-semibold text-white">
+          {isCurrency && <span className="text-lg text-text-secondary mr-1">Bs</span>}
+          <AnimatedValue value={value} isCurrency={isCurrency} />
+        </p>
+        <span className={`text-xs font-semibold ${trend.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}>{trend}</span>
+      </div>
     </div>
+  </div>
 );
 
 const SalesChart = () => {
-    const data = [ { day: 'Lun', sales: 4000 }, { day: 'Mar', sales: 3000 }, { day: 'Mié', sales: 5000 }, { day: 'Jue', sales: 4500 }, { day: 'Vie', sales: 6000 }, { day: 'Sáb', sales: 8000 }, { day: 'Dom', sales: 7500 }, ];
-    const maxSales = Math.max(...data.map(d => d.sales));
-    return (
-        <div className="h-full flex flex-col">
-             <h3 className="text-lg font-semibold text-white mb-4">Resumen de Actividad Reciente</h3>
-             <div className="flex-grow">
-                <svg width="100%" height="100%" viewBox="0 0 500 250" className="text-text-secondary">
-                    {/* Y-Axis Lines */}
-                    {[0.25, 0.5, 0.75, 1].map(v => <line key={v} x1="30" y1={220 - (200 * v)} x2="490" y2={220 - (200 * v)} stroke="var(--border-color)" strokeWidth="1" strokeDasharray="2,2" />)}
-                    {/* X-Axis */}
-                    <line x1="30" y1="220" x2="490" y2="220" stroke="var(--border-color)" strokeWidth="1" />
-                    {data.map((d, i) => {
-                        const barHeight = (d.sales / maxSales) * 200;
-                        return (
-                            <g key={d.day}>
-                                <title>{`${d.day}: Bs ${d.sales.toLocaleString('es-BO')}`}</title>
-                                <rect x={40 + i * 65} y={220 - barHeight} width="40" height={barHeight} fill="var(--accent-cyan-dark)" rx="2" className="chart-bar transition-all" />
-                                <text x={60 + i * 65} y="235" textAnchor="middle" fontSize="12" fill="currentColor">{d.day}</text>
-                            </g>
-                        );
-                    })}
-                    {/* Y-Axis Labels */}
-                    <text x="25" y="225" textAnchor="end" fontSize="12" fill="currentColor">0</text>
-                    <text x="25" y="25" textAnchor="end" fontSize="12" fill="currentColor">{maxSales/1000}k</text>
-                </svg>
-            </div>
-        </div>
-    );
+  const data = [
+    { day: 'Lun', sales: 4000 }, { day: 'Mar', sales: 3000 }, { day: 'Mié', sales: 5000 },
+    { day: 'Jue', sales: 4500 }, { day: 'Vie', sales: 6000 }, { day: 'Sáb', sales: 8000 }, { day: 'Dom', sales: 7500 },
+  ];
+  const maxSales = Math.max(...data.map(d => d.sales));
+  return (
+    <div className="h-full flex flex-col">
+      <h3 className="text-lg font-semibold text-white mb-4">Resumen de Actividad Reciente</h3>
+      <div className="flex-grow">
+        <svg width="100%" height="100%" viewBox="0 0 500 250" className="text-text-secondary">
+          {[0.25, 0.5, 0.75, 1].map(v => <line key={v} x1="30" y1={220 - (200 * v)} x2="490" y2={220 - (200 * v)} stroke="var(--border-color)" strokeWidth="1" strokeDasharray="2,2" />)}
+          <line x1="30" y1="220" x2="490" y2="220" stroke="var(--border-color)" strokeWidth="1" />
+          {data.map((d, i) => {
+            const h = (d.sales / maxSales) * 200;
+            return (
+              <g key={d.day}>
+                <title>{`${d.day}: Bs ${d.sales.toLocaleString('es-BO')}`}</title>
+                <rect x={40 + i * 65} y={220 - h} width="40" height={h} fill="var(--accent-cyan-dark)" rx="2" className="chart-bar transition-all" />
+                <text x={60 + i * 65} y="235" textAnchor="middle" fontSize="12" fill="currentColor">{d.day}</text>
+              </g>
+            );
+          })}
+          <text x="25" y="225" textAnchor="end" fontSize="12" fill="currentColor">0</text>
+          <text x="25" y="25" textAnchor="end" fontSize="12" fill="currentColor">{maxSales/1000}k</text>
+        </svg>
+      </div>
+    </div>
+  );
 };
 
 const NotificationsFeed = () => {
-    const notifications = [ { icon: <IconWallet className="w-5 h-5"/>, text: 'Venta #8231 confirmada por Bs 1,250', time: 'hace 5 min' }, { icon: <IconTruck className="w-5 h-5"/>, text: 'Despacho #412 ha sido asignado.', time: 'hace 2 horas' }, { icon: <IconReturn className="w-5 h-5"/>, text: 'Solicitud de devolución iniciada.', time: 'hace 3 horas' }, { icon: <IconUsersAdmin className="w-5 h-5"/>, text: 'Juan Pérez ha actualizado su perfil.', time: 'hace 1 día' }, ];
-    return (
-        <div>
-            <h3 className="text-lg font-semibold text-white mb-4">Notificaciones</h3>
-            <ul className="space-y-4">
-                {notifications.map((n, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                        <div className={`p-2 rounded-full bg-bg-medium ${ i === 0 ? 'text-cyan-400' : 'text-text-secondary'}`}>{n.icon}</div>
-                        <div>
-                            <p className="text-sm text-text-primary">{n.text}</p>
-                            <p className="text-xs text-text-secondary">{n.time}</p>
-                        </div>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
+  const notifications = [
+    { icon: <IconWallet className="w-5 h-5"/>, text: 'Venta #8231 confirmada por Bs 1,250', time: 'hace 5 min' },
+    { icon: <IconTruck className="w-5 h-5"/>, text: 'Despacho #412 ha sido asignado.', time: 'hace 2 horas' },
+    { icon: <IconReturn className="w-5 h-5"/>, text: 'Solicitud de devolución iniciada.', time: 'hace 3 horas' },
+    { icon: <IconUsersAdmin className="w-5 h-5"/>, text: 'Juan Pérez ha actualizado su perfil.', time: 'hace 1 día' },
+  ];
+  return (
+    <div>
+      <h3 className="text-lg font-semibold text-white mb-4">Notificaciones</h3>
+      <ul className="space-y-4">
+        {notifications.map((n, i) => (
+          <li key={i} className="flex items-start gap-3">
+            <div className={`p-2 rounded-full bg-bg-medium ${ i === 0 ? 'text-cyan-400' : 'text-text-secondary'}`}>{n.icon}</div>
+            <div>
+              <p className="text-sm text-text-primary">{n.text}</p>
+              <p className="text-xs text-text-secondary">{n.time}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 };
 
 const TopPerformers = () => {
-    const performers = [ { name: 'Maria Rodriguez', sales: 15200.50, color: 'bg-cyan-400' }, { name: 'Carlos Guzman', sales: 12800.00, color: 'bg-cyan-600' }, { name: 'Ana Mendoza', sales: 11500.75, color: 'bg-cyan-800' },];
-    return (
-         <div className="lg:col-span-1 glass-pane rounded-lg p-6 fade-in-animation" style={{ animationDelay: '700ms' }}>
-            <h3 className="text-lg font-semibold text-white mb-4">Vendedores con Mejor Rendimiento</h3>
-            <ul className="space-y-4">
-                 {performers.map(p => (
-                    <li key={p.name}>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="font-medium text-text-primary">{p.name}</span>
-                            <span className="text-text-secondary">Bs {p.sales.toLocaleString('es-BO')}</span>
-                        </div>
-                        <div className="w-full bg-bg-medium rounded-full h-1.5">
-                            <div className={`${p.color} h-1.5 rounded-full`} style={{ width: `${(p.sales / performers[0].sales) * 100}%`}}></div>
-                        </div>
-                    </li>
-                ))}
-            </ul>
-        </div>
-    );
-}
+  const performers = [
+    { name: 'Maria Rodriguez', sales: 15200.50, color: 'bg-cyan-400' },
+    { name: 'Carlos Guzman', sales: 12800.00, color: 'bg-cyan-600' },
+    { name: 'Ana Mendoza', sales: 11500.75, color: 'bg-cyan-800' },
+  ];
+  return (
+    <div className="lg:col-span-1 glass-pane rounded-lg p-6 fade-in-animation" style={{ animationDelay: '700ms' }}>
+      <h3 className="text-lg font-semibold text-white mb-4">Vendedores con Mejor Rendimiento</h3>
+      <ul className="space-y-4">
+        {performers.map(p => (
+          <li key={p.name}>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="font-medium text-text-primary">{p.name}</span>
+              <span className="text-text-secondary">Bs {p.sales.toLocaleString('es-BO')}</span>
+            </div>
+            <div className="w-full bg-bg-medium rounded-full h-1.5">
+              <div className={`${p.color} h-1.5 rounded-full`} style={{ width: `${(p.sales / performers[0].sales) * 100}%`}}></div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
 
 /* ========================================================================
    MAIN PAGE COMPONENT
@@ -298,13 +298,24 @@ export default function HomePage() {
   const kpiData = useMemo(() => {
     if (!salesReport) return { sales: 0, orders: 0, revenue: 0, returns: 0 };
     const todaySales = salesReport.filter((s: any) => s.order_date.startsWith(new Date().toISOString().slice(0, 10)));
-    return { sales: todaySales.length, orders: new Set(todaySales.map((s: any) => s.order_id)).size, revenue: todaySales.reduce((acc: number, s: any) => acc + (s.total || 0), 0), returns: 0 };
+    return {
+      sales: todaySales.length,
+      orders: new Set(todaySales.map((s: any) => s.order_id)).size,
+      revenue: todaySales.reduce((acc: number, s: any) => acc + (s.total || 0), 0),
+      returns: 0
+    };
   }, [salesReport]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
-      const keyMap: Record<string, string> = { 'H': '/', '1': '/logistica', '2': '/dashboard/sales-report', '3': '/dashboard/vendedores', '4': '/dashboard/devoluciones', '5': '/playbook-whatsapp', '6': '/promotores/registro', '7': '/promotores/resumen', '8': '/dashboard/usuarios' };
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      const keyMap: Record<string, string> = {
+        'H': '/', '1': '/logistica', '2': '/dashboard/sales-report', '3': '/dashboard/vendedores',
+        '4': '/dashboard/devoluciones', '5': '/playbook-whatsapp', '6': '/promotores/registro',
+        '7': '/promotores/resumen', '8': '/dashboard/usuarios',
+        // NUEVO atajo
+        'R': '/admin/asistencia/resumen',
+      };
       if (keyMap[e.key]) { e.preventDefault(); window.location.href = keyMap[e.key]; }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -314,8 +325,8 @@ export default function HomePage() {
   const userName = meLoading ? '...' : me?.full_name || 'Usuario';
   const userFirstName = userName.split(' ')[0];
   const greeting = useMemo(() => {
-      const hour = new Date().getHours();
-      return hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+    const hour = new Date().getHours();
+    return hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
   }, []);
 
   return (
@@ -324,30 +335,28 @@ export default function HomePage() {
       <div className="flex min-h-screen bg-bg-dark font-sans">
         <Sidebar userRole={userRole} userName={userName} />
         <main className="flex-1 ml-64 pt-16">
-            <div className="p-8 max-w-7xl mx-auto space-y-8">
-                <HeaderBar greeting={greeting} userName={userFirstName} />
-
-                {can(userRole, 'view:kpis') && (
-                    <section>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <KpiCard icon={<IconChart className="w-6 h-6"/>} title="Ventas del Día" value={kpiData.sales} trend="+5%" delay={100} />
-                            <KpiCard icon={<IconPackage className="w-6 h-6"/>} title="Pedidos Facturados" value={kpiData.orders} trend="+2%" delay={200} />
-                            <KpiCard icon={<IconWallet className="w-6 h-6"/>} title="Ingresos (Hoy)" value={kpiData.revenue} trend="+12.5%" isCurrency delay={300} />
-                            <KpiCard icon={<IconReturn className="w-6 h-6"/>} title="Devoluciones" value={kpiData.returns} trend="-1%" delay={400} />
-                        </div>
-                    </section>
-                )}
-
-                <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-2 glass-pane rounded-lg p-6 min-h-[350px] fade-in-animation" style={{ animationDelay: '500ms' }}>
-                       <SalesChart />
-                    </div>
-                    <div className="lg:col-span-1 glass-pane rounded-lg p-6 fade-in-animation" style={{ animationDelay: '600ms' }}>
-                        <NotificationsFeed />
-                    </div>
-                    <TopPerformers />
-                </section>
-            </div>
+          <div className="p-8 max-w-7xl mx-auto space-y-8">
+            <HeaderBar greeting={greeting} userName={userFirstName} />
+            {can(userRole, 'view:kpis') && (
+              <section>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <KpiCard icon={<IconChart className="w-6 h-6"/>} title="Ventas del Día" value={kpiData.sales} trend="+5%" delay={100} />
+                  <KpiCard icon={<IconPackage className="w-6 h-6"/>} title="Pedidos Facturados" value={kpiData.orders} trend="+2%" delay={200} />
+                  <KpiCard icon={<IconWallet className="w-6 h-6"/>} title="Ingresos (Hoy)" value={kpiData.revenue} trend="+12.5%" isCurrency delay={300} />
+                  <KpiCard icon={<IconReturn className="w-6 h-6"/>} title="Devoluciones" value={kpiData.returns} trend="-1%" delay={400} />
+                </div>
+              </section>
+            )}
+            <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 glass-pane rounded-lg p-6 min-h-[350px] fade-in-animation" style={{ animationDelay: '500ms' }}>
+                <SalesChart />
+              </div>
+              <div className="lg:col-span-1 glass-pane rounded-lg p-6 fade-in-animation" style={{ animationDelay: '600ms' }}>
+                <NotificationsFeed />
+              </div>
+              <TopPerformers />
+            </section>
+          </div>
         </main>
       </div>
     </>

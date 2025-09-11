@@ -8,7 +8,7 @@ export default function AdminSucursalesPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = async () => {
-    const res = await fetch('/api/sites', { cache: 'no-store', headers: { Accept: 'application/json' } });
+    const res = await fetch('/endpoints/sites', { cache: 'no-store', headers: { Accept: 'application/json' } });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || 'sites_fetch_failed');
     setSites(json.data as Site[]);
@@ -20,14 +20,14 @@ export default function AdminSucursalesPage() {
     setMsg(null);
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
       const payload = { lat: coords.latitude, lng: coords.longitude };
-      const res = await fetch(`/api/sites/${s.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res = await fetch(`/endpoints/sites/${s.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (res.ok) { setMsg(`Coordenadas actualizadas para "${s.name}"`); load(); }
       else setMsg('No se pudo actualizar.');
     }, () => setMsg('Activa GPS y permisos.'), { enableHighAccuracy: true, timeout: 10000 });
   };
 
   const updateRadius = async (s: Site, radius: number) => {
-    const res = await fetch(`/api/sites/${s.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ radius_m: radius }) });
+    const res = await fetch(`/endpoints/sites/${s.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ radius_m: radius }) });
     if (res.ok) load();
   };
 
