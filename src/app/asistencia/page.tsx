@@ -1,10 +1,12 @@
 'use client';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import CameraCapture from '@/components/attendance/CameraCapture';
 import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
 import { isMobileUA } from '@/lib/device';
 import { compressDataUrl } from '@/lib/image';
 
+/* ================== GPS mejorado (muestreo) ================== */
 type GeoFix = { lat: number; lng: number; accuracy: number; ts: number };
 type GeoResult = { lat: number; lng: number; accuracy: number };
 
@@ -15,8 +17,10 @@ async function getBestLocation(opts?: {
   const minAcc  = opts?.minAccuracy ?? 35;
   const hard    = opts?.hardLimit ?? 60;
   const tmo     = opts?.timeoutMs ?? 15000;
+
   const fixes: GeoFix[] = [];
   const started = Date.now();
+
   const getOnce = () =>
     new Promise<GeoFix>((resolve, reject) => {
       const id = navigator.geolocation.watchPosition(
@@ -29,6 +33,7 @@ async function getBestLocation(opts?: {
         { enableHighAccuracy: true, maximumAge: 0, timeout: Math.min(4000, tmo) }
       );
     });
+
   while (fixes.length < samples && Date.now() - started < tmo) {
     try {
       const fix = await getOnce();
@@ -37,17 +42,21 @@ async function getBestLocation(opts?: {
       await new Promise(r => setTimeout(r, 300));
     } catch {}
   }
+
   if (!fixes.length) throw new Error('gps_unavailable');
   fixes.sort((a, b) => a.accuracy - b.accuracy);
   const best = fixes.slice(0, Math.max(1, Math.floor(fixes.length * 0.7)));
+
   const good = best.find(f => f.accuracy <= minAcc);
   if (good) return good;
   const hardOk = best.find(f => f.accuracy <= hard);
   if (hardOk) return hardOk;
   return best[0];
 }
+/* ============================================================= */
 
 type CheckType = 'in' | 'out';
+
 type Me = {
   ok: boolean;
   id: string;
@@ -58,15 +67,13 @@ type Me = {
 };
 
 export default function AsistenciaPage() {
-  // Evita mismatch de hidratación: detecta device post-hidratación
-  const [ready, setReady] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
-    setReady(true);
-    setIsDesktop(!isMobileUA());
-  }, []);
+  /* ------- Montaje seguro (evita hydration mismatch) ------- */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  /* --------------------------------------------------------- */
 
   const [me, setMe] = useState<Me | null>(null);
+
   const [siteId, setSiteId] = useState<string | null>(null);
   const [siteName, setSiteName] = useState<string | null>(null);
 
@@ -79,6 +86,7 @@ export default function AsistenciaPage() {
   const [locLoading, setLocLoading] = useState(false);
   const [resolvingSite, setResolvingSite] = useState(false);
 
+  // device id
   const deviceId = useMemo<string>(() => {
     const k = 'fx_device_id';
     let v = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
@@ -89,15 +97,42 @@ export default function AsistenciaPage() {
     return v || 'web-client';
   }, []);
 
-  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  // Cargar identidad
+  /* ============= Bloqueo de escritorio (sin mismatch) ============= */
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => { setIsDesktop(!isMobileUA()); }, []);
+  if (!mounted) {
+    // Render consistente para SSR
+    return (
+      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb'}}>
+        Cargando…
+      </div>
+    );
+  }
+  if (isDesktop) {
+    return (
+      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
+        <div style={{maxWidth:560,padding:24,borderRadius:16,border:'1px solid #334155',background:'rgba(15,23,42,.85)',textAlign:'center'}}>
+          <h1 style={{margin:'0 0 8px'}}>Marcaje solo desde teléfono 📱</h1>
+          <p style={{margin:0,opacity:.85}}>Para precisión real usamos el GPS del dispositivo. Abre este link en tu celular y activa ubicación precisa.</p>
+        </div>
+      </div>
+    );
+  }
+  /* ================================================================ */
+
+  /* ==================== Cargar identidad ==================== */
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch('/endpoints/me', { cache: 'no-store' });
         const d: Me = await r.json();
-        if (!r.ok || !d?.ok) throw new Error(d as any);
+        if (!r.ok || !d?.ok) throw new Error((d as any)?.error || 'me_failed');
         setMe(d);
       } catch {
         setToast('No se pudo cargar tu sesión');
@@ -105,45 +140,41 @@ export default function AsistenciaPage() {
     })();
   }, []);
 
-  // Resolver sucursal asignada
+  /* ============== Resolver sucursal asignada ============== */
   useEffect(() => {
     if (!me?.id) return;
     (async () => {
       setResolvingSite(true);
       try {
-        // a) asignada a mi usuario
-        let r = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
-        if (r.ok) {
-          const j = await r.json();
-          const s = Array.isArray(j?.results) ? j.results[0] : Array.isArray(j) ? j[0] : null;
-          if (s?.id) {
-            setSiteId(s.id);
-            setSiteName(s.name || s.title || s.local || 'Sucursal asignada');
-            setResolvingSite(false);
-            return;
-          }
+        // 1) Asignada (endpoint ya normaliza alias/nombres)
+        const r = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
+        const j = await r.json();
+        const s = Array.isArray(j?.results) ? j.results[0] : null;
+
+        if (s?.id) {
+          setSiteId(s.id);
+          setSiteName(s.name ?? 'Sucursal asignada');
+          setResolvingSite(false);
+          return;
         }
-        // b) fallback por nombre (people.local)
+
+        // 2) Fallback por nombre crudo de people.local
         if (me.local) {
           const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
-          if (r2.ok) {
-            const j2 = await r2.json();
-            const s2 = Array.isArray(j2?.results) ? j2.results[0] : Array.isArray(j2) ? j2[0] : null;
-            if (s2?.id) {
-              setSiteId(s2.id);
-              setSiteName(s2.name || s2.title || me.local);
-              setResolvingSite(false);
-              return;
-            }
-            setSiteId(null);
-            setSiteName(`${me.local} (no mapeada)`);
-            setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
+          const j2 = await r2.json();
+          const s2 = Array.isArray(j2?.results) ? j2.results[0] : null;
+          if (s2?.id) {
+            setSiteId(s2.id);
+            setSiteName(s2.name ?? me.local);
             setResolvingSite(false);
             return;
           }
         }
-        setToast('No se pudo resolver tu sucursal asignada');
-      } catch {
+
+        setSiteId(null);
+        setSiteName(me?.local ? `${me.local} (no mapeada)` : 'No asignada');
+        setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
+      } catch (e) {
         setToast('Fallo resolviendo sucursal');
       } finally {
         setResolvingSite(false);
@@ -155,11 +186,16 @@ export default function AsistenciaPage() {
   const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
   const progressPercent = (progress / 4) * 100;
 
+  /* =================== Acciones botones =================== */
   const handleGetQR = async () => {
     if (!siteId) { setToast('⚠️ No hay sucursal asignada'); return; }
-    const r = await getQR(siteId!);
-    setQr(r);
-    setToast(`✅ Código QR generado`);
+    try {
+      const r = await getQR(siteId);
+      setQr(r);
+      setToast(`✅ Código QR generado (expira en 60s)`);
+    } catch (e: any) {
+      setToast(`QR error: ${e?.message || 'falló la función'}`);
+    }
   };
 
   const handleGetLocation = async () => {
@@ -210,7 +246,9 @@ export default function AsistenciaPage() {
       if (r.ok) {
         setToast(`🎉 ${checkType === 'in' ? 'Entrada' : 'Salida'} registrada`);
         setSelfie(null); setLoc(null); setQr(null);
-      } else setToast('❌ Error al registrar');
+      } else {
+        setToast('❌ Error al registrar');
+      }
     } catch (err: any) {
       setToast(err?.message || '❌ Error al registrar');
     } finally {
@@ -218,23 +256,7 @@ export default function AsistenciaPage() {
     }
   };
 
-  // Mientras hidrata, render neutro (evita mismatch)
-  if (!ready) {
-    return <div style={{minHeight:'100dvh',background:'#0f172a'}} />;
-  }
-
-  // Si es desktop, muestra aviso (post-hidratación)
-  if (isDesktop) {
-    return (
-      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
-        <div style={{maxWidth:560,padding:24,borderRadius:16,border:'1px solid #334155',background:'rgba(15,23,42,.85)',textAlign:'center'}}>
-          <h1 style={{margin:'0 0 8px'}}>Marcaje solo desde teléfono 📱</h1>
-          <p style={{margin:0,opacity:.85}}>Para precisión real usamos el GPS del dispositivo. Abre este link en tu celular y activa ubicación precisa.</p>
-        </div>
-      </div>
-    );
-  }
-
+  /* ============================ UI ============================ */
   return (
     <div style={{
       minHeight: '100dvh',
@@ -304,8 +326,7 @@ export default function AsistenciaPage() {
                 setSelfie(small);
               }} />
               <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                <button type="button" onClick={async ()=>{ await handleGetLocation(); }}
-                  disabled={locLoading}
+                <button type="button" onClick={handleGetLocation} disabled={locLoading}
                   style={{ padding:'12px 16px', borderRadius:12, border:'1px solid rgba(148,163,184,.2)', background: locLoading ? 'rgba(71,85,105,.5)' : 'rgba(15,23,42,.8)', color:'#e5e7eb', fontWeight:600, cursor: locLoading ? 'not-allowed' : 'pointer' }}>
                   {locLoading ? 'Obteniendo ubicación…' : '📍 Obtener ubicación (mejorada)'}
                 </button>
