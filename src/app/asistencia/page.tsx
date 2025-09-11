@@ -67,16 +67,15 @@ type Me = {
 };
 
 export default function AsistenciaPage() {
-  /* ------- Montaje seguro (evita hydration mismatch) ------- */
+  // ================================================================
+  // CORRECCIÓN: TODOS LOS HOOKS SE DECLARAN AQUÍ ARRIBA
+  // ================================================================
+
+  /* ------- Estados y Hooks del Componente ------- */
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  /* --------------------------------------------------------- */
-
   const [me, setMe] = useState<Me | null>(null);
-
   const [siteId, setSiteId] = useState<string | null>(null);
   const [siteName, setSiteName] = useState<string | null>(null);
-
   const [checkType, setCheckType] = useState<CheckType>('in');
   const [selfie, setSelfie] = useState<string | null>(null);
   const [loc, setLoc] = useState<GeoResult | null>(null);
@@ -85,8 +84,9 @@ export default function AsistenciaPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [locLoading, setLocLoading] = useState(false);
   const [resolvingSite, setResolvingSite] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
-  // device id
+  // device id (useMemo es un Hook)
   const deviceId = useMemo<string>(() => {
     const k = 'fx_device_id';
     let v = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
@@ -97,36 +97,21 @@ export default function AsistenciaPage() {
     return v || 'web-client';
   }, []);
 
+  /* ------- Efectos Secundarios (useEffect) ------- */
+  // Efecto para el montaje seguro (evita hydration mismatch)
+  useEffect(() => { setMounted(true); }, []);
+
+  // Efecto para detectar si es escritorio
+  useEffect(() => { setIsDesktop(!isMobileUA()); }, []);
+
+  // Efecto para limpiar el toast
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
-
-  /* ============= Bloqueo de escritorio (sin mismatch) ============= */
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => { setIsDesktop(!isMobileUA()); }, []);
-  if (!mounted) {
-    // Render consistente para SSR
-    return (
-      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb'}}>
-        Cargando…
-      </div>
-    );
-  }
-  if (isDesktop) {
-    return (
-      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
-        <div style={{maxWidth:560,padding:24,borderRadius:16,border:'1px solid #334155',background:'rgba(15,23,42,.85)',textAlign:'center'}}>
-          <h1 style={{margin:'0 0 8px'}}>Marcaje solo desde teléfono 📱</h1>
-          <p style={{margin:0,opacity:.85}}>Para precisión real usamos el GPS del dispositivo. Abre este link en tu celular y activa ubicación precisa.</p>
-        </div>
-      </div>
-    );
-  }
-  /* ================================================================ */
-
-  /* ==================== Cargar identidad ==================== */
+  
+  // Efecto para cargar la identidad del usuario
   useEffect(() => {
     (async () => {
       try {
@@ -140,48 +125,73 @@ export default function AsistenciaPage() {
     })();
   }, []);
 
-  /* ============== Resolver sucursal asignada ============== */
+  // Efecto para resolver la sucursal asignada
   useEffect(() => {
     if (!me?.id) return;
     (async () => {
       setResolvingSite(true);
       try {
-        // 1) Asignada (endpoint ya normaliza alias/nombres)
-        const r = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
-        const j = await r.json();
-        const s = Array.isArray(j?.results) ? j.results[0] : null;
-
-        if (s?.id) {
-          setSiteId(s.id);
-          setSiteName(s.name ?? 'Sucursal asignada');
-          setResolvingSite(false);
-          return;
+        let foundSite = null;
+        const r1 = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
+        if (r1.ok) {
+            const j1 = await r1.json();
+            foundSite = Array.isArray(j1?.results) ? j1.results[0] : null;
         }
-
-        // 2) Fallback por nombre crudo de people.local
-        if (me.local) {
-          const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
-          const j2 = await r2.json();
-          const s2 = Array.isArray(j2?.results) ? j2.results[0] : null;
-          if (s2?.id) {
-            setSiteId(s2.id);
-            setSiteName(s2.name ?? me.local);
-            setResolvingSite(false);
-            return;
-          }
+        if (!foundSite && me.local) {
+            const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
+            if (r2.ok) {
+                const j2 = await r2.json();
+                foundSite = Array.isArray(j2?.results) ? j2.results[0] : null;
+            }
         }
-
-        setSiteId(null);
-        setSiteName(me?.local ? `${me.local} (no mapeada)` : 'No asignada');
-        setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
+        if (foundSite?.id) {
+            setSiteId(foundSite.id);
+            setSiteName(foundSite.name ?? me.local ?? 'Sucursal asignada');
+        } else {
+            setSiteId(null);
+            setSiteName(me?.local ? `${me.local} (no mapeada)` : 'No asignada');
+            setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
+        }
       } catch (e) {
+        console.error("Error resolviendo sucursal:", e);
         setToast('Fallo resolviendo sucursal');
+        setSiteId(null);
+        setSiteName('Error de red');
       } finally {
         setResolvingSite(false);
       }
     })();
   }, [me?.id, me?.local]);
 
+  // ================================================================
+  // AHORA, LAS VALIDACIONES Y RETORNOS TEMPRANOS
+  // ================================================================
+
+  if (!mounted) {
+    // Render consistente para SSR mientras se determina si es móvil/escritorio
+    return (
+      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb'}}>
+        Cargando…
+      </div>
+    );
+  }
+
+  if (isDesktop) {
+    // Bloqueo para dispositivos de escritorio
+    return (
+      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
+        <div style={{maxWidth:560,padding:24,borderRadius:16,border:'1px solid #334155',background:'rgba(15,23,42,.85)',textAlign:'center'}}>
+          <h1 style={{margin:'0 0 8px'}}>Marcaje solo desde teléfono 📱</h1>
+          <p style={{margin:0,opacity:.85}}>Para precisión real usamos el GPS del dispositivo. Abre este link en tu celular y activa ubicación precisa.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // ================================================================
+  // LÓGICA Y RENDERIZADO PRINCIPAL DEL COMPONENTE
+  // ================================================================
+  
   const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
   const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
   const progressPercent = (progress / 4) * 100;
@@ -190,11 +200,15 @@ export default function AsistenciaPage() {
   const handleGetQR = async () => {
     if (!siteId) { setToast('⚠️ No hay sucursal asignada'); return; }
     try {
+      setLoading(true);
       const r = await getQR(siteId);
       setQr(r);
       setToast(`✅ Código QR generado (expira en 60s)`);
     } catch (e: any) {
-      setToast(`QR error: ${e?.message || 'falló la función'}`);
+      console.error("Error al obtener QR:", e);
+      setToast(`Error QR: ${e?.message || 'Falló la función. Revisa CORS o la URL.'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -306,7 +320,7 @@ export default function AsistenciaPage() {
             <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
               <div style={{ color:'#94a3b8' }}>Sucursal</div>
               <div style={{ background:'rgba(15,23,42,.7)', border:'1px solid rgba(148,163,184,.18)', borderRadius:12, padding:'10px 12px', color: siteId ? '#e5e7eb' : '#f59e0b' }}>
-                {resolvingSite ? 'Resolviendo…' : (siteName ?? me?.local ?? 'No asignada')}
+                {resolvingSite ? 'Resolviendo…' : (siteName ?? 'No asignada')}
               </div>
             </div>
           </div>
@@ -369,17 +383,17 @@ export default function AsistenciaPage() {
             <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
               <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent:'center' }}>
                 <button type="button" onClick={handleGetQR}
-                  disabled={!siteId || resolvingSite}
-                  style={{ padding:'16px 24px', borderRadius:16, border:'none', background: (!siteId || resolvingSite) ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#0ea5e9,#0284c7)', color:'white', fontWeight:600, fontSize:15, cursor: (!siteId || resolvingSite) ? 'not-allowed' : 'pointer', transition:'all .3s', boxShadow: (!siteId || resolvingSite) ? 'none' : '0 8px 25px rgba(14,165,233,.3)', minWidth:160, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                  🔲 Obtener QR
+                  disabled={!siteId || resolvingSite || loading}
+                  style={{ padding:'16px 24px', borderRadius:16, border:'none', background: (!siteId || resolvingSite || loading) ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#0ea5e9,#0284c7)', color:'white', fontWeight:600, fontSize:15, cursor: (!siteId || resolvingSite || loading) ? 'not-allowed' : 'pointer', transition:'all .3s', boxShadow: (!siteId || resolvingSite || loading) ? 'none' : '0 8px 25px rgba(14,165,233,.3)', minWidth:160, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  {loading ? '...' : '🔲 Obtener QR'}
                 </button>
                 <button type="button" onClick={submit}
-                  disabled={(!me?.id) || (!siteId) || !selfie || !loc || !qr || loading}
+                  disabled={!canSubmit || loading}
                   style={{ padding:'16px 32px', borderRadius:16, border:'none',
-                    background: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'rgba(71,85,105,.5)' : (checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'),
-                    color:'white', fontWeight:700, fontSize:16, cursor: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'not-allowed' : 'pointer', transition:'all .3s',
-                    boxShadow: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'none' : (checkType==='in' ? '0 8px 25px rgba(16,185,129,.4)' : '0 8px 25px rgba(239,68,68,.4)'),
-                    minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transform: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'none' : 'translateY(-2px)' }}>
+                    background: (!canSubmit || loading) ? 'rgba(71,85,105,.5)' : (checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'),
+                    color:'white', fontWeight:700, fontSize:16, cursor: (!canSubmit || loading) ? 'not-allowed' : 'pointer', transition:'all .3s',
+                    boxShadow: (!canSubmit || loading) ? 'none' : (checkType==='in' ? '0 8px 25px rgba(16,185,129,.4)' : '0 8px 25px rgba(239,68,68,.4)'),
+                    minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transform: (!canSubmit || loading) ? 'none' : 'translateY(-2px)' }}>
                   {loading ? (<><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,.3)', borderTop:'2px solid white', borderRadius:'50%', animation:'spin 1s linear infinite' }} /> Procesando...</>) : (`${checkType==='in' ? '✅' : '🚪'} Marcar ${checkType==='in' ? 'Entrada' : 'Salida'}`)}
                 </button>
               </div>
