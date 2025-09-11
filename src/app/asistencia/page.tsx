@@ -68,7 +68,7 @@ type Me = {
 
 export default function AsistenciaPage() {
   // ================================================================
-  // TODOS LOS HOOKS SE DECLARAN AQUÍ ARRIBA
+  // HOOKS DECLARADOS AL PRINCIPIO PARA CUMPLIR REGLAS DE REACT
   // ================================================================
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
@@ -103,71 +103,50 @@ export default function AsistenciaPage() {
     return () => clearTimeout(t);
   }, [toast]);
   
-  // Efecto para cargar la identidad del usuario (CON DEPURACIÓN)
   useEffect(() => {
-    console.log("[PAGE_FRONTEND] 1. Iniciando carga de 'me'.");
     (async () => {
       try {
         const r = await fetch('/endpoints/me', { cache: 'no-store' });
         const d: Me = await r.json();
         if (!r.ok || !d?.ok) throw new Error((d as any)?.error || 'me_failed');
-        console.log("[PAGE_FRONTEND] 2. 'me' cargado exitosamente:", d);
         setMe(d);
       } catch (e) {
-        console.error("[PAGE_FRONTEND] ERROR al cargar 'me'.", e);
         setToast('No se pudo cargar tu sesión');
       }
     })();
   }, []);
 
-  // Efecto para resolver la sucursal asignada (CON DEPURACIÓN)
   useEffect(() => {
-    if (!me?.id) {
-      // console.log("[PAGE_FRONTEND] 3. Esperando que 'me' se cargue para buscar sucursal.");
-      return;
-    }
-
-    console.log(`[PAGE_FRONTEND] 4. 'me' está disponible. Iniciando búsqueda de sucursal para local: "${me.local}"`);
+    if (!me?.id) return;
     (async () => {
       setResolvingSite(true);
       try {
         let foundSite = null;
 
-        console.log("[PAGE_FRONTEND] 5. INTENTO 1: Buscando con assigned_to=me.");
         const r1 = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
-        
-        if (!r1.ok) {
-            console.error("[PAGE_FRONTEND] ERROR en fetch a assigned_to=me. Status:", r1.status);
-        } else {
+        if (r1.ok) {
             const j1 = await r1.json();
-            console.log("[PAGE_FRONTEND] 6. Respuesta de assigned_to=me:", j1);
             foundSite = Array.isArray(j1?.results) && j1.results.length > 0 ? j1.results[0] : null;
         }
 
         if (!foundSite && me.local) {
-          console.log(`[PAGE_FRONTEND] 7. INTENTO 2 (Fallback): Buscando con name=${me.local}.`);
           const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
-          if(!r2.ok) {
-              console.error(`[PAGE_FRONTEND] ERROR en fetch a name=${me.local}. Status:`, r2.status);
-          } else {
+          if(r2.ok) {
               const j2 = await r2.json();
-              console.log(`[PAGE_FRONTEND] 8. Respuesta de name=${me.local}:`, j2);
               foundSite = Array.isArray(j2?.results) && j2.results.length > 0 ? j2.results[0] : null;
           }
         }
 
-        console.log("[PAGE_FRONTEND] 9. Lógica final. ¿Se encontró una sucursal?", foundSite);
         if (foundSite?.id) {
-            console.log("[PAGE_FRONTEND] 10. ¡ÉXITO! Seteando siteId y siteName:", { id: foundSite.id, name: foundSite.name });
             setSiteId(foundSite.id);
             setSiteName(foundSite.name ?? me.local ?? 'Sucursal asignada');
         } else {
-            console.warn("[PAGE_FRONTEND] 10. FALLO. No se encontró sucursal. Seteando a '(no mapeada)'.");
             setSiteId(null);
             setSiteName(me?.local ? `${me.local} (no mapeada)` : 'No asignada');
+            setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
         }
       } catch (e) {
-        console.error("[PAGE_FRONTEND] ERROR CATASTRÓFICO en el try/catch de búsqueda de sucursal:", e);
+        console.error("Error resolviendo sucursal:", e);
         setToast('Fallo resolviendo sucursal');
         setSiteId(null);
         setSiteName('Error de red');
@@ -178,7 +157,7 @@ export default function AsistenciaPage() {
   }, [me?.id, me?.local]);
 
   // ================================================================
-  // AHORA, LAS VALIDACIONES Y RETORNOS TEMPRANOS
+  // VALIDACIONES Y RETORNOS TEMPRANOS
   // ================================================================
   if (!mounted) {
     return (
@@ -199,7 +178,7 @@ export default function AsistenciaPage() {
   }
   
   // ================================================================
-  // LÓGICA Y RENDERIZADO PRINCIPAL DEL COMPONENTE
+  // LÓGICA Y RENDERIZADO PRINCIPAL
   // ================================================================
   const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
   const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
@@ -213,7 +192,6 @@ export default function AsistenciaPage() {
       setQr(r);
       setToast(`✅ Código QR generado (expira en 60s)`);
     } catch (e: any) {
-      console.error("Error al obtener QR:", e);
       setToast(`Error QR: ${e?.message || 'Falló la función. Revisa CORS o la URL.'}`);
     } finally {
       setLoading(false);
@@ -338,7 +316,7 @@ export default function AsistenciaPage() {
               <h3 style={{ color:'#f1f5f9', fontSize:16, fontWeight:600, margin:0 }}>Verificación Biométrica</h3>
             </div>
             <div style={{ display:'grid', gap:16 }}>
-              <CameraCapture onCapture={async (raw: any) => {
+              <CameraCapture onCapture={async (raw) => {
                 const small = await compressDataUrl(raw, 720, 0.72);
                 setSelfie(small);
               }} />

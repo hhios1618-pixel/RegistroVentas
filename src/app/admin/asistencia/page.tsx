@@ -68,10 +68,8 @@ type Me = {
 
 export default function AsistenciaPage() {
   // ================================================================
-  // CORRECCIÓN: TODOS LOS HOOKS SE DECLARAN AQUÍ ARRIBA
+  // HOOKS DECLARADOS AL PRINCIPIO PARA CUMPLIR REGLAS DE REACT
   // ================================================================
-
-  /* ------- Estados y Hooks del Componente ------- */
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const [siteId, setSiteId] = useState<string | null>(null);
@@ -86,7 +84,6 @@ export default function AsistenciaPage() {
   const [resolvingSite, setResolvingSite] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
-  // device id (useMemo es un Hook)
   const deviceId = useMemo<string>(() => {
     const k = 'fx_device_id';
     let v = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
@@ -97,21 +94,15 @@ export default function AsistenciaPage() {
     return v || 'web-client';
   }, []);
 
-  /* ------- Efectos Secundarios (useEffect) ------- */
-  // Efecto para el montaje seguro (evita hydration mismatch)
   useEffect(() => { setMounted(true); }, []);
-
-  // Efecto para detectar si es escritorio
   useEffect(() => { setIsDesktop(!isMobileUA()); }, []);
 
-  // Efecto para limpiar el toast
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
   
-  // Efecto para cargar la identidad del usuario
   useEffect(() => {
     (async () => {
       try {
@@ -119,31 +110,33 @@ export default function AsistenciaPage() {
         const d: Me = await r.json();
         if (!r.ok || !d?.ok) throw new Error((d as any)?.error || 'me_failed');
         setMe(d);
-      } catch {
+      } catch (e) {
         setToast('No se pudo cargar tu sesión');
       }
     })();
   }, []);
 
-  // Efecto para resolver la sucursal asignada
   useEffect(() => {
     if (!me?.id) return;
     (async () => {
       setResolvingSite(true);
       try {
         let foundSite = null;
+
         const r1 = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
         if (r1.ok) {
             const j1 = await r1.json();
-            foundSite = Array.isArray(j1?.results) ? j1.results[0] : null;
+            foundSite = Array.isArray(j1?.results) && j1.results.length > 0 ? j1.results[0] : null;
         }
+
         if (!foundSite && me.local) {
-            const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
-            if (r2.ok) {
-                const j2 = await r2.json();
-                foundSite = Array.isArray(j2?.results) ? j2.results[0] : null;
-            }
+          const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
+          if(r2.ok) {
+              const j2 = await r2.json();
+              foundSite = Array.isArray(j2?.results) && j2.results.length > 0 ? j2.results[0] : null;
+          }
         }
+
         if (foundSite?.id) {
             setSiteId(foundSite.id);
             setSiteName(foundSite.name ?? me.local ?? 'Sucursal asignada');
@@ -164,20 +157,16 @@ export default function AsistenciaPage() {
   }, [me?.id, me?.local]);
 
   // ================================================================
-  // AHORA, LAS VALIDACIONES Y RETORNOS TEMPRANOS
+  // VALIDACIONES Y RETORNOS TEMPRANOS
   // ================================================================
-
   if (!mounted) {
-    // Render consistente para SSR mientras se determina si es móvil/escritorio
     return (
       <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb'}}>
         Cargando…
       </div>
     );
   }
-
   if (isDesktop) {
-    // Bloqueo para dispositivos de escritorio
     return (
       <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
         <div style={{maxWidth:560,padding:24,borderRadius:16,border:'1px solid #334155',background:'rgba(15,23,42,.85)',textAlign:'center'}}>
@@ -189,14 +178,12 @@ export default function AsistenciaPage() {
   }
   
   // ================================================================
-  // LÓGICA Y RENDERIZADO PRINCIPAL DEL COMPONENTE
+  // LÓGICA Y RENDERIZADO PRINCIPAL
   // ================================================================
-  
   const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
   const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
   const progressPercent = (progress / 4) * 100;
 
-  /* =================== Acciones botones =================== */
   const handleGetQR = async () => {
     if (!siteId) { setToast('⚠️ No hay sucursal asignada'); return; }
     try {
@@ -205,7 +192,6 @@ export default function AsistenciaPage() {
       setQr(r);
       setToast(`✅ Código QR generado (expira en 60s)`);
     } catch (e: any) {
-      console.error("Error al obtener QR:", e);
       setToast(`Error QR: ${e?.message || 'Falló la función. Revisa CORS o la URL.'}`);
     } finally {
       setLoading(false);
@@ -270,7 +256,6 @@ export default function AsistenciaPage() {
     }
   };
 
-  /* ============================ UI ============================ */
   return (
     <div style={{
       minHeight: '100dvh',
@@ -282,7 +267,6 @@ export default function AsistenciaPage() {
       `,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
-      {/* Header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 50, background: 'rgba(15, 23, 42, 0.8)',
         backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
@@ -308,7 +292,6 @@ export default function AsistenciaPage() {
       </div>
 
       <div style={{ maxWidth: 896, margin: '0 auto', padding: '32px 20px' }}>
-        {/* Identidad (solo lectura) */}
         <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, marginBottom:32, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
           <div style={{ display:'grid', gap:12 }}>
             <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
@@ -326,9 +309,7 @@ export default function AsistenciaPage() {
           </div>
         </div>
 
-        {/* Grid principal */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:24, marginBottom:32 }}>
-          {/* Biométrico */}
           <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
               <div style={{ width:32, height:32, borderRadius:8, background:'linear-gradient(135deg,#8b5cf6,#7c3aed)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, color:'white' }}>🔒</div>
@@ -355,7 +336,6 @@ export default function AsistenciaPage() {
             </div>
           </div>
 
-          {/* Tipo + QR */}
           <div style={{ display:'grid', gap:24 }}>
             <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
               <div style={{ textAlign:'center', marginBottom:20 }}>
@@ -398,7 +378,6 @@ export default function AsistenciaPage() {
                 </button>
               </div>
 
-              {/* Status */}
               <div style={{ display:'flex', gap:12, marginTop:20, fontSize:13, justifyContent:'center', flexWrap:'wrap' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, color: me?.id ? '#10b981' : '#64748b' }}>{me?.id ? '✅' : '⏳'} Empleado</div>
                 <div style={{ display:'flex', alignItems:'center', gap:6, color: siteId ? '#10b981' : '#64748b' }}>{siteId ? `✅ ${siteName}` : '⏳ Sucursal'}</div>
@@ -416,7 +395,6 @@ export default function AsistenciaPage() {
           </div>
         </div>
 
-        {/* Toast */}
         {toast && (
           <div style={{ position:'fixed', top:20, right:20, background:'rgba(15,23,42,.95)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.2)', borderRadius:16, padding:'16px 20px', color:'#f1f5f9', fontSize:14, fontWeight:500, boxShadow:'0 10px 40px rgba(0,0,0,.3)', zIndex:100, maxWidth:320, animation:'slideInRight .3s ease' }}>
             {toast}
