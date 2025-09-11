@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 
 /* ================================
@@ -21,10 +21,11 @@ export default function PromotoresHome() {
   const role = capRole(me?.role);
   const allowed = !!me?.ok && (role === 'PROMOTOR' || role === 'ADMIN');
 
-  // datos del mes (solo ventas)
+  // datos del mes (KPIs/lista desde endpoints de PROMOTORES)
   const [month, setMonth] = useState(monthIso());
   const { data: sal, isLoading: salLoading } = useSWR(
-    allowed ? `/endpoints/my/sales?month=${month}` : null, fetcher
+    allowed ? `/endpoints/promoters/summary?month=${month}` : null,
+    fetcher
   );
 
   // hotkeys
@@ -32,8 +33,8 @@ export default function PromotoresHome() {
     const onKey = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
       const k = e.key.toLowerCase();
-      if (k === 'r') window.location.href = '/promotores/registro';
-      if (k === 'm') window.location.href = '/promotores/resumen';
+      if (k === 'r') window.location.href = '/dashboard/registro';
+      if (k === 'm') window.location.href = '/promotores';         // este mismo home (resumen)
       if (k === 'c') window.location.href = '/dashboard/captura';
       if (k === 'p') window.location.href = '/playbook-whatsapp';
     };
@@ -96,8 +97,8 @@ export default function PromotoresHome() {
             Navegación
           </h3>
           <ul className="space-y-1">
-            <Li href="/promotores/registro" kbd="R" label="Registrar venta" />
-            <Li href="/promotores/resumen" kbd="M" label="Mi resumen" />
+            <Li href="/dashboard/registro" kbd="R" label="Registrar venta" />
+            <Li href="/promotores" kbd="M" label="Mi resumen" />
             <Li href="/dashboard/captura" kbd="C" label="Captura / Embudo" />
             <Li href="/playbook-whatsapp" kbd="P" label="Playbook WhatsApp" />
           </ul>
@@ -118,7 +119,7 @@ export default function PromotoresHome() {
             <QuickAction
               title="Registrar venta"
               desc="Carga rápida con validaciones"
-              href="/promotores/registro"
+              href="/dashboard/registro"
               icon="💸"
               gradient="from-emerald-400 to-teal-500"
               kbd="R"
@@ -126,7 +127,7 @@ export default function PromotoresHome() {
             <QuickAction
               title="Mi resumen"
               desc="KPIs de ventas del mes"
-              href="/promotores/resumen"
+              href="/promotores"
               icon="📊"
               gradient="from-fuchsia-400 to-pink-500"
               kbd="M"
@@ -152,7 +153,9 @@ export default function PromotoresHome() {
           <section className="glass rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-white">Últimas ventas</h3>
-              <div className="text-xs text-[#8B949E]">{salLoading ? 'Cargando…' : `${ventasRecientes.length} registros`}</div>
+              <div className="text-xs text-[#8B949E]">
+                {salLoading ? 'Cargando…' : `${ventasRecientes.length} registros`}
+              </div>
             </div>
             <div className="overflow-auto">
               <table className="w-full text-sm border-collapse">
