@@ -6,7 +6,7 @@ import { geocodeFirstOSM, normalizeAddressForSantaCruz } from '@/lib/geocode';
 export const runtime = 'nodejs'; // Necesario para usar SERVICE_ROLE en Vercel
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE!;
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
   auth: { persistSession: false },

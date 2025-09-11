@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE!;
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'fenix_session';
 const COOKIE_DAYS = Number(process.env.SESSION_DAYS || '30');

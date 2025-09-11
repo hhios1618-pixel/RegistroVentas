@@ -13,7 +13,7 @@ type ProfileRow = { id: string; full_name: string | null; role: string | null; t
 // --- HELPERS (Funciones de Ayuda) ---
 function sbAdmin(): SB {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, { auth: { persistSession: false } });
 }
 

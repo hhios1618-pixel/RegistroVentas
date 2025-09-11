@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE!;
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || 'FENIX2025!';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';

@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE!;
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // === Config desde .env ===
 const DEFAULT_DOMAIN = process.env.LOGIN_DOMAIN || 'fenix.local';
