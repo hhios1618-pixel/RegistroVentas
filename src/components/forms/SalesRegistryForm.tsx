@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import useSWR from 'swr';
 
 // --- DEFINICIÓN DE TIPOS ---
 interface ProductSearchResult {
@@ -42,14 +43,23 @@ interface SuccessInfo {
   order_no: number | string | null;
 }
 
-// --- CONFIGURACIÓN ---
+// --- UTILITIES ---
+const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then((res) => res.ok ? res.json() : Promise.reject(new Error('Error al cargar datos.')));
+
+const normalizeRole = (rawRole?: string): 'admin' | 'promotor' | 'unknown' => {
+  const r = (rawRole || '').trim().toUpperCase();
+  if (['GERENCIA', 'ADMIN', 'ADMINISTRADOR'].includes(r)) return 'admin';
+  if (['PROMOTOR', 'PROMOTORA'].includes(r)) return 'promotor';
+  return 'unknown';
+};
+
+// --- CONFIGURACIÓN DE SUPABASE ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.error("Supabase URL o Anon Key no están definidas en las variables de entorno.");
 }
-
 const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
 
 const getInitialOrderState = (): OrderState => ({
@@ -60,19 +70,31 @@ const getInitialOrderState = (): OrderState => ({
     location: null,
     destino: '',
     payment_method: '',
-    seller_id: 'UUID-DEL-VENDEDOR-LOGUEADO' // Placeholder
+    seller_id: ''
 });
 
 // --- COMPONENTE COMPARTIDO DEL FORMULARIO ---
 export default function SalesRegistryForm() {
+    // Lógica de Permisos
+    const { data: me, isLoading: meLoading } = useSWR('/endpoints/me', fetcher);
+    const userRole = useMemo(() => normalizeRole(me?.raw_role), [me?.raw_role]);
+    const canAccess = me?.ok && (userRole === 'promotor' || userRole === 'admin');
+
+    // Estados del Formulario
     const [order, setOrder] = useState<OrderState>(getInitialOrderState());
     const [currentStep, setCurrentStep] = useState('products');
     const [isLoading, setIsLoading] = useState(false);
     const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
-
     const [productQuery, setProductQuery] = useState('');
     const [searchResults, setSearchResults] = useState<ProductSearchResult[]>([]);
     const [newItem, setNewItem] = useState<NewItemState>({ name: '', qty: 1, unit_price: '', sale_type: null, is_recognized: false });
+
+    // Efectos
+    useEffect(() => {
+        if (me?.id) {
+            setOrder(prev => ({ ...prev, seller_id: me.id }));
+        }
+    }, [me?.id]);
 
     useEffect(() => {
         const search = async () => {
@@ -87,6 +109,7 @@ export default function SalesRegistryForm() {
         return () => clearTimeout(timeoutId);
     }, [productQuery]);
 
+    // Handlers
     const handleAddItem = () => {
         if (!newItem.name || !newItem.qty) return;
         const finalItem: OrderItem = {
@@ -104,7 +127,6 @@ export default function SalesRegistryForm() {
     
     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
-        // Valida que el valor contenga solo números
         if (/^[0-9]*$/.test(value)) {
             setOrder(p => ({ ...p, customer_phone: value }));
         }
@@ -124,7 +146,7 @@ export default function SalesRegistryForm() {
             return;
         }
         
-        const itemWithoutPrice = order.items.findIndex(item => item.unit_price === null || item.unit_price === undefined);
+        const itemWithoutPrice = order.items.findIndex(item => item.unit_price === null || item.unit_price === undefined || isNaN(item.unit_price));
          if (itemWithoutPrice !== -1) {
             setCurrentStep(`awaiting_price_${itemWithoutPrice}`);
             return;
@@ -199,12 +221,33 @@ export default function SalesRegistryForm() {
         setIsLoading(false);
     };
 
+    // Guardia de Permisos
+    if (meLoading) {
+        return <div className="text-center text-gray-400 p-8">Verificando permisos...</div>;
+    }
+
+    if (!canAccess) {
+        return (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-center text-rose-200 max-w-md mx-auto">
+                No tienes permisos para esta página.
+            </div>
+        );
+    }
+    
+    // Vista de Éxito
     if (successInfo) {
         return (
-            <div className="text-center p-8 bg-gray-800 rounded-lg max-w-lg mx-auto">
+            <div className="text-center p-8 bg-gray-900 rounded-lg max-w-lg mx-auto">
                 <h2 className="text-3xl font-bold text-green-400 mb-4">¡Pedido Guardado con Éxito!</h2>
                 <p className="text-lg text-gray-300">Se ha registrado el pedido: <strong className="text-white">#{successInfo.order_no || successInfo.id}</strong></p>
-                <button onClick={() => { setOrder(getInitialOrderState()); setCurrentStep('products'); setSuccessInfo(null); }} className="mt-8 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded-lg text-lg">
+                <button 
+                  onClick={() => { 
+                    setOrder(getInitialOrderState()); 
+                    setCurrentStep('products'); 
+                    setSuccessInfo(null); 
+                  }} 
+                  className="mt-8 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded-lg text-lg"
+                >
                     Registrar Nuevo Pedido
                 </button>
             </div>
@@ -226,7 +269,7 @@ export default function SalesRegistryForm() {
             );
         }
         
-         if (currentStep.startsWith('awaiting_price_')) {
+        if (currentStep.startsWith('awaiting_price_')) {
             const index = parseInt(currentStep.split('_')[2]);
             const item = order.items[index];
             return (
@@ -304,13 +347,14 @@ export default function SalesRegistryForm() {
                          </button>
                     </div>
                 );
+            // --- ESTA ES LA CORRECCIÓN QUE ARREGLA EL BUILD ---
             default:
                 return null;
         }
     };
     
     return (
-        <div className="bg-gray-800 rounded-lg shadow-lg p-6 md:p-8">
+        <div className="bg-gray-900 text-white rounded-lg shadow-lg p-6 md:p-8">
             <h1 className="text-3xl font-bold text-yellow-400 mb-6">Nuevo Pedido</h1>
             
             <section>
@@ -318,16 +362,16 @@ export default function SalesRegistryForm() {
                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end p-4 border border-gray-700 rounded-lg">
                     <div className="md:col-span-3 relative">
                         <label className="block text-sm font-medium text-gray-300">Buscar Producto</label>
-                        <input type="text" value={productQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProductQuery(e.target.value)} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        <input type="text" value={productQuery} onChange={(e) => setProductQuery(e.target.value)} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
                         {searchResults.length > 0 && (
-                            <div className="absolute z-10 w-full bg-gray-900 rounded-b-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                            <div className="absolute z-10 w-full bg-gray-900 border border-gray-700 rounded-b-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                                 {searchResults.map(p => <div key={p.id} onClick={() => { setNewItem({ ...newItem, name: p.name, is_recognized: true }); setProductQuery(p.name); setSearchResults([]); }} className="p-3 hover:bg-gray-700 cursor-pointer">{p.name}</div>)}
                             </div>
                         )}
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-300">Cant.</label>
-                        <input type="number" value={newItem.qty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItem(p => ({...p, qty: parseInt(e.target.value) || 1}))} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        <input type="number" value={newItem.qty} onChange={(e) => setNewItem(p => ({...p, qty: parseInt(e.target.value) || 1}))} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
                     </div>
                     <div className="md:col-span-2">
                         <button onClick={handleAddItem} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Añadir al Pedido</button>
@@ -337,7 +381,7 @@ export default function SalesRegistryForm() {
                     {order.items.map((item, index) => (
                         <div key={index} className="flex justify-between items-center bg-gray-700 p-2 rounded">
                             <span>{item.qty} x {item.name} {item.sale_type ? `(${item.sale_type})` : ''}</span>
-                            <button onClick={() => handleRemoveItem(index)} className="text-red-400 hover:text-red-300 text-xl">&times;</button>
+                            <button onClick={() => handleRemoveItem(index)} className="text-red-400 hover:text-red-300 text-xl font-bold">&times;</button>
                         </div>
                     ))}
                 </div>
@@ -353,7 +397,9 @@ export default function SalesRegistryForm() {
             
             {currentStep === 'products' && order.items.length > 0 && (
                  <div className="mt-8 pt-4 border-t border-gray-700 text-right">
-                    <button onClick={advanceFlow} className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded text-lg">Continuar con el Pedido</button>
+                    <button onClick={advanceFlow} className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded text-lg">
+                        Continuar con el Pedido ({order.items.length} items)
+                    </button>
                 </div>
             )}
         </div>
