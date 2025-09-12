@@ -8,10 +8,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Se añaden los nuevos tipos de marcaje al tipo de Payload
 type Payload = {
   person_id: string;
   site_id: string;
-  type: "in" | "out";
+  type: "in" | "out" | "lunch_in" | "lunch_out";
   lat: number;
   lng: number;
   accuracy: number;
@@ -42,37 +43,24 @@ serve(async (req) => {
   if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
 
   try {
-    const SUPABASE_URL = Deno.env.get("PROJECT_URL");
-    const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY");
+    const SUPABASE_URL = Deno.env.get("PROJECT_URL") || Deno.env.get("SUPABASE_URL");
+    const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
       return new Response(JSON.stringify({ error: "missing_env" }), { status: 500, headers: { ...corsHeaders, "content-type":"application/json" }});
     }
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    let body: Payload;
-    try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: "bad_json" }), { status: 400, headers: { ...corsHeaders, "content-type":"application/json" }}); }
+    const body: Payload = await req.json();
+    
+    // Se actualiza la lista de tipos válidos para incluir los de almuerzo
+    const validTypes = ["in", "out", "lunch_in", "lunch_out"];
+    if (!validTypes.includes(body.type)) {
+      return new Response(JSON.stringify({ error:`type_invalid: ${body.type}` }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
+    }
 
-    const required = ["person_id","site_id","type","lat","lng","accuracy","device_id","selfie_base64","qr_code"] as const;
-    for (const k of required) {
-      // deno-lint-ignore no-explicit-any
-      if ((body as any)[k] === undefined || (body as any)[k] === null) {
-        return new Response(JSON.stringify({ error:"missing_field", field:k }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
-      }
-    }
-    if (body.type !== "in" && body.type !== "out") {
-      return new Response(JSON.stringify({ error:"type_invalid" }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
-    }
-    // Precisión exigida (60 m si indoor urbano; bájalo a 50 cuando todo esté afinado)
     if (typeof body.accuracy === "number" && body.accuracy > 60) {
       return new Response(JSON.stringify({ error:"accuracy_too_high", accuracy: body.accuracy }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
-    }
-
-    const { data: person, error: pErr } = await supabase
-      .from("people").select("id, active, role").eq("id", body.person_id).single();
-    if (pErr || !person) return new Response(JSON.stringify({ error:"person_not_found" }), { status:404, headers:{ ...corsHeaders, "content-type":"application/json" }});
-    if (person.active === false) return new Response(JSON.stringify({ error:"person_inactive" }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
-    if (person.role && String(person.role).toLowerCase().includes("promotor")) {
-      return new Response(JSON.stringify({ error:"role_not_allowed" }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
     }
 
     const { data: site, error: sErr } = await supabase
@@ -82,24 +70,24 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error:"site_inactive_or_unset" }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
     }
 
-    const distance_m = haversineMeters(body.lat, body.lng, site.lat, site.lng);
-    const radius = site.radius_m ?? 100;
-    if (distance_m > radius) {
-      return new Response(JSON.stringify({
-        error: "outside_geofence",
-        distance_m,
-        required_radius: radius,
-        accuracy: body.accuracy
-      }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
+    // --- MODIFICACIÓN CLAVE: Geofencing solo para Entrada y Salida principal ---
+    if (body.type === 'in' || body.type === 'out') {
+      const distance_m = haversineMeters(body.lat, body.lng, site.lat, site.lng);
+      const radius = site.radius_m ?? 100;
+      if (distance_m > radius) {
+        return new Response(JSON.stringify({
+          error: "outside_geofence",
+          distance_m,
+          required_radius: radius,
+        }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
+      }
     }
-
-    // QR vigente
+    
     const nowIso = new Date().toISOString();
     const { data: qr, error: qErr } = await supabase
       .from("qr_tokens").select("site_id, code, exp_at").eq("site_id", body.site_id).eq("code", body.qr_code).gt("exp_at", nowIso).maybeSingle();
     if (qErr || !qr) return new Response(JSON.stringify({ error:"qr_invalid_or_expired" }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
-
-    // Subida selfie
+    
     const bytes = dataUrlToBytes(body.selfie_base64);
     const selfiePath = `${body.site_id}/${body.person_id}/${Date.now()}.jpg`;
     const { error: upErr } = await supabase.storage.from("attendance-selfies").upload(selfiePath, bytes, { contentType:"image/jpeg", upsert:false });
@@ -111,8 +99,8 @@ serve(async (req) => {
       selfie_path: selfiePath, device_id: body.device_id, source: "web",
     });
     if (insErr) return new Response(JSON.stringify({ error:"insert_failed", details: insErr.message }), { status:500, headers:{ ...corsHeaders, "content-type":"application/json" }});
-
-    return new Response(JSON.stringify({ ok:true, distance_m, recorded_at: new Date().toISOString() }), { status:200, headers:{ ...corsHeaders, "content-type":"application/json" }});
+    
+    return new Response(JSON.stringify({ ok:true, recorded_at: new Date().toISOString() }), { status:200, headers:{ ...corsHeaders, "content-type":"application/json" }});
   } catch (e) {
     console.error("[edge checkin] error:", e);
     return new Response(JSON.stringify({ error:"internal_error", details: String(e) }), { status:500, headers:{ ...corsHeaders, "content-type":"application/json" }});

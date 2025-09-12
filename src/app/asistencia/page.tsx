@@ -55,7 +55,7 @@ async function getBestLocation(opts?: {
 }
 /* ============================================================= */
 
-type CheckType = 'in' | 'out';
+type CheckType = 'in' | 'out' | 'lunch_out' | 'lunch_in';
 
 type Me = {
   ok: boolean;
@@ -96,7 +96,7 @@ export default function AsistenciaPage() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 5000); // Aumentado a 5 segundos
+    const t = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -124,15 +124,13 @@ export default function AsistenciaPage() {
             const j1 = await r1.json();
             foundSite = Array.isArray(j1?.results) && j1.results.length > 0 ? j1.results[0] : null;
         }
-
         if (!foundSite && me.local) {
-          const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
-          if(r2.ok) {
-              const j2 = await r2.json();
-              foundSite = Array.isArray(j2?.results) && j2.results.length > 0 ? j2.results[0] : null;
-          }
+            const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
+            if(r2.ok) {
+                const j2 = await r2.json();
+                foundSite = Array.isArray(j2?.results) && j2.results.length > 0 ? j2.results[0] : null;
+            }
         }
-
         if (foundSite?.id) {
             setSiteId(foundSite.id);
             setSiteName(foundSite.name ?? me.local ?? 'Sucursal asignada');
@@ -142,10 +140,7 @@ export default function AsistenciaPage() {
             setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
         }
       } catch (e) {
-        console.error("Error resolviendo sucursal:", e);
         setToast('Fallo resolviendo sucursal');
-        setSiteId(null);
-        setSiteName('Error de red');
       } finally {
         setResolvingSite(false);
       }
@@ -153,18 +148,14 @@ export default function AsistenciaPage() {
   }, [me?.id, me?.local]);
 
   if (!mounted) {
-    return (
-      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb'}}>
-        Cargando…
-      </div>
-    );
+    return <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb'}}>Cargando…</div>;
   }
   if (isDesktop) {
     return (
       <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
         <div style={{maxWidth:560,padding:24,borderRadius:16,border:'1px solid #334155',background:'rgba(15,23,42,.85)',textAlign:'center'}}>
           <h1 style={{margin:'0 0 8px'}}>Marcaje solo desde teléfono 📱</h1>
-          <p style={{margin:0,opacity:.85}}>Para precisión real usamos el GPS del dispositivo. Abre este link en tu celular y activa ubicación precisa.</p>
+          <p style={{margin:0,opacity:.85}}>Para precisión real usamos el GPS del dispositivo. Abre este link en tu celular.</p>
         </div>
       </div>
     );
@@ -233,18 +224,18 @@ export default function AsistenciaPage() {
         selfie_base64: selfie!,
         qr_code: qr!.code,
       };
-      const r = await checkIn(payload);
-      if (r.ok) {
-        // MENSAJE DE ÉXITO PERSONALIZADO
-        const successMessage = checkType === 'in' ? '✅ Marca de Entrada Exitosa' : '✅ Marca de Salida Exitosa';
-        setToast(successMessage);
-        setSelfie(null); setLoc(null); setQr(null);
-      } else {
-        // Esto es un fallback, el error real se captura en el catch
-        setToast('❌ Error desconocido al registrar');
-      }
+      await checkIn(payload);
+      
+      let successMessage = '✅ Marca Registrada';
+      if (checkType === 'in') successMessage = '✅ Marca de Entrada Exitosa';
+      if (checkType === 'out') successMessage = '✅ Marca de Salida Exitosa';
+      if (checkType === 'lunch_out') successMessage = '🥪 ¡Buen provecho! Salida a almuerzo registrada.';
+      if (checkType === 'lunch_in') successMessage = '💪 ¡Bienvenido de vuelta! Vuelta de almuerzo registrada.';
+      
+      setToast(successMessage);
+      setSelfie(null); setLoc(null); setQr(null);
+
     } catch (err: any) {
-      // TRADUCCIÓN DE ERRORES DEL BACKEND A MENSAJES AMIGABLES
       const errorMessage = err?.message || '';
       
       if (errorMessage.includes('outside_geofence')) {
@@ -256,10 +247,23 @@ export default function AsistenciaPage() {
       } else {
         setToast(`❌ Error: ${errorMessage}`);
       }
-
     } finally {
       setLoading(false);
     }
+  };
+
+  const checkTypeLabels: Record<CheckType, string> = {
+    in: 'Entrada',
+    out: 'Salida',
+    lunch_out: 'Salida Almuerzo',
+    lunch_in: 'Vuelta Almuerzo',
+  };
+
+  const buttonColors: Record<CheckType, string> = {
+    in: 'linear-gradient(135deg,#10b981,#059669)',
+    out: 'linear-gradient(135deg,#ef4444,#dc2626)',
+    lunch_out: 'linear-gradient(135deg,#eab308,#ca8a04)',
+    lunch_in: 'linear-gradient(135deg,#3b82f6,#2563eb)',
   };
 
   return (
@@ -278,7 +282,22 @@ export default function AsistenciaPage() {
         backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
       }}>
         <div style={{ maxWidth: 896, margin: '0 auto', padding: '16px 20px' }}>
-          {/* ... (resto del JSX del header se mantiene igual) ... */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: 'white' }}>A</div>
+              <div>
+                <h1 style={{ fontSize: 24, fontWeight: 700, color: '#f8fafc', margin: 0 }}>Registro de Asistencia</h1>
+                <p style={{ color: '#94a3b8', fontSize: 14, margin: 0 }}>Selfie + GPS mejorado + QR</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 80, height: 4, background: 'rgba(148,163,184,0.2)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', transition: 'width 0.3s ease' }} />
+              </div>
+              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 500 }}>{progress}/4</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -331,23 +350,27 @@ export default function AsistenciaPage() {
             <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
               <div style={{ textAlign:'center', marginBottom:20 }}>
                 <h2 style={{ color:'#f1f5f9', fontSize:18, fontWeight:600, margin:0 }}>Tipo de Marcaje</h2>
-                <p style={{ color:'#64748b', fontSize:14, margin:'4px 0 0 0' }}>Entrada o salida</p>
+                <p style={{ color:'#64748b', fontSize:14, margin:'4px 0 0 0' }}>Selecciona una opción</p>
               </div>
-              <div style={{ display:'flex', background:'rgba(15,23,42,.6)', borderRadius:16, padding:6, maxWidth:280, margin:'0 auto' }}>
-                <button onClick={() => setCheckType('in')}
-                  style={{ flex:1, padding:'14px 20px', borderRadius:12, border:'none',
-                    background: checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'transparent',
-                    color: checkType==='in' ? 'white' : '#94a3b8', fontWeight: checkType==='in' ? 700 : 500, fontSize:15, cursor:'pointer',
-                    transition:'all .3s', boxShadow: checkType==='in' ? '0 4px 12px rgba(16,185,129,.3)' : 'none' }}>
-                  🟢 Entrada
-                </button>
-                <button onClick={() => setCheckType('out')}
-                  style={{ flex:1, padding:'14px 20px', borderRadius:12, border:'none',
-                    background: checkType==='out' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'transparent',
-                    color: checkType==='out' ? 'white' : '#94a3b8', fontWeight: checkType==='out' ? 700 : 500, fontSize:15, cursor:'pointer',
-                    transition:'all .3s', boxShadow: checkType==='out' ? '0 4px 12px rgba(239,68,68,.3)' : 'none' }}>
-                  🔴 Salida
-                </button>
+              
+              <div style={{ display:'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background:'rgba(15,23,42,.6)', borderRadius:16, padding:6, margin:'0 auto' }}>
+                {(['in', 'out', 'lunch_out', 'lunch_in'] as CheckType[]).map((type) => {
+                  const emojis: Record<CheckType, string> = { in: '🟢', out: '🔴', lunch_out: '🥪', lunch_in: '💪' };
+                  return (
+                    <button key={type} onClick={() => setCheckType(type)}
+                      style={{
+                        padding:'14px 10px', borderRadius:12, border:'none',
+                        background: checkType === type ? buttonColors[type] : 'transparent',
+                        color: checkType === type ? 'white' : '#94a3b8',
+                        fontWeight: checkType === type ? 700 : 500,
+                        fontSize:14, cursor:'pointer',
+                        transition:'all .3s',
+                        boxShadow: checkType === type ? `0 4px 12px ${buttonColors[type].replace('linear-gradient(135deg,', 'rgba(').replace(')',',.3)')}` : 'none'
+                      }}>
+                      {emojis[type]} {checkTypeLabels[type]}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -360,12 +383,15 @@ export default function AsistenciaPage() {
                 </button>
                 <button type="button" onClick={submit}
                   disabled={!canSubmit || loading}
-                  style={{ padding:'16px 32px', borderRadius:16, border:'none',
-                    background: (!canSubmit || loading) ? 'rgba(71,85,105,.5)' : (checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'),
+                  style={{
+                    padding:'16px 32px', borderRadius:16, border:'none',
+                    background: (!canSubmit || loading) ? 'rgba(71,85,105,.5)' : buttonColors[checkType],
                     color:'white', fontWeight:700, fontSize:16, cursor: (!canSubmit || loading) ? 'not-allowed' : 'pointer', transition:'all .3s',
-                    boxShadow: (!canSubmit || loading) ? 'none' : (checkType==='in' ? '0 8px 25px rgba(16,185,129,.4)' : '0 8px 25px rgba(239,68,68,.4)'),
-                    minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transform: (!canSubmit || loading) ? 'none' : 'translateY(-2px)' }}>
-                  {loading ? (<><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,.3)', borderTop:'2px solid white', borderRadius:'50%', animation:'spin 1s linear infinite' }} /> Procesando...</>) : (`${checkType==='in' ? '✅' : '🚪'} Marcar ${checkType==='in' ? 'Entrada' : 'Salida'}`)}
+                    boxShadow: (!canSubmit || loading) ? 'none' : `0 8px 25px ${buttonColors[checkType].replace('linear-gradient(135deg,', 'rgba(').replace(')',',.4)')}`,
+                    minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                    transform: (!canSubmit || loading) ? 'none' : 'translateY(-2px)'
+                  }}>
+                  {loading ? (<div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,.3)', borderTop:'2px solid white', borderRadius:'50%', animation:'spin 1s linear infinite' }} />) : (`✅ Marcar ${checkTypeLabels[checkType]}`)}
                 </button>
               </div>
 
