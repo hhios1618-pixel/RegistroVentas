@@ -1,52 +1,78 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-/**
- * PATCH /endpoints/sites/:id
- * Body: { name?, lat?, lng?, radius_m?, is_active? }
- */
-export async function PATCH(req: Request, ctx: any) {
-  try {
-    const id: string | undefined = ctx?.params?.id;
-    if (!id) return NextResponse.json({ error: 'missing_id' }, { status: 400 });
+const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'fenix_session';
+const JWT_SECRET  = process.env.JWT_SECRET!;
 
-    let body: any = null;
-    try {
-      body = await req.json();
-    } catch {
-      return NextResponse.json({ error: 'bad_json' }, { status: 400 });
-    }
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const assignedTo = searchParams.get('assigned_to');
+  const name = searchParams.get('name');
 
-    const update: Record<string, unknown> = {};
-    if (Object.prototype.hasOwnProperty.call(body, 'name')) update.name = body.name;
-    if (Object.prototype.hasOwnProperty.call(body, 'lat')) update.lat = body.lat;
-    if (Object.prototype.hasOwnProperty.call(body, 'lng')) update.lng = body.lng;
-    if (Object.prototype.hasOwnProperty.call(body, 'radius_m')) update.radius_m = body.radius_m;
-    if (Object.prototype.hasOwnProperty.call(body, 'is_active')) update.is_active = body.is_active;
-
-    if (Object.keys(update).length === 0) {
-      return NextResponse.json({ error: 'empty_update' }, { status: 400 });
-    }
-
+  // BÚSQUEDA LIBRE POR NOMBRE (se mantiene)
+  if (name && !assignedTo) {
     const { data, error } = await supabaseAdmin
       .from('sites')
-      .update(update)
-      .eq('id', id)
-      .select()
-      .single();
+      .select('id, name, lat, lng, radius_m, is_active')
+      .ilike('name', `%${name}%`)
+      .eq('is_active', true)
+      .order('name');
+    if (error) return NextResponse.json({ error: 'sites_fetch_failed' }, { status: 500 });
+    return NextResponse.json({ results: data ?? [] });
+  }
 
-    if (error) {
-      console.error('[PATCH /endpoints/sites/:id] error:', error);
-      return NextResponse.json({ error: 'update_failed' }, { status: 500 });
+  // RESOLVER SEDE DEL USUARIO (Lógica Nueva y Robusta con site_id)
+  if (assignedTo === 'me') {
+    const rawCookie = req.cookies.get(COOKIE_NAME)?.value;
+    if (!rawCookie) return NextResponse.json({ results: [] });
+
+    let payload: any;
+    try {
+      payload = jwt.verify(rawCookie, JWT_SECRET);
+    } catch {
+      return NextResponse.json({ results: [] });
     }
 
-    return NextResponse.json({ data }, { status: 200 });
-  } catch (e) {
-    console.error('[PATCH /endpoints/sites/:id] unexpected:', e);
-    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+    // 1. Obtener el site_id del usuario
+    const { data: person, error: personError } = await supabaseAdmin
+      .from('people')
+      .select('site_id')
+      .eq('id', payload.sub)
+      .single();
+
+    if (personError || !person?.site_id) {
+      // Si el usuario no tiene site_id asignado, devolvemos un array vacío.
+      return NextResponse.json({ results: [] });
+    }
+    
+    // 2. Buscar la sucursal directamente por su ID.
+    const { data: site, error: siteError } = await supabaseAdmin
+      .from('sites')
+      .select('id, name, lat, lng, radius_m, is_active')
+      .eq('id', person.site_id)
+      .eq('is_active', true)
+      .single();
+
+    if (siteError || !site) {
+      // La sucursal asignada podría estar inactiva o haber sido eliminada
+      return NextResponse.json({ results: [] });
+    }
+
+    // Devolvemos la sucursal encontrada dentro de un array, como espera el frontend
+    return NextResponse.json({ results: [site] });
   }
+
+  // LISTADO GENERAL (se mantiene)
+  const { data, error } = await supabaseAdmin
+    .from('sites')
+    .select('id, name, lat, lng, radius_m, is_active')
+    .eq('is_active', true)
+    .order('name');
+  if (error) return NextResponse.json({ error: 'sites_fetch_failed' }, { status: 500 });
+  return NextResponse.json({ results: data ?? [] });
 }
