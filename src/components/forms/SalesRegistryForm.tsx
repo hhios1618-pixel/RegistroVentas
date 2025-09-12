@@ -44,7 +44,7 @@ interface SuccessInfo {
 }
 
 // --- UTILITIES ---
-const fetcher = (url: string) => fetch(url).then((res) => res.ok ? res.json() : Promise.reject(new Error('Error al cargar datos.')));
+const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then((res) => res.ok ? res.json() : Promise.reject(new Error('Error al cargar datos.')));
 
 const normalizeRole = (rawRole?: string): 'admin' | 'promotor' | 'unknown' => {
   const r = (rawRole || '').trim().toUpperCase();
@@ -75,18 +75,12 @@ const getInitialOrderState = (): OrderState => ({
 
 // --- COMPONENTE COMPARTIDO DEL FORMULARIO ---
 export default function SalesRegistryForm() {
-    // ================================================================
-    // LÓGICA DE PERMISOS
-    // ================================================================
+    // Lógica de Permisos
     const { data: me, isLoading: meLoading } = useSWR('/endpoints/me', fetcher);
     const userRole = useMemo(() => normalizeRole(me?.raw_role), [me?.raw_role]);
-    
-    // Solo permitimos el acceso a PROMOTOR o ADMIN
     const canAccess = me?.ok && (userRole === 'promotor' || userRole === 'admin');
 
-    // ================================================================
-    // ESTADOS DEL FORMULARIO
-    // ================================================================
+    // Estados del Formulario
     const [order, setOrder] = useState<OrderState>(getInitialOrderState());
     const [currentStep, setCurrentStep] = useState('products');
     const [isLoading, setIsLoading] = useState(false);
@@ -95,7 +89,7 @@ export default function SalesRegistryForm() {
     const [searchResults, setSearchResults] = useState<ProductSearchResult[]>([]);
     const [newItem, setNewItem] = useState<NewItemState>({ name: '', qty: 1, unit_price: '', sale_type: null, is_recognized: false });
 
-    // --- EFECTOS ---
+    // Efectos
     useEffect(() => {
         if (me?.id) {
             setOrder(prev => ({ ...prev, seller_id: me.id }));
@@ -115,7 +109,7 @@ export default function SalesRegistryForm() {
         return () => clearTimeout(timeoutId);
     }, [productQuery]);
 
-    // --- HANDLERS ---
+    // Handlers
     const handleAddItem = () => {
         if (!newItem.name || !newItem.qty) return;
         const finalItem: OrderItem = {
@@ -227,9 +221,7 @@ export default function SalesRegistryForm() {
         setIsLoading(false);
     };
 
-    // ================================================================
-    // "GUARDIA" DE PERMISOS
-    // ================================================================
+    // Guardia de Permisos
     if (meLoading) {
         return <div className="text-center text-gray-400 p-8">Verificando permisos...</div>;
     }
@@ -237,14 +229,12 @@ export default function SalesRegistryForm() {
     if (!canAccess) {
         return (
             <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-center text-rose-200 max-w-md mx-auto">
-                No tienes permisos para registrar ventas. Contacta a un administrador.
+                No tienes permisos para esta página.
             </div>
         );
     }
     
-    // ================================================================
-    // RENDERIZADO DEL FORMULARIO
-    // ================================================================
+    // Vista de Éxito
     if (successInfo) {
         return (
             <div className="text-center p-8 bg-gray-900 rounded-lg max-w-lg mx-auto">
@@ -265,7 +255,102 @@ export default function SalesRegistryForm() {
     }
     
     const renderStepContent = () => {
-        // ... (el contenido de renderStepContent se mantiene igual)
+        if (currentStep.startsWith('awaiting_sale_type_')) {
+            const index = parseInt(currentStep.split('_')[3]);
+            const item = order.items[index];
+            return (
+                <div>
+                    <h3 className="text-lg mb-4">Para <strong>{item?.name}</strong>, ¿es venta por mayor o detalle?</h3>
+                    <div className="flex gap-4">
+                        <button onClick={() => { updateItem(index, { sale_type: 'mayor' }); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">📦 Por Mayor</button>
+                        <button onClick={() => { updateItem(index, { sale_type: 'detalle' }); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">🛍️ Al Detalle</button>
+                    </div>
+                </div>
+            );
+        }
+        
+        if (currentStep.startsWith('awaiting_price_')) {
+            const index = parseInt(currentStep.split('_')[2]);
+            const item = order.items[index];
+            return (
+                <div>
+                    <h3 className="text-lg mb-2">¿Cuál es el precio unitario (Bs.) para <strong>{item?.name}</strong>?</h3>
+                    <input type="number" onBlur={(e) => updateItem(index, { unit_price: parseFloat(e.target.value) || 0 })} placeholder="Ej: 80.00" autoFocus className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                    <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Confirmar Precio</button>
+                </div>
+            );
+        }
+
+        switch (currentStep) {
+            case 'awaiting_customer':
+                return (
+                    <div>
+                        <h3 className="text-lg mb-2">Datos del Cliente</h3>
+                        <input type="text" value={order.customer_name} onChange={e => setOrder(p => ({...p, customer_name: e.target.value}))} placeholder="Nombre Completo" className="w-full bg-gray-700 rounded p-2 border border-gray-600 mb-2" />
+                        <input type="tel" value={order.customer_phone} onChange={handlePhoneChange} placeholder="Teléfono (solo números)" className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Siguiente</button>
+                    </div>
+                );
+            case 'awaiting_order_type':
+                 return (
+                    <div>
+                        <h3 className="text-lg mb-4">¿El pedido es para entrega local o encomienda?</h3>
+                        <div className="flex gap-4">
+                            <button onClick={() => { setOrder(p => ({...p, is_encomienda: false})); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">🛵 Entrega Local</button>
+                            <button onClick={() => { setOrder(p => ({...p, is_encomienda: true})); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">📦 Encomienda</button>
+                        </div>
+                    </div>
+                );
+            case 'awaiting_destination':
+                 return (
+                    <div>
+                        <h3 className="text-lg mb-2">Destino de la Encomienda</h3>
+                        <input type="text" defaultValue={order.destino} onBlur={(e) => setOrder(p => ({...p, destino: e.target.value}))} placeholder="Ciudad o Departamento" autoFocus className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Siguiente</button>
+                    </div>
+                );
+             case 'awaiting_location':
+                 return (
+                    <div>
+                        <h3 className="text-lg mb-2">Ubicación de Entrega Local</h3>
+                        <input type="text" defaultValue={order.location || ''} onBlur={(e) => setOrder(p => ({...p, location: e.target.value}))} placeholder="Dirección o link de Google Maps" autoFocus className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Siguiente</button>
+                    </div>
+                );
+            case 'awaiting_payment':
+                 return (
+                    <div>
+                        <h3 className="text-lg mb-4">Método de Pago</h3>
+                        <div className="flex flex-col gap-2">
+                            <button onClick={() => { setOrder(p => ({...p, payment_method: 'Efectivo'})); advanceFlow(); }} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">💵 Efectivo</button>
+                            <button onClick={() => { setOrder(p => ({...p, payment_method: 'QR'})); advanceFlow(); }} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">📲 QR</button>
+                            <button onClick={() => { setOrder(p => ({...p, payment_method: 'Transferencia'})); advanceFlow(); }} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">🏦 Transferencia</button>
+                        </div>
+                    </div>
+                );
+            case 'confirming':
+                const total = order.items.reduce((sum, item) => sum + (item.qty * item.unit_price), 0);
+                return (
+                    <div>
+                        <h3 className="text-xl font-bold mb-2">Resumen Final</h3>
+                        <div className="space-y-1 text-left bg-gray-700/50 p-4 rounded">
+                            <p><strong>Cliente:</strong> {order.customer_name} ({order.customer_phone})</p>
+                            <p><strong>Entrega:</strong> {order.is_encomienda ? `Encomienda a ${order.destino}` : `Local en ${order.location}`}</p>
+                            <p><strong>Pago:</strong> {order.payment_method}</p>
+                            <ul className="list-disc list-inside pt-2">
+                                {order.items.map((item, i) => <li key={i}>{item.qty} x {item.name} ({item.sale_type}) @ Bs. {item.unit_price.toFixed(2)}</li>)}
+                            </ul>
+                            <p className="text-xl font-bold mt-2 border-t border-gray-600 pt-2">Total: Bs. {total.toFixed(2)}</p>
+                        </div>
+                        <button onClick={handleSaveOrder} disabled={isLoading} className="mt-4 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded text-lg disabled:bg-gray-500">
+                             {isLoading ? 'Guardando...' : 'Confirmar y Guardar Pedido'}
+                         </button>
+                    </div>
+                );
+            // --- ESTA ES LA CORRECCIÓN QUE ARREGLA EL BUILD ---
+            default:
+                return null;
+        }
     };
     
     return (
@@ -277,7 +362,7 @@ export default function SalesRegistryForm() {
                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end p-4 border border-gray-700 rounded-lg">
                     <div className="md:col-span-3 relative">
                         <label className="block text-sm font-medium text-gray-300">Buscar Producto</label>
-                        <input type="text" value={productQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProductQuery(e.target.value)} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        <input type="text" value={productQuery} onChange={(e) => setProductQuery(e.target.value)} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
                         {searchResults.length > 0 && (
                             <div className="absolute z-10 w-full bg-gray-900 border border-gray-700 rounded-b-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                                 {searchResults.map(p => <div key={p.id} onClick={() => { setNewItem({ ...newItem, name: p.name, is_recognized: true }); setProductQuery(p.name); setSearchResults([]); }} className="p-3 hover:bg-gray-700 cursor-pointer">{p.name}</div>)}
@@ -286,7 +371,7 @@ export default function SalesRegistryForm() {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-300">Cant.</label>
-                        <input type="number" value={newItem.qty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItem(p => ({...p, qty: parseInt(e.target.value) || 1}))} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        <input type="number" value={newItem.qty} onChange={(e) => setNewItem(p => ({...p, qty: parseInt(e.target.value) || 1}))} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
                     </div>
                     <div className="md:col-span-2">
                         <button onClick={handleAddItem} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Añadir al Pedido</button>
