@@ -1,4 +1,4 @@
-// app/api/products/route.ts  (misma funcionalidad; solo lazy init + runtime node)
+// app/endpoints/products/route.ts  (misma funcionalidad; solo lazy init + runtime node)
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const srv = process.env.SUPABASE_SERVICE_ROLE; // mismo nombre que en el resto
+  const srv = process.env.SUPABASE_SERVICE_ROLE_KEY; // mismo nombre que en el resto
   if (!url) throw new Error('Missing env: NEXT_PUBLIC_SUPABASE_URL');
   if (!srv) throw new Error('Missing env: SUPABASE_SERVICE_ROLE');
   return createClient(url, srv, { auth: { persistSession: false } });

@@ -28,7 +28,7 @@ export default function PersonSelect({
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch('/api/people?limit=500', {
+        const res = await fetch('/endpoints/people?limit=500', {
           cache: 'no-store',
           headers: { Accept: 'application/json' },
         });
@@ -56,7 +56,7 @@ export default function PersonSelect({
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch(`/api/people?q=${encodeURIComponent(term)}&limit=300`, {
+        const res = await fetch(`/endpoints/people?q=${encodeURIComponent(term)}&limit=300`, {
           cache: 'no-store',
           headers: { Accept: 'application/json' },
         });

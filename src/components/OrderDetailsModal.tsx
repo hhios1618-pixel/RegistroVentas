@@ -188,7 +188,7 @@ export default function OrderDetailsModal({
     if (activeTab !== 'delivery') return;
     (async () => {
       try {
-        const res = await fetch(`/api/orders/${order.id}/assign`, { method: 'GET' });
+        const res = await fetch(`/endpoints/orders/${order.id}/assign`, { method: 'GET' });
         const json = await res.json();
         if (json?.assignment) {
           setCurrentWindow({ start: json.assignment.window_start, end: json.assignment.window_end });
@@ -226,7 +226,7 @@ export default function OrderDetailsModal({
     try {
       const desde = composeLocalISO(fixedYear, mes + 1, dia, desdeH, desdeM);
       const hasta = composeLocalISO(fixedYear, mes + 1, dia, hastaH, hastaM);
-      const response = await fetch(`/api/orders/${order.id}/assign`, {
+      const response = await fetch(`/endpoints/orders/${order.id}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ desde, hasta, deliveryUserId: selectedDelivery }),

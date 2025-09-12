@@ -1,4 +1,4 @@
-// app/api/usd-rate/route.ts
+// app/endpoints/usd-rate/route.ts
 
 import { NextResponse } from 'next/server';
 
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'; // Asegura que la ruta no sea cacheada e
 export async function GET() {
   try {
     // URL de la API P2P de Binance para comprar USDT con BOB
-    const BINANCE_P2P_URL = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
+    const BINANCE_P2P_URL = 'https://p2p.binance.com/bendpoints/c2c/v2/friendly/c2c/adv/search';
 
     const response = await fetch(BINANCE_P2P_URL, {
       method: 'POST',

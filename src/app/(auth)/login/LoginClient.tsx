@@ -1,55 +1,42 @@
-// En tu archivo: src/app/(auth)/login/LoginClient.tsx
-
 'use client';
 
 import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-// FIX 1: Importar el tipo 'Variants' desde framer-motion
 import { motion, Variants } from 'framer-motion';
 
-// --- Iconos para UI Mejorada ---
+// --- Iconos UI ---
 const UserIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
   </svg>
 );
-
 const LockIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
   </svg>
 );
-
 export const Spinner = () => (
-    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-        <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
+  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+    <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+  </svg>
 );
 
-// --- Lógica de redirección ---
-const HOME: Record<string, string> = {
-  GERENCIA: '/', ADMIN: '/', COORDINADOR: '/', ASESOR: '/',
-  PROMOTOR: '/promotores/registro', VENDEDOR: '/captura',
-  LOGISTICA: '/delivery', USER: '/',
-};
-const roleHome = (r?: string) => HOME[String(r || 'USER').toUpperCase()] || HOME.USER;
-
-// --- Componente Cliente del Login ---
+// --- Componente ---
 export function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPwd, setShowPwd] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
+  const [username, setUsername]   = useState('');
+  const [password, setPassword]   = useState('');
+  const [showPwd, setShowPwd]     = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [notice, setNotice]       = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
 
   const ui = {
-    ok: (m: string) => setNotice({ type: 'success', msg: m }),
-    err: (m: string) => setNotice({ type: 'error', msg: m }),
-    info: (m: string) => setNotice({ type: 'info', msg: m }),
+    ok: (m: string)  => setNotice({ type: 'success', msg: m }),
+    err: (m: string) => setNotice({ type: 'error',  msg: m }),
+    info:(m: string) => setNotice({ type: 'info',    msg: m }),
     clear: () => setNotice(null),
   };
 
@@ -68,11 +55,11 @@ export function LoginClient() {
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j?.ok) throw new Error(j?.error || 'Usuario o contraseña incorrectos.');
 
-      const role = String(j?.user?.role || 'USER').toUpperCase();
-      const dest = searchParams.get('redirectTo') || roleHome(role);
+      // 🚀 Ahora todos pasan por /post-login
+      const dest = searchParams.get('redirectTo') || '/post-login';
 
       ui.ok('Acceso verificado. Redirigiendo…');
-      setTimeout(() => router.replace(dest), 300);
+      setTimeout(() => router.replace(dest), 250);
     } catch {
       ui.err('Usuario o contraseña incorrectos.');
     } finally {
@@ -80,25 +67,17 @@ export function LoginClient() {
     }
   }
 
-  // FIX 2: Aplicar el tipo 'Variants' a la constante
   const containerVariants: Variants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+    hidden:  { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
   };
 
   return (
     <div className="min-h-dvh flex items-center justify-center p-6 relative overflow-hidden">
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute top-0 left-0 w-full h-full object-cover z-0"
-        src="/1.mp4"
-      />
+      <video autoPlay loop muted playsInline className="absolute top-0 left-0 w-full h-full object-cover z-0" src="/1.mp4" />
       <div className="absolute top-0 left-0 w-full h-full bg-black/60 z-10" />
 
-      <motion.div 
+      <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -106,19 +85,12 @@ export function LoginClient() {
       >
         <div
           className="w-full h-full rounded-2xl p-8"
-          style={{
-            background: 'rgba(12, 16, 32, 0.7)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-          }}
+          style={{ background: 'rgba(12, 16, 32, 0.7)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
         >
           <div className="mb-8 flex items-center gap-4">
             <div
               className="h-12 w-12 rounded-xl grid place-items-center text-white text-xl font-bold"
-              style={{
-                background: 'conic-gradient(from 160deg,#00E0FF,#00FFA3,#00E0FF)',
-                boxShadow: '0 0 32px rgba(0,255,195,.40)',
-              }}
+              style={{ background: 'conic-gradient(from 160deg,#00E0FF,#00FFA3,#00E0FF)', boxShadow: '0 0 32px rgba(0,255,195,.40)' }}
             >
               F
             </div>

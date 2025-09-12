@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE!;
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const ADMIN_KEY = process.env.ADMIN_PROVISION_KEY!;
 
 const toEmail = (u: string) => `${u}@fenix.local`;

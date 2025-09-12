@@ -1,11 +1,12 @@
 'use client';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import CameraCapture from '@/components/attendance/CameraCapture';
 import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
 import { isMobileUA } from '@/lib/device';
 import { compressDataUrl } from '@/lib/image';
 
-// ======== GPS mejorado (muestreo) ========
+/* ================== GPS mejorado (muestreo) ================== */
 type GeoFix = { lat: number; lng: number; accuracy: number; ts: number };
 type GeoResult = { lat: number; lng: number; accuracy: number };
 
@@ -52,21 +53,120 @@ async function getBestLocation(opts?: {
   if (hardOk) return hardOk;
   return best[0];
 }
-// ========================================
+/* ============================================================= */
 
 type CheckType = 'in' | 'out';
+
 type Me = {
   ok: boolean;
   id: string;
   full_name: string;
   role?: string;
   email?: string;
-  local?: string | null; // ⬅️ viene desde /endpoints/me
+  local?: string | null;
 };
 
 export default function AsistenciaPage() {
-  // Bloquea escritorio
-  if (typeof window !== 'undefined' && !isMobileUA()) {
+  // ================================================================
+  // HOOKS DECLARADOS AL PRINCIPIO PARA CUMPLIR REGLAS DE REACT
+  // ================================================================
+  const [mounted, setMounted] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
+  const [siteId, setSiteId] = useState<string | null>(null);
+  const [siteName, setSiteName] = useState<string | null>(null);
+  const [checkType, setCheckType] = useState<CheckType>('in');
+  const [selfie, setSelfie] = useState<string | null>(null);
+  const [loc, setLoc] = useState<GeoResult | null>(null);
+  const [qr, setQr] = useState<{ code: string; exp_at: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [locLoading, setLocLoading] = useState(false);
+  const [resolvingSite, setResolvingSite] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  const deviceId = useMemo<string>(() => {
+    const k = 'fx_device_id';
+    let v = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
+    if (!v) {
+      v = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+      if (typeof window !== 'undefined') localStorage.setItem(k, v);
+    }
+    return v || 'web-client';
+  }, []);
+
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { setIsDesktop(!isMobileUA()); }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+  
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/endpoints/me', { cache: 'no-store' });
+        const d: Me = await r.json();
+        if (!r.ok || !d?.ok) throw new Error((d as any)?.error || 'me_failed');
+        setMe(d);
+      } catch (e) {
+        setToast('No se pudo cargar tu sesión');
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!me?.id) return;
+    (async () => {
+      setResolvingSite(true);
+      try {
+        let foundSite = null;
+
+        const r1 = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
+        if (r1.ok) {
+            const j1 = await r1.json();
+            foundSite = Array.isArray(j1?.results) && j1.results.length > 0 ? j1.results[0] : null;
+        }
+
+        if (!foundSite && me.local) {
+          const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
+          if(r2.ok) {
+              const j2 = await r2.json();
+              foundSite = Array.isArray(j2?.results) && j2.results.length > 0 ? j2.results[0] : null;
+          }
+        }
+
+        if (foundSite?.id) {
+            setSiteId(foundSite.id);
+            setSiteName(foundSite.name ?? me.local ?? 'Sucursal asignada');
+        } else {
+            setSiteId(null);
+            setSiteName(me?.local ? `${me.local} (no mapeada)` : 'No asignada');
+            setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
+        }
+      } catch (e) {
+        console.error("Error resolviendo sucursal:", e);
+        setToast('Fallo resolviendo sucursal');
+        setSiteId(null);
+        setSiteName('Error de red');
+      } finally {
+        setResolvingSite(false);
+      }
+    })();
+  }, [me?.id, me?.local]);
+
+  // ================================================================
+  // VALIDACIONES Y RETORNOS TEMPRANOS
+  // ================================================================
+  if (!mounted) {
+    return (
+      <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb'}}>
+        Cargando…
+      </div>
+    );
+  }
+  if (isDesktop) {
     return (
       <div style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0f172a',color:'#e5e7eb',fontFamily:'system-ui'}}>
         <div style={{maxWidth:560,padding:24,borderRadius:16,border:'1px solid #334155',background:'rgba(15,23,42,.85)',textAlign:'center'}}>
@@ -76,100 +176,26 @@ export default function AsistenciaPage() {
       </div>
     );
   }
-
-  const [me, setMe] = useState<Me | null>(null);
-  const [siteId, setSiteId] = useState<string | null>(null);
-  const [siteName, setSiteName] = useState<string | null>(null);
-
-  const [checkType, setCheckType] = useState<CheckType>('in');
-  const [selfie, setSelfie] = useState<string | null>(null);
-  const [loc, setLoc] = useState<GeoResult | null>(null);
-  const [qr, setQr] = useState<{ code: string; exp_at: string } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [locLoading, setLocLoading] = useState(false);
-  const [resolvingSite, setResolvingSite] = useState(false);
-
-  // Device id
-  const deviceId = useMemo<string>(() => {
-    const k = 'fx_device_id';
-    let v = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
-    if (!v) { v = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2); if (typeof window !== 'undefined') localStorage.setItem(k, v); }
-    return v || 'web-client';
-  }, []);
-
-  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
-
-  // === Cargar identidad (incluye local) ===
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch('/endpoints/me', { cache: 'no-store' });
-        const d: Me = await r.json();
-        if (!r.ok || !d?.ok) throw new Error(d as any);
-        setMe(d);
-      } catch {
-        setToast('No se pudo cargar tu sesión');
-      }
-    })();
-  }, []);
-
-  // === Resolver sucursal asignada ===
-  useEffect(() => {
-    if (!me?.id) return;
-    (async () => {
-      setResolvingSite(true);
-      try {
-        // 1) Directo: asignada por sesión
-        let r = await fetch('/endpoints/sites?assigned_to=me', { cache: 'no-store' });
-        if (r.ok) {
-          const j = await r.json();
-          const s = Array.isArray(j?.results) ? j.results[0] : Array.isArray(j) ? j[0] : null;
-          if (s?.id) {
-            setSiteId(s.id);
-            setSiteName(s.name || s.title || s.local || 'Sucursal asignada');
-            setResolvingSite(false);
-            return;
-          }
-        }
-        // 2) Fallback: usar me.local como nombre para buscar en sites
-        if (me.local) {
-          const r2 = await fetch(`/endpoints/sites?name=${encodeURIComponent(me.local)}`, { cache: 'no-store' });
-          if (r2.ok) {
-            const j2 = await r2.json();
-            const s2 = Array.isArray(j2?.results) ? j2.results[0] : Array.isArray(j2) ? j2[0] : null;
-            if (s2?.id) {
-              setSiteId(s2.id);
-              setSiteName(s2.name || s2.title || me.local);
-              setResolvingSite(false);
-              return;
-            }
-            // si no match exacto, al menos mostramos el nombre “heredado”
-            setSiteId(null);
-            setSiteName(`${me.local} (no mapeada)`);
-            setToast('Tu sucursal no está mapeada en /sites. Contacta a admin.');
-            setResolvingSite(false);
-            return;
-          }
-        }
-        setToast('No se pudo resolver tu sucursal asignada');
-      } catch {
-        setToast('Fallo resolviendo sucursal');
-      } finally {
-        setResolvingSite(false);
-      }
-    })();
-  }, [me?.id, me?.local]);
-
+  
+  // ================================================================
+  // LÓGICA Y RENDERIZADO PRINCIPAL
+  // ================================================================
   const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
   const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
   const progressPercent = (progress / 4) * 100;
 
   const handleGetQR = async () => {
     if (!siteId) { setToast('⚠️ No hay sucursal asignada'); return; }
-    const r = await getQR(siteId!);
-    setQr(r);
-    setToast(`✅ Código QR generado`);
+    try {
+      setLoading(true);
+      const r = await getQR(siteId);
+      setQr(r);
+      setToast(`✅ Código QR generado (expira en 60s)`);
+    } catch (e: any) {
+      setToast(`Error QR: ${e?.message || 'Falló la función. Revisa CORS o la URL.'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGetLocation = async () => {
@@ -220,7 +246,9 @@ export default function AsistenciaPage() {
       if (r.ok) {
         setToast(`🎉 ${checkType === 'in' ? 'Entrada' : 'Salida'} registrada`);
         setSelfie(null); setLoc(null); setQr(null);
-      } else setToast('❌ Error al registrar');
+      } else {
+        setToast('❌ Error al registrar');
+      }
     } catch (err: any) {
       setToast(err?.message || '❌ Error al registrar');
     } finally {
@@ -239,8 +267,6 @@ export default function AsistenciaPage() {
       `,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
-      
-      {/* Header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 50, background: 'rgba(15, 23, 42, 0.8)',
         backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
@@ -259,14 +285,13 @@ export default function AsistenciaPage() {
               <div style={{ width: 80, height: 4, background: 'rgba(148,163,184,0.2)', borderRadius: 2, overflow: 'hidden' }}>
                 <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #059669)', transition: 'width 0.3s ease' }} />
               </div>
-              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 500 }}>{[Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length}/4</span>
+              <span style={{ color: '#94a3b8', fontSize: 12, fontWeight: 500 }}>{progress}/4</span>
             </div>
           </div>
         </div>
       </div>
 
       <div style={{ maxWidth: 896, margin: '0 auto', padding: '32px 20px' }}>
-        {/* Identidad (solo lectura) */}
         <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, marginBottom:32, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
           <div style={{ display:'grid', gap:12 }}>
             <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
@@ -278,15 +303,13 @@ export default function AsistenciaPage() {
             <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center' }}>
               <div style={{ color:'#94a3b8' }}>Sucursal</div>
               <div style={{ background:'rgba(15,23,42,.7)', border:'1px solid rgba(148,163,184,.18)', borderRadius:12, padding:'10px 12px', color: siteId ? '#e5e7eb' : '#f59e0b' }}>
-                {resolvingSite ? 'Resolviendo…' : (siteName ?? me?.local ?? 'No asignada')}
+                {resolvingSite ? 'Resolviendo…' : (siteName ?? 'No asignada')}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Grid principal */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:24, marginBottom:32 }}>
-          {/* Biométrico */}
           <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
               <div style={{ width:32, height:32, borderRadius:8, background:'linear-gradient(135deg,#8b5cf6,#7c3aed)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, color:'white' }}>🔒</div>
@@ -298,8 +321,7 @@ export default function AsistenciaPage() {
                 setSelfie(small);
               }} />
               <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                <button type="button" onClick={async ()=>{ await handleGetLocation(); }}
-                  disabled={locLoading}
+                <button type="button" onClick={handleGetLocation} disabled={locLoading}
                   style={{ padding:'12px 16px', borderRadius:12, border:'1px solid rgba(148,163,184,.2)', background: locLoading ? 'rgba(71,85,105,.5)' : 'rgba(15,23,42,.8)', color:'#e5e7eb', fontWeight:600, cursor: locLoading ? 'not-allowed' : 'pointer' }}>
                   {locLoading ? 'Obteniendo ubicación…' : '📍 Obtener ubicación (mejorada)'}
                 </button>
@@ -314,7 +336,6 @@ export default function AsistenciaPage() {
             </div>
           </div>
 
-          {/* Tipo + QR */}
           <div style={{ display:'grid', gap:24 }}>
             <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
               <div style={{ textAlign:'center', marginBottom:20 }}>
@@ -342,22 +363,21 @@ export default function AsistenciaPage() {
             <div style={{ background:'rgba(30,41,59,.6)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.1)', borderRadius:20, padding:24, boxShadow:'0 10px 40px rgba(0,0,0,.2)' }}>
               <div style={{ display:'flex', gap:16, flexWrap:'wrap', justifyContent:'center' }}>
                 <button type="button" onClick={handleGetQR}
-                  disabled={!siteId || resolvingSite}
-                  style={{ padding:'16px 24px', borderRadius:16, border:'none', background: (!siteId || resolvingSite) ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#0ea5e9,#0284c7)', color:'white', fontWeight:600, fontSize:15, cursor: (!siteId || resolvingSite) ? 'not-allowed' : 'pointer', transition:'all .3s', boxShadow: (!siteId || resolvingSite) ? 'none' : '0 8px 25px rgba(14,165,233,.3)', minWidth:160, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                  🔲 Obtener QR
+                  disabled={!siteId || resolvingSite || loading}
+                  style={{ padding:'16px 24px', borderRadius:16, border:'none', background: (!siteId || resolvingSite || loading) ? 'rgba(71,85,105,.5)' : 'linear-gradient(135deg,#0ea5e9,#0284c7)', color:'white', fontWeight:600, fontSize:15, cursor: (!siteId || resolvingSite || loading) ? 'not-allowed' : 'pointer', transition:'all .3s', boxShadow: (!siteId || resolvingSite || loading) ? 'none' : '0 8px 25px rgba(14,165,233,.3)', minWidth:160, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                  {loading ? '...' : '🔲 Obtener QR'}
                 </button>
                 <button type="button" onClick={submit}
-                  disabled={(!me?.id) || (!siteId) || !selfie || !loc || !qr || loading}
+                  disabled={!canSubmit || loading}
                   style={{ padding:'16px 32px', borderRadius:16, border:'none',
-                    background: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'rgba(71,85,105,.5)' : (checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'),
-                    color:'white', fontWeight:700, fontSize:16, cursor: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'not-allowed' : 'pointer', transition:'all .3s',
-                    boxShadow: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'none' : (checkType==='in' ? '0 8px 25px rgba(16,185,129,.4)' : '0 8px 25px rgba(239,68,68,.4)'),
-                    minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transform: ((!me?.id) || (!siteId) || !selfie || !loc || !qr || loading) ? 'none' : 'translateY(-2px)' }}>
+                    background: (!canSubmit || loading) ? 'rgba(71,85,105,.5)' : (checkType==='in' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#ef4444,#dc2626)'),
+                    color:'white', fontWeight:700, fontSize:16, cursor: (!canSubmit || loading) ? 'not-allowed' : 'pointer', transition:'all .3s',
+                    boxShadow: (!canSubmit || loading) ? 'none' : (checkType==='in' ? '0 8px 25px rgba(16,185,129,.4)' : '0 8px 25px rgba(239,68,68,.4)'),
+                    minWidth:180, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transform: (!canSubmit || loading) ? 'none' : 'translateY(-2px)' }}>
                   {loading ? (<><div style={{ width:16, height:16, border:'2px solid rgba(255,255,255,.3)', borderTop:'2px solid white', borderRadius:'50%', animation:'spin 1s linear infinite' }} /> Procesando...</>) : (`${checkType==='in' ? '✅' : '🚪'} Marcar ${checkType==='in' ? 'Entrada' : 'Salida'}`)}
                 </button>
               </div>
 
-              {/* Status */}
               <div style={{ display:'flex', gap:12, marginTop:20, fontSize:13, justifyContent:'center', flexWrap:'wrap' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, color: me?.id ? '#10b981' : '#64748b' }}>{me?.id ? '✅' : '⏳'} Empleado</div>
                 <div style={{ display:'flex', alignItems:'center', gap:6, color: siteId ? '#10b981' : '#64748b' }}>{siteId ? `✅ ${siteName}` : '⏳ Sucursal'}</div>
@@ -375,7 +395,6 @@ export default function AsistenciaPage() {
           </div>
         </div>
 
-        {/* Toast */}
         {toast && (
           <div style={{ position:'fixed', top:20, right:20, background:'rgba(15,23,42,.95)', backdropFilter:'blur(16px)', border:'1px solid rgba(148,163,184,.2)', borderRadius:16, padding:'16px 20px', color:'#f1f5f9', fontSize:14, fontWeight:500, boxShadow:'0 10px 40px rgba(0,0,0,.3)', zIndex:100, maxWidth:320, animation:'slideInRight .3s ease' }}>
             {toast}

@@ -1,4 +1,3 @@
-// src/lib/attendance/api.ts
 // Lib de asistencia: tipos + llamadas a Edge Functions (qr, checkin)
 
 export type CheckType = 'in' | 'out' | 'lunch_in' | 'lunch_out';
@@ -24,7 +23,18 @@ const FUNCTIONS_BASE =
   `${URL}/functions/v1`;
 
 function assertEnv() {
-  if (!URL || !ANON) throw new Error('env_missing');
+  if (!URL || !ANON) throw new Error('Faltan variables de entorno NEXT_PUBLIC_SUPABASE_URL o ANON_KEY');
+}
+
+async function handleFetchError(res: Response): Promise<Error> {
+  // Manejo de errores más robusto
+  // Si la respuesta no es JSON, usa el statusText.
+  try {
+    const json = await res.json();
+    return new Error((json && (json.error || json.message)) || `Error ${res.status}`);
+  } catch (e) {
+    return new Error(`Error ${res.status}: ${res.statusText}`);
+  }
 }
 
 // === QR ===
@@ -35,9 +45,11 @@ export async function getQR(site_id: string): Promise<{ code: string; exp_at: st
     headers: { Authorization: `Bearer ${ANON}` },
     cache: 'no-store',
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || 'internal_error');
-  return json as { code: string; exp_at: string };
+  
+  if (!res.ok) {
+    throw await handleFetchError(res);
+  }
+  return res.json() as Promise<{ code: string; exp_at: string }>;
 }
 
 // === Check-in (turno y colación) ===
@@ -51,11 +63,9 @@ export async function checkIn(payload: CheckInPayload): Promise<{ ok: boolean }>
     },
     body: JSON.stringify(payload),
   });
-  const json = await res.json();
+
   if (!res.ok) {
-    // propaga mensaje para toasts
-    const err = (json && (json.error || json.message)) || `checkin_failed_${res.status}`;
-    throw new Error(err);
+    throw await handleFetchError(res);
   }
-  return json as { ok: boolean };
+  return res.json() as Promise<{ ok: boolean }>;
 }

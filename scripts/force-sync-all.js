@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SRK = process.env.SUPABASE_SERVICE_ROLE;
+const SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!URL || !SRK) { console.error('Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE'); process.exit(1); }
 
 const LOGIN_DOMAIN     = process.env.LOGIN_DOMAIN || 'fenix.local';

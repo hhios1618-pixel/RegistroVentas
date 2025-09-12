@@ -5,7 +5,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// GET /api/people?q=hugo&limit=300
+// GET /endpoints/people?q=hugo&limit=300
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);

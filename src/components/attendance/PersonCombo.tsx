@@ -39,7 +39,7 @@ export default function PersonCombo({ value, onSelect }: Props) {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/people?limit=500', { cache: 'no-store', headers: { Accept: 'application/json' } });
+        const res = await fetch('/endpoints/people?limit=500', { cache: 'no-store', headers: { Accept: 'application/json' } });
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'fetch_failed');
         setList(json.data as Person[]);
@@ -59,7 +59,7 @@ export default function PersonCombo({ value, onSelect }: Props) {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/people?q=${encodeURIComponent(term)}&limit=300`, { cache: 'no-store', headers: { Accept: 'application/json' } });
+        const res = await fetch(`/endpoints/people?q=${encodeURIComponent(term)}&limit=300`, { cache: 'no-store', headers: { Accept: 'application/json' } });
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'fetch_failed');
         setList(json.data as Person[]);

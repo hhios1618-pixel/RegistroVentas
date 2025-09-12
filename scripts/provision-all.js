@@ -15,7 +15,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SERVICE_ROLE  = process.env.SUPABASE_SERVICE_ROLE;
+const SERVICE_ROLE  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!SUPABASE_URL || !SERVICE_ROLE) {
   console.error('❌ Faltan env: NEXT_PUBLIC_SUPABASE_URL y/o SUPABASE_SERVICE_ROLE en .env.local');
   process.exit(1);
