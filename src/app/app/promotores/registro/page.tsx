@@ -1,7 +1,6 @@
-// src/app/promotores/registro/page.tsx
 'use client';
-import RegistryPage from '@/app/dashboard/registro/page';
+import SalesRegistryForm from '@/components/forms/SalesRegistryForm';
 
-export default function PromotoresRegistro() {
-  return <RegistryPage />;
+export default function PromotoresRegistroPage() {
+  return <SalesRegistryForm />;
 }
