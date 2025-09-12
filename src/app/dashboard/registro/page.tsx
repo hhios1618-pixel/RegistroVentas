@@ -1,10 +1,8 @@
-"use client";
-
-import React, { useState, useEffect } from 'react';
+'use client';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// --- DEFINICIÓN DE TIPOS PARA TYPESCRIPT ---
-// Esto resuelve todos los errores de tipado que encontraste.
+// --- DEFINICIÓN DE TIPOS ---
 interface ProductSearchResult {
   id: number;
   name: string;
@@ -42,7 +40,6 @@ interface SuccessInfo {
   id: number;
   order_no: number | string | null;
 }
-
 
 // --- CONFIGURACIÓN ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -102,6 +99,15 @@ export default function SalesRegistryPage() {
 
     const handleRemoveItem = (indexToRemove: number) => {
         setOrder(prev => ({ ...prev, items: prev.items.filter((_, index) => index !== indexToRemove) }));
+    };
+    
+    // --- CAMBIO CLAVE: Función para manejar el teléfono ---
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        // Esta expresión regular comprueba si el valor contiene solo números (o está vacío)
+        if (/^[0-9]*$/.test(value)) {
+            setOrder(p => ({ ...p, customer_phone: value }));
+        }
     };
 
     const updateItem = (index: number, updates: Partial<OrderItem>) => {
@@ -238,7 +244,8 @@ export default function SalesRegistryPage() {
                     <div>
                         <h3 className="text-lg mb-2">Datos del Cliente</h3>
                         <input type="text" value={order.customer_name} onChange={e => setOrder(p => ({...p, customer_name: e.target.value}))} placeholder="Nombre Completo" className="w-full bg-gray-700 rounded p-2 border border-gray-600 mb-2" />
-                        <input type="tel" value={order.customer_phone} onChange={e => setOrder(p => ({...p, customer_phone: e.target.value}))} placeholder="Teléfono" className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
+                        {/* --- CAMBIO CLAVE: Se usa la nueva función de validación --- */}
+                        <input type="tel" value={order.customer_phone} onChange={handlePhoneChange} placeholder="Teléfono (solo números)" className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
                         <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Siguiente</button>
                     </div>
                 );
