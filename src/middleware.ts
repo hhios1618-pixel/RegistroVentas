@@ -36,13 +36,14 @@ const ASESOR_ALLOW: RegExp[] = [
   /^\/dashboard\/devoluciones(?:\/.*)?$/,
 ];
 
+// --- LISTA CORREGIDA PARA PROMOTOR ---
 const PROMOTOR_ALLOW: RegExp[] = [
-  /^\/promotores(?:\/.*)?$/,         // home/resumen de promotores
-  /^\/dashboard\/registro(?:\/.*)?$/, // registrar ventas (¡lo que querías!)
-  /^\/dashboard\/captura(?:\/.*)?$/,  // embudo/captura
-  /^\/playbook-whatsapp(?:\/.*)?$/,   // playbook
-  /^\/dashboard\/usuarios(?:\/.*)?$/, // perfil (opcional)
-  /^\/$/,                             // raíz (opcional)
+  /^\/dashboard\/promotores(?:\/.*)?$/, // <-- RUTA NUEVA Y CORRECTA
+  /^\/dashboard\/registro(?:\/.*)?$/,   // Mantenemos esta como la ruta oficial de registro
+  /^\/dashboard\/captura(?:\/.*)?$/,
+  /^\/playbook-whatsapp(?:\/.*)?$/,
+  /^\/dashboard\/usuarios(?:\/.*)?$/,
+  /^\/$/,
 ];
 
 function readRoleFromCookie(req: NextRequest): string | null {
@@ -63,20 +64,17 @@ function readRoleFromCookie(req: NextRequest): string | null {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // público / assets / preflight
   if (req.method === 'OPTIONS' || isPublic(pathname) || isStaticAsset(pathname)) {
     return NextResponse.next();
   }
 
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
 
-  // Endpoints: nunca redirigir; si no hay sesión => 401 JSON
   if (pathname.startsWith('/endpoints/')) {
     if (!hasSession) return NextResponse.json({ ok:false, error:'no_session' }, { status:401 });
     return NextResponse.next();
   }
 
-  // Páginas: si no hay sesión => /login?redirectTo=
   if (!hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
@@ -84,21 +82,19 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // RBAC básico
   const role = readRoleFromCookie(req);
 
-  // 🔓 PROMOTOR: permitir solo su allowlist
   if (role === 'PROMOTOR' || role === 'PROMOTORA') {
     const allowed = PROMOTOR_ALLOW.some((rx) => rx.test(pathname));
     if (!allowed) {
       const url = req.nextUrl.clone();
-      url.pathname = '/promotores';
+      // --- REDIRECCIÓN CORREGIDA ---
+      url.pathname = '/dashboard/promotores'; // Redirigir a la nueva página de resumen
       url.searchParams.delete('redirectTo');
       return NextResponse.redirect(url);
     }
   }
 
-  // 🔓 ASESOR: permitir su allowlist
   if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'VENDEDORA') {
     const allowed = ASESOR_ALLOW.some((rx) => rx.test(pathname));
     if (!allowed) {
@@ -109,7 +105,7 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // Otros roles: pasan
+  // Los roles como GERENCIA/admin no entran en los 'if' anteriores y pasan directamente
   return NextResponse.next();
 }
 
