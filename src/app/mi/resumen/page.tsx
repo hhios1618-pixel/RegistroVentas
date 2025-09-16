@@ -1,17 +1,39 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import useSWR from 'swr';
+import { useRouter } from 'next/navigation';
 
-const fetcher = (u:string)=>fetch(u).then(r=>r.json());
+const fetcher = (u:string)=>fetch(u,{cache:'no-store'}).then(r=>r.json());
+
+type Role = 'admin'|'promotor'|'coordinador'|'lider'|'asesor'|'unknown';
+const norm = (r?:string):Role=>{
+  const x=(r||'').toUpperCase();
+  if(['GERENCIA','ADMIN','ADMINISTRADOR'].includes(x)) return 'admin';
+  if(['PROMOTOR','PROMOTORA'].includes(x)) return 'promotor';
+  if(['COORDINADOR','COORDINADORA','COORDINACION'].includes(x)) return 'coordinador';
+  if(['LIDER','JEFE','SUPERVISOR'].includes(x)) return 'lider';
+  if(['ASESOR','VENDEDOR','VENDEDORA'].includes(x)) return 'asesor';
+  return 'unknown';
+};
 
 export default function MiResumenPage() {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0,7)); // YYYY-MM
+  const router = useRouter();
   const { data: me } = useSWR('/endpoints/me', fetcher);
-  const { data: att, isLoading: attLoading } = useSWR(`/endpoints/my/attendance?month=${month}`, fetcher);
+  const role:Role = useMemo(()=>norm(me?.role), [me?.role]);
+
+  // si es promotor, no aplica este resumen (no tienen asistencia propia aquí)
+  useEffect(()=>{
+    if (!me) return;
+    if (role === 'promotor') router.replace('/dashboard/promotores');
+  }, [me, role, router]);
+
+  const [month, setMonth] = useState(new Date().toISOString().slice(0,7)); // YYYY-MM
+  const { data: att, isLoading: attLoading } = useSWR(
+    role==='promotor' ? null : `/endpoints/my/attendance?month=${month}`, fetcher
+  );
   const { data: sal, isLoading: salLoading } = useSWR(`/endpoints/my/sales?month=${month}`, fetcher);
 
   const name = me?.full_name || '—';
-
   const attKpis = att?.kpis ?? { dias_con_marca:0, entradas:0, salidas:0, pct_geocerca_ok:0 };
   const salKpis = sal?.kpis ?? { ventas:0, pedidos:0, total:0 };
 
@@ -39,41 +61,45 @@ export default function MiResumenPage() {
 
       {/* KPIs */}
       <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16,marginBottom:24}}>
-        <Kpi title="Días con marca" value={attKpis.dias_con_marca} />
-        <Kpi title="Entradas" value={attKpis.entradas} />
-        <Kpi title="Salidas" value={attKpis.salidas} />
-        <Kpi title="% Geo OK" value={attKpis.pct_geocerca_ok} suffix="%" />
+        {role!=='promotor' && <>
+          <Kpi title="Días con marca" value={attKpis.dias_con_marca} />
+          <Kpi title="Entradas" value={attKpis.entradas} />
+          <Kpi title="Salidas" value={attKpis.salidas} />
+          <Kpi title="% Geo OK" value={attKpis.pct_geocerca_ok} suffix="%" />
+        </>}
         <Kpi title="Ventas" value={salKpis.ventas} />
         <Kpi title="Pedidos" value={salKpis.pedidos} />
         <Kpi title="Total Bs" value={salKpis.total} money />
       </section>
 
-      <div style={{display:'grid',gridTemplateColumns:'2fr 3fr',gap:16}}>
-        {/* Asistencia timeline */}
-        <div style={{background:'rgba(30,41,59,.6)',border:'1px solid rgba(148,163,184,.1)',borderRadius:16,padding:16}}>
-          <h3 style={{marginTop:0}}>Asistencia</h3>
-          {attLoading ? 'Cargando…' : (
-            <div style={{display:'grid',gap:12}}>
-              {att?.days?.length ? att.days.map((d:any)=>(
-                <div key={d.date} style={{background:'#0b1220',border:'1px solid #334155',borderRadius:12,padding:12}}>
-                  <div style={{fontWeight:700,marginBottom:8}}>{d.date}</div>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                    {d.marks.map((m:any)=>(
-                      <span key={m.id} style={{
-                        padding:'6px 8px',borderRadius:10,border:'1px solid #334155',background:m.type==='in'?'#064e3b':'#3f0a0a',
-                        color:'white',fontSize:12
-                      }}>
-                        {m.type.toUpperCase()} · {new Date(m.taken_at).toLocaleTimeString('es-BO',{hour:'2-digit',minute:'2-digit'})}
-                        {typeof m.distance_m==='number' && <span style={{opacity:.8}}> · {Math.round(m.distance_m)}m</span>}
-                        {m.site_name && <span style={{opacity:.8}}> · {m.site_name}</span>}
-                      </span>
-                    ))}
+      <div style={{display:'grid',gridTemplateColumns: role==='promotor' ? '1fr' : '2fr 3fr', gap:16}}>
+        {/* Asistencia timeline (no para promotores) */}
+        {role!=='promotor' && (
+          <div style={{background:'rgba(30,41,59,.6)',border:'1px solid rgba(148,163,184,.1)',borderRadius:16,padding:16}}>
+            <h3 style={{marginTop:0}}>Asistencia</h3>
+            {attLoading ? 'Cargando…' : (
+              <div style={{display:'grid',gap:12}}>
+                {att?.days?.length ? att.days.map((d:any)=>(
+                  <div key={d.date} style={{background:'#0b1220',border:'1px solid #334155',borderRadius:12,padding:12}}>
+                    <div style={{fontWeight:700,marginBottom:8}}>{d.date}</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                      {d.marks.map((m:any)=>(
+                        <span key={m.id} style={{
+                          padding:'6px 8px',borderRadius:10,border:'1px solid #334155',background:m.type==='in'?'#064e3b':'#3f0a0a',
+                          color:'white',fontSize:12
+                        }}>
+                          {m.type.toUpperCase()} · {new Date(m.taken_at || m.created_at).toLocaleTimeString('es-BO',{hour:'2-digit',minute:'2-digit'})}
+                          {typeof m.distance_m==='number' && <span style={{opacity:.8}}> · {Math.round(m.distance_m)}m</span>}
+                          {m.site_name && <span style={{opacity:.8}}> · {m.site_name}</span>}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )) : <div style={{opacity:.8}}>Sin marcas este mes.</div>}
-            </div>
-          )}
-        </div>
+                )) : <div style={{opacity:.8}}>Sin marcas este mes.</div>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Ventas + Top productos */}
         <div style={{display:'grid',gap:16}}>
