@@ -63,6 +63,21 @@ const fmtDT = (s: string | null) => {
 const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
 
 /* ============================================================================
+   COMPONENTES UI
+   ============================================================================ */
+const Kpi = ({ title, value, accent }: { title: string; value: string; accent?: string }) => (
+  <div className="relative">
+    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg p-4 shadow-2xl">
+      <div className="text-xs font-medium text-white/70 mb-1">{title}</div>
+      <div className={`text-lg font-bold ${accent ? '' : 'text-white'}`} style={accent ? { color: accent } : {}}>
+        {value}
+      </div>
+    </div>
+  </div>
+);
+
+/* ============================================================================
    PÁGINA
    ============================================================================ */
 export default function AsistenciaResumenPage() {
@@ -114,7 +129,6 @@ export default function AsistenciaResumenPage() {
       p2.set('start', start);
       p2.set('end', end);
       if (siteIdFilter) p2.set('site_id', siteIdFilter);
-      // NOTA: no metemos 'q' aquí para no perder mapeo por persona (igual filtra en UI)
       const r2 = await fetch(`/endpoints/attendance?${p2.toString()}`, { cache: 'no-store' });
       const j2 = await r2.json();
       if (!r2.ok) throw new Error(j2?.error || 'attendance_fetch_failed');
@@ -140,7 +154,6 @@ export default function AsistenciaResumenPage() {
       const pid = m.person?.id;
       const sname = (m.site?.name || '').trim();
       if (pid && sname) {
-        // nos quedamos con el primer nombre no vacío que encontremos
         if (!map.has(pid)) map.set(pid, sname);
       }
     }
@@ -148,15 +161,12 @@ export default function AsistenciaResumenPage() {
   }, [marks]);
 
   // Agrupar rows (summary) por sucursal → persona → días.
-  // Si una persona no aparece en personToSiteName, cae en "Sin sucursal".
   const grouped = useMemo(() => {
-    // filtro por q (nombre) aquí para que aplique a todas las vistas
     const filterQ = (r: Row) => {
       if (!q) return true;
       return (r.person_name || '').toLowerCase().includes(q.toLowerCase());
     };
 
-    // sucursal → personId → info
     const bySite = new Map<
       string,
       {
@@ -165,22 +175,20 @@ export default function AsistenciaResumenPage() {
           {
             person_name: string;
             days: Row[];
-            // Subtotales persona
             exp: number;
             wrk: number;
             late: number;
             early: number;
             lunch: number;
-            comp: number; // %
+            comp: number;
           }
         >;
-        // Subtotales sucursal
         exp: number;
         wrk: number;
         late: number;
         early: number;
         lunch: number;
-        comp: number; // %
+        comp: number;
       }
     >();
 
@@ -207,7 +215,7 @@ export default function AsistenciaResumenPage() {
       personBucket.days.push(r);
     }
 
-    // Calculamos subtotales (persona y sucursal)
+    // Calculamos subtotales
     for (const [, siteBucket] of bySite) {
       for (const [, p] of siteBucket.people) {
         const exp = sum(p.days.map((d) => (isFiniteNum(d.expected_minutes) ? (d.expected_minutes as number) : 0)));
@@ -228,7 +236,6 @@ export default function AsistenciaResumenPage() {
       siteBucket.comp = siteBucket.exp ? Math.round((siteBucket.wrk / siteBucket.exp) * 100) : 0;
     }
 
-    // Orden por nombre de sitio y por nombre de persona
     const ordered: {
       siteName: string;
       siteTotals: { exp: number; wrk: number; late: number; early: number; lunch: number; comp: number };
@@ -241,8 +248,6 @@ export default function AsistenciaResumenPage() {
           person_id: pid,
           person_name: p.person_name,
           totals: { exp: p.exp, wrk: p.wrk, late: p.late, early: p.early, lunch: p.lunch, comp: p.comp },
-          // FIX #1 (NUEVO): Corregido el ordenamiento por fecha para manejar valores nulos.
-          // El ordenamiento por nombre aquí es redundante, ya que todos los días son de la misma persona.
           days: p.days.sort((a, b) => (a.date || '').localeCompare(b.date || '')),
         }))
         .sort((a, b) => (a.person_name || '').localeCompare(b.person_name || ''));
@@ -254,7 +259,6 @@ export default function AsistenciaResumenPage() {
       });
     }
 
-    // Empujar “Sin sucursal” al final
     ordered.sort((a, b) => {
       if (a.siteName === 'Sin sucursal') return 1;
       if (b.siteName === 'Sin sucursal') return -1;
@@ -264,7 +268,7 @@ export default function AsistenciaResumenPage() {
     return ordered;
   }, [rows, personToSiteName, q]);
 
-  // KPIs generales (en base a grouped)
+  // KPIs generales
   const globalKpis = useMemo(() => {
     const exp = sum(grouped.map((g) => g.siteTotals.exp));
     const wrk = sum(grouped.map((g) => g.siteTotals.wrk));
@@ -289,7 +293,7 @@ export default function AsistenciaResumenPage() {
     setOpenPersons((s) => ({ ...s, [key]: !s[key] }));
   };
 
-  // Export CSV (por sucursal o por persona)
+  // Export CSV
   const exportCSVForSite = (siteName: string) => {
     const site = grouped.find((g) => g.siteName === siteName);
     if (!site) return;
@@ -317,7 +321,7 @@ export default function AsistenciaResumenPage() {
         body.push([
           `"${siteName.replaceAll('"', '""')}"`,
           `"${(p.person_name || '').replaceAll('"', '""')}"`,
-          r.date || '', // Asegurar que la fecha no sea nula
+          r.date || '',
           fmtDT(r.first_in) === '—' ? '' : fmtDT(r.first_in),
           fmtDT(r.lunch_in ?? null) === '—' ? '' : fmtDT(r.lunch_in ?? null),
           fmtDT(r.lunch_out ?? null) === '—' ? '' : fmtDT(r.lunch_out ?? null),
@@ -367,7 +371,7 @@ export default function AsistenciaResumenPage() {
       [
         `"${siteName.replaceAll('"', '""')}"`,
         `"${(personName || '').replaceAll('"', '""')}"`,
-        r.date || '', // Asegurar que la fecha no sea nula
+        r.date || '',
         fmtDT(r.first_in) === '—' ? '' : fmtDT(r.first_in),
         fmtDT(r.lunch_in ?? null) === '—' ? '' : fmtDT(r.lunch_in ?? null),
         fmtDT(r.lunch_out ?? null) === '—' ? '' : fmtDT(r.lunch_out ?? null),
@@ -395,125 +399,106 @@ export default function AsistenciaResumenPage() {
     URL.revokeObjectURL(url);
   };
 
-  // estilos base (usa tu Tailwind; estos son inline mínimos para cohesión)
-  const card = { background: 'rgba(17,24,39,0.55)', border: '1px solid #223047', borderRadius: 14 } as React.CSSProperties;
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: '1px solid #223047',
-    background: 'rgba(3,7,18,.35)',
-    color: '#e5e7eb',
-    outline: 'none',
-    fontSize: 14,
-  };
-  const btn = (bg: string, extra?: React.CSSProperties): React.CSSProperties => ({
-    padding: '10px 14px',
-    borderRadius: 10,
-    border: '1px solid #2a3b55',
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontSize: 14,
-    background: bg,
-    color: '#e5e7eb',
-    ...extra,
-  });
+  const thStyle = "px-3 py-2 text-left text-xs font-bold text-white/70 uppercase tracking-wider";
+  const tdStyle = "px-3 py-2 text-sm text-white/80";
 
   return (
-    <div
-      style={{
-        minHeight: '100dvh',
-        background:
-          'radial-gradient(1200px 400px at -10% -10%, rgba(99,102,241,.12), transparent), radial-gradient(1200px 400px at 110% -10%, rgba(168,85,247,.12), transparent), linear-gradient(135deg,#0b1220,#0f172a 40%, #0a1022)',
-        color: '#e5e7eb',
-        fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif',
-      }}
-    >
+    <div className="min-h-screen bg-black text-white">
       {/* HEADER */}
-      <div
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 40,
-          backdropFilter: 'blur(10px)',
-          background: 'rgba(10,16,34,.65)',
-          borderBottom: '1px solid rgba(148,163,184,.12)',
-        }}
-      >
-        <div style={{ maxWidth: 'min(1800px, 96vw)', margin: '0 auto', padding: '14px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 12,
-                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                display: 'grid',
-                placeItems: 'center',
-                fontWeight: 800,
-                color: '#fff',
-              }}
-            >
-              R
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 20 }}>Resumen de Asistencia (Gerencial)</div>
-              <div style={{ color: '#94a3b8', fontSize: 12 }}>L–S 08:30–18:30 (10h) — TZ America/La_Paz — Sin domingos</div>
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border-b border-white/10 sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-r from-blue-500/30 to-purple-500/30 backdrop-blur-sm border border-blue-500/30 flex items-center justify-center font-bold text-white">
+                R
+              </div>
+              <div>
+                <div className="text-xl font-bold text-white">Resumen de Asistencia (Gerencial)</div>
+                <div className="text-sm text-white/60">L–S 08:30–18:30 (10h) — TZ America/La_Paz — Sin domingos</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 'min(1800px, 96vw)', margin: '0 auto', padding: '18px 12px 28px' }}>
+      <div className="max-w-7xl mx-auto px-6 py-8">
         {/* FILTROS */}
-        <div
-          style={{
-            ...card,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(12, 1fr)',
-            gap: 10,
-            padding: 12,
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={{ fontSize: 12, opacity: 0.8 }}>Desde</label>
-            <input type="date" value={start} onChange={(e) => setStart(e.currentTarget.value)} style={inputStyle} />
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={{ fontSize: 12, opacity: 0.8 }}>Hasta</label>
-            <input type="date" value={end} onChange={(e) => setEnd(e.currentTarget.value)} style={inputStyle} />
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label style={{ fontSize: 12, opacity: 0.8 }}>Sucursal (filtro opcional)</label>
-            <select value={siteIdFilter} onChange={(e) => setSiteIdFilter(e.currentTarget.value)} style={inputStyle}>
-              <option value="">Todas</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div style={{ gridColumn: 'span 3' }}>
-            <label style={{ fontSize: 12, opacity: 0.8 }}>Persona</label>
-            <input
-              placeholder="Buscar nombre…"
-              value={q}
-              onChange={(e) => setQ(e.currentTarget.value)}
-              onKeyDown={(e) => e.key === 'Enter' && load()}
-              style={inputStyle}
-            />
-          </div>
-          <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'end', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={load} style={btn('#133a55')}>Aplicar</button>
-            <button onClick={expandAllSites} style={btn('#0b5e2e')}>Expandir todo</button>
-            <button onClick={collapseAllSites} style={btn('#5e0b0b')}>Contraer todo</button>
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg p-4 shadow-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-white/70 mb-1">Desde</label>
+                <input 
+                  type="date" 
+                  value={start} 
+                  onChange={(e) => setStart(e.currentTarget.value)} 
+                  className="w-full px-3 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-white/70 mb-1">Hasta</label>
+                <input 
+                  type="date" 
+                  value={end} 
+                  onChange={(e) => setEnd(e.currentTarget.value)} 
+                  className="w-full px-3 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-white/70 mb-1">Sucursal</label>
+                <select 
+                  value={siteIdFilter} 
+                  onChange={(e) => setSiteIdFilter(e.currentTarget.value)} 
+                  className="w-full px-3 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all text-sm"
+                >
+                  <option value="" className="bg-black">Todas</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id} className="bg-black">
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-white/70 mb-1">Persona</label>
+                <input
+                  placeholder="Buscar nombre…"
+                  value={q}
+                  onChange={(e) => setQ(e.currentTarget.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && load()}
+                  className="w-full px-3 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all text-sm"
+                />
+              </div>
+              <div className="flex items-end">
+                <button 
+                  onClick={load} 
+                  className="w-full px-4 py-2 bg-gradient-to-r from-blue-500/30 to-blue-600/30 backdrop-blur-sm border border-blue-500/30 text-white font-semibold rounded-md hover:from-blue-500/40 hover:to-blue-600/40 transition-all text-sm"
+                >
+                  Aplicar
+                </button>
+              </div>
+              <div className="flex items-end gap-2">
+                <button 
+                  onClick={expandAllSites} 
+                  className="flex-1 px-3 py-2 bg-gradient-to-r from-green-500/30 to-green-600/30 backdrop-blur-sm border border-green-500/30 text-white font-medium rounded-md hover:from-green-500/40 hover:to-green-600/40 transition-all text-xs"
+                >
+                  Expandir
+                </button>
+                <button 
+                  onClick={collapseAllSites} 
+                  className="flex-1 px-3 py-2 bg-gradient-to-r from-red-500/30 to-red-600/30 backdrop-blur-sm border border-red-500/30 text-white font-medium rounded-md hover:from-red-500/40 hover:to-red-600/40 transition-all text-xs"
+                >
+                  Contraer
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* KPIs GLOBALES */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 16 }}>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <Kpi title="Horas esperadas" value={mmOrDash(globalKpis.exp)} />
           <Kpi title="Horas trabajadas" value={mmOrDash(globalKpis.wrk)} />
           <Kpi
@@ -528,223 +513,211 @@ export default function AsistenciaResumenPage() {
 
         {/* CONTENIDO */}
         {loading ? (
-          <div style={{ ...card, padding: 16, marginTop: 12 }}>Cargando…</div>
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+            <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg p-6 shadow-2xl">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-2"></div>
+                <div className="text-white/70">Cargando…</div>
+              </div>
+            </div>
+          </div>
         ) : err ? (
-          <div style={{ ...card, padding: 16, marginTop: 12, color: '#ef4444' }}>Error: {err}</div>
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-orange-500/20 rounded-lg"></div>
+            <div className="relative backdrop-blur-xl bg-white/5 border border-red-500/30 rounded-lg p-6 shadow-2xl">
+              <div className="text-red-400">Error: {err}</div>
+            </div>
+          </div>
         ) : grouped.length === 0 ? (
-          <div style={{ ...card, padding: 16, marginTop: 12, opacity: 0.85 }}>Sin resultados</div>
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+            <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg p-6 shadow-2xl">
+              <div className="text-white/70 text-center">Sin resultados</div>
+            </div>
+          </div>
         ) : (
-          <div style={{ display: 'grid', gap: 14 }}>
+          <div className="space-y-4">
             {grouped.map((g) => {
               const open = !!openSites[g.siteName];
               return (
-                <div key={g.siteName} style={{ ...card, padding: 14 }}>
-                  {/* CABECERA SUCURSAL */}
-                  <div
-                    onClick={() => toggleSite(g.siteName)}
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg,#8b5cf6,#7c3aed)',
-                        display: 'grid', placeItems: 'center', fontWeight: 800
-                      }}>
-                        {g.siteName.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 16, fontWeight: 800 }}>{g.siteName} <span style={{ opacity: .7, fontWeight: 600 }}>({g.people.length} personas)</span></div>
-                        <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                          Esperadas: <b>{mmOrDash(g.siteTotals.exp)}</b> ·
-                          Trabajadas: <b>{mmOrDash(g.siteTotals.wrk)}</b> ·
-                          Cumpl.: <b style={{ color: g.siteTotals.comp >= 100 ? '#10b981' : g.siteTotals.comp >= 80 ? '#eab308' : '#f87171' }}>{g.siteTotals.comp}%</b> ·
-                          Atraso: <b>{mmOrDash(g.siteTotals.late)}</b> ·
-                          Salida ant.: <b>{mmOrDash(g.siteTotals.early)}</b>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <button onClick={(e) => { e.stopPropagation(); exportCSVForSite(g.siteName); }} style={btn('#0b5e2e')}>Exportar CSV</button>
-                      <div style={{
-                        width: 30, height: 30, borderRadius: 8, border: '1px solid #2a3b55',
-                        display: 'grid', placeItems: 'center', fontWeight: 800
-                      }}>{open ? '–' : '+'}</div>
-                    </div>
-                  </div>
-
-                  {/* LISTA PERSONAS */}
-                  {open && (
-                    <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
-                      {g.people.map((p) => {
-                        const key = `${g.siteName}::${p.person_id}`;
-                        const openP = !!openPersons[key];
-                        const compColor = p.totals.comp >= 100 ? '#10b981' : p.totals.comp >= 80 ? '#eab308' : '#f87171';
-
-                        return (
-                          <div key={key} style={{ border: '1px solid #223047', borderRadius: 12 }}>
-                            {/* CABECERA PERSONA */}
-                            <div
-                              onClick={() => togglePerson(g.siteName, p.person_id)}
-                              style={{
-                                padding: '10px 12px',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                cursor: 'pointer',
-                                background: 'rgba(2,6,23,.22)',
-                                borderTopLeftRadius: 12,
-                                borderTopRightRadius: 12,
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontWeight: 700 }}>{p.person_name || 'Sin Nombre'}</div>
-                                <div style={{ fontSize: 12, color: '#94a3b8' }}>
-                                  Esperadas: <b>{mmOrDash(p.totals.exp)}</b> ·
-                                  Trabajadas: <b>{mmOrDash(p.totals.wrk)}</b> ·
-                                  Cumpl.: <b style={{ color: compColor }}>{p.totals.comp}%</b> ·
-                                  Atraso: <b>{mmOrDash(p.totals.late)}</b> ·
-                                  Salida ant.: <b>{mmOrDash(p.totals.early)}</b>
-                                </div>
-                              </div>
-                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); exportCSVForPerson(g.siteName, p.person_name, p.days); }}
-                                  style={btn('#133a55')}
-                                >
-                                  CSV
-                                </button>
-                                <div style={{
-                                  width: 26, height: 26, borderRadius: 8, border: '1px solid #2a3b55',
-                                  display: 'grid', placeItems: 'center', fontWeight: 800
-                                }}>{openP ? '–' : '+'}</div>
-                              </div>
-                            </div>
-
-                            {/* DÍAS PERSONA */}
-                            {openP && (
-                              <div style={{ padding: 10 }}>
-                                <div style={{ overflowX: 'auto' }}>
-                                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
-                                    <thead>
-                                      <tr style={{ background: 'rgba(17,24,39,0.6)' }}>
-                                        {[
-                                          'Fecha',
-                                          'Primer In',
-                                          'Lunch In',
-                                          'Lunch Out',
-                                          'Último Out',
-                                          'Colación',
-                                          'Trabajado',
-                                          'Esperado',
-                                          '%',
-                                          'Atraso',
-                                          'Salida Ant.',
-                                          'Presente',
-                                        ].map((h) => (
-                                          <th key={h} style={thStyle}>{h}</th>
-                                        ))}
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {p.days.length === 0 ? (
-                                        <tr>
-                                          <td colSpan={12} style={{ padding: 12, opacity: .8 }}>Sin marcas</td>
-                                        </tr>
-                                      ) : (
-                                        p.days.map((r, i) => (
-                                          <tr key={`${r.person_id}-${r.date}`} style={{ borderBottom: '1px solid #223047', background: i % 2 ? 'rgba(2,6,23,.14)' : 'transparent' }}>
-                                            <td style={tdStyle}>{r.date}</td>
-                                            <td style={tdStyle}>{fmtDT(r.first_in)}</td>
-                                            <td style={tdStyle}>{fmtDT(r.lunch_in ?? null)}</td>
-                                            <td style={tdStyle}>{fmtDT(r.lunch_out ?? null)}</td>
-                                            <td style={tdStyle}>{fmtDT(r.last_out)}</td>
-                                            <td style={{ ...tdStyle, color: isFiniteNum(r.lunch_minutes) && r.lunch_minutes > 0 ? '#22c55e' : undefined }}>
-                                              {mmOrDash(r.lunch_minutes)}
-                                            </td>
-                                            <td style={tdStyle}>{mmOrDash(r.worked_minutes)}</td>
-                                            <td style={tdStyle}>{mmOrDash(r.expected_minutes)}</td>
-                                            <td style={{ ...tdStyle, fontWeight: 700, color: isFiniteNum(r.compliance_pct) && (r.compliance_pct as number) >= 100 ? '#10b981' : (r.compliance_pct || 0) >= 80 ? '#eab308' : '#f87171' }}>
-                                              {isFiniteNum(r.compliance_pct) ? r.compliance_pct : 0}%
-                                            </td>
-                                            <td style={{ ...tdStyle, color: isFiniteNum(r.late_minutes) && r.late_minutes > 0 ? '#f87171' : undefined }}>
-                                              {mmOrDash(r.late_minutes)}
-                                            </td>
-                                            <td style={{ ...tdStyle, color: isFiniteNum(r.early_leave_minutes) && r.early_leave_minutes > 0 ? '#f59e0b' : undefined }}>
-                                              {mmOrDash(r.early_leave_minutes)}
-                                            </td>
-                                            <td style={tdStyle}>{r.present ? '✅' : '—'}</td>
-                                          </tr>
-                                        ))
-                                      )}
-                                      {/* Subtotal persona (fila fuerte) */}
-                                      <tr style={{ background: 'rgba(17,24,39,0.6)' }}>
-                                        <td style={{ ...tdStyle, fontWeight: 800 }} colSpan={5}>Subtotal {p.person_name || 'Sin Nombre'}</td>
-                                        <td style={{ ...tdStyle, fontWeight: 800 }}>{mmOrDash(p.totals.lunch)}</td>
-                                        <td style={{ ...tdStyle, fontWeight: 800 }}>{mmOrDash(p.totals.wrk)}</td>
-                                        <td style={{ ...tdStyle, fontWeight: 800 }}>{mmOrDash(p.totals.exp)}</td>
-                                        <td style={{ ...tdStyle, fontWeight: 800, color: compColor }}>{p.totals.comp}%</td>
-                                        <td style={{ ...tdStyle, fontWeight: 800 }}>{mmOrDash(p.totals.late)}</td>
-                                        <td style={{ ...tdStyle, fontWeight: 800 }}>{mmOrDash(p.totals.early)}</td>
-                                        <td style={tdStyle}></td>
-                                      </tr>
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
+                <div key={g.siteName} className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+                  <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
+                    {/* CABECERA SUCURSAL */}
+                    <div
+                      onClick={() => toggleSite(g.siteName)}
+                      className="p-4 cursor-pointer hover:bg-white/5 transition-colors rounded-t-lg"
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-purple-500/30 to-pink-500/30 backdrop-blur-sm border border-purple-500/30 flex items-center justify-center font-bold text-white">
+                            {g.siteName.charAt(0).toUpperCase()}
                           </div>
-                        );
-                      })}
-                      {/* Subtotal sucursal (tarjeta compacta) */}
-                      <div style={{ marginTop: 6, padding: 10, border: '1px dashed #334155', borderRadius: 10 }}>
-                        <div style={{ fontWeight: 800, marginBottom: 4 }}>Total {g.siteName}</div>
-                        <div style={{ fontSize: 13, color: '#94a3b8' }}>
-                          Esperadas: <b>{mmOrDash(g.siteTotals.exp)}</b> · Trabajadas: <b>{mmOrDash(g.siteTotals.wrk)}</b> ·
-                          Cumpl.: <b style={{ color: compColor(g.siteTotals.comp) }}>{g.siteTotals.comp}%</b> ·
-                          Atraso: <b>{mmOrDash(g.siteTotals.late)}</b> · Salida ant.: <b>{mmOrDash(g.siteTotals.early)}</b> ·
-                          Colación: <b>{mmOrDash(g.siteTotals.lunch)}</b>
+                          <div>
+                            <div className="text-lg font-bold text-white">
+                              {g.siteName} <span className="text-white/60 font-medium">({g.people.length} personas)</span>
+                            </div>
+                            <div className="text-sm text-white/60">
+                              Esperadas: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.exp)}</span> ·
+                              Trabajadas: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.wrk)}</span> ·
+                              Cumpl.: <span className="font-semibold" style={{ color: g.siteTotals.comp >= 100 ? '#10b981' : g.siteTotals.comp >= 80 ? '#eab308' : '#f87171' }}>{g.siteTotals.comp}%</span> ·
+                              Atraso: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.late)}</span> ·
+                              Salida ant.: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.early)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 items-center">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); exportCSVForSite(g.siteName); }} 
+                            className="px-3 py-1.5 bg-gradient-to-r from-green-500/30 to-green-600/30 backdrop-blur-sm border border-green-500/30 text-white font-medium rounded-md hover:from-green-500/40 hover:to-green-600/40 transition-all text-sm"
+                          >
+                            Exportar CSV
+                          </button>
+                          <div className="w-8 h-8 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg flex items-center justify-center font-bold text-white">
+                            {open ? '–' : '+'}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  )}
+
+                    {/* LISTA PERSONAS */}
+                    {open && (
+                      <div className="p-4 pt-0 space-y-3">
+                        {g.people.map((p) => {
+                          const key = `${g.siteName}::${p.person_id}`;
+                          const openP = !!openPersons[key];
+                          const compColor = p.totals.comp >= 100 ? '#10b981' : p.totals.comp >= 80 ? '#eab308' : '#f87171';
+
+                          return (
+                            <div key={key} className="border border-white/10 rounded-lg overflow-hidden">
+                              {/* CABECERA PERSONA */}
+                              <div
+                                onClick={() => togglePerson(g.siteName, p.person_id)}
+                                className="p-3 cursor-pointer hover:bg-white/5 transition-colors bg-white/5"
+                              >
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <div className="font-semibold text-white">{p.person_name || 'Sin Nombre'}</div>
+                                    <div className="text-sm text-white/60">
+                                      Esperadas: <span className="font-medium text-white">{mmOrDash(p.totals.exp)}</span> ·
+                                      Trabajadas: <span className="font-medium text-white">{mmOrDash(p.totals.wrk)}</span> ·
+                                      Cumpl.: <span className="font-medium" style={{ color: compColor }}>{p.totals.comp}%</span> ·
+                                      Atraso: <span className="font-medium text-white">{mmOrDash(p.totals.late)}</span> ·
+                                      Salida ant.: <span className="font-medium text-white">{mmOrDash(p.totals.early)}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 items-center">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); exportCSVForPerson(g.siteName, p.person_name, p.days); }}
+                                      className="px-2 py-1 bg-gradient-to-r from-blue-500/30 to-blue-600/30 backdrop-blur-sm border border-blue-500/30 text-white font-medium rounded text-xs hover:from-blue-500/40 hover:to-blue-600/40 transition-all"
+                                    >
+                                      CSV
+                                    </button>
+                                    <div className="w-6 h-6 bg-white/10 backdrop-blur-sm border border-white/20 rounded flex items-center justify-center font-bold text-white text-sm">
+                                      {openP ? '–' : '+'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* DÍAS PERSONA */}
+                              {openP && (
+                                <div className="p-3 bg-black/20">
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse min-w-[860px]">
+                                      <thead>
+                                        <tr className="bg-white/5 border-b border-white/10">
+                                          {[
+                                            'Fecha',
+                                            'Primer In',
+                                            'Lunch In',
+                                            'Lunch Out',
+                                            'Último Out',
+                                            'Colación',
+                                            'Trabajado',
+                                            'Esperado',
+                                            '%',
+                                            'Atraso',
+                                            'Salida Ant.',
+                                            'Presente',
+                                          ].map((h) => (
+                                            <th key={h} className={thStyle}>{h}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {p.days.length === 0 ? (
+                                          <tr>
+                                            <td colSpan={12} className="px-3 py-4 text-center text-white/60">Sin marcas</td>
+                                          </tr>
+                                        ) : (
+                                          p.days.map((r, i) => (
+                                            <tr key={`${r.person_id}-${r.date}`} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${i % 2 ? 'bg-white/5' : ''}`}>
+                                              <td className={tdStyle}>{r.date}</td>
+                                              <td className={tdStyle}>{fmtDT(r.first_in)}</td>
+                                              <td className={tdStyle}>{fmtDT(r.lunch_in ?? null)}</td>
+                                              <td className={tdStyle}>{fmtDT(r.lunch_out ?? null)}</td>
+                                              <td className={tdStyle}>{fmtDT(r.last_out)}</td>
+                                              <td className={`${tdStyle} ${isFiniteNum(r.lunch_minutes) && r.lunch_minutes > 0 ? 'text-green-400' : ''}`}>
+                                                {mmOrDash(r.lunch_minutes)}
+                                              </td>
+                                              <td className={tdStyle}>{mmOrDash(r.worked_minutes)}</td>
+                                              <td className={tdStyle}>{mmOrDash(r.expected_minutes)}</td>
+                                              <td className={`${tdStyle} font-bold`} style={{ color: isFiniteNum(r.compliance_pct) && (r.compliance_pct as number) >= 100 ? '#10b981' : (r.compliance_pct || 0) >= 80 ? '#eab308' : '#f87171' }}>
+                                                {isFiniteNum(r.compliance_pct) ? r.compliance_pct : 0}%
+                                              </td>
+                                              <td className={`${tdStyle} ${isFiniteNum(r.late_minutes) && r.late_minutes > 0 ? 'text-red-400' : ''}`}>
+                                                {mmOrDash(r.late_minutes)}
+                                              </td>
+                                              <td className={`${tdStyle} ${isFiniteNum(r.early_leave_minutes) && r.early_leave_minutes > 0 ? 'text-yellow-400' : ''}`}>
+                                                {mmOrDash(r.early_leave_minutes)}
+                                              </td>
+                                              <td className={tdStyle}>{r.present ? '✅' : '—'}</td>
+                                            </tr>
+                                          ))
+                                        )}
+                                        {/* Subtotal persona */}
+                                        <tr className="bg-white/10 border-t border-white/20">
+                                          <td className={`${tdStyle} font-bold`} colSpan={5}>Subtotal {p.person_name || 'Sin Nombre'}</td>
+                                          <td className={`${tdStyle} font-bold`}>{mmOrDash(p.totals.lunch)}</td>
+                                          <td className={`${tdStyle} font-bold`}>{mmOrDash(p.totals.wrk)}</td>
+                                          <td className={`${tdStyle} font-bold`}>{mmOrDash(p.totals.exp)}</td>
+                                          <td className={`${tdStyle} font-bold`} style={{ color: compColor }}>{p.totals.comp}%</td>
+                                          <td className={`${tdStyle} font-bold`}>{mmOrDash(p.totals.late)}</td>
+                                          <td className={`${tdStyle} font-bold`}>{mmOrDash(p.totals.early)}</td>
+                                          <td className={tdStyle}></td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {/* Subtotal sucursal */}
+                        <div className="mt-2 p-3 border border-dashed border-white/30 rounded-lg bg-white/5">
+                          <div className="font-bold text-white mb-1">Total {g.siteName}</div>
+                          <div className="text-sm text-white/70">
+                            Esperadas: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.exp)}</span> ·
+                            Trabajadas: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.wrk)}</span> ·
+                            Cumpl.: <span className="font-semibold" style={{ color: g.siteTotals.comp >= 100 ? '#10b981' : g.siteTotals.comp >= 80 ? '#eab308' : '#f87171' }}>{g.siteTotals.comp}%</span> ·
+                            Atraso: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.late)}</span> ·
+                            Salida ant.: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.early)}</span> ·
+                            Colación: <span className="font-semibold text-white">{mmOrDash(g.siteTotals.lunch)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
-
-        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-          * Cálculo con TZ <b>America/La_Paz</b>, excluye <b>domingos</b>, turno fijo <b>08:30–18:30</b> (10h). Si existen colaciones, se descuentan de las horas trabajadas.
-        </div>
       </div>
     </div>
   );
 }
-
-/* ============================================================================
-   UI helpers
-   ============================================================================ */
-function Kpi({ title, value, accent }: { title: string; value: string; accent?: string }) {
-  return (
-    <div style={{ background: 'rgba(17,24,39,0.55)', border: '1px solid #223047', borderRadius: 14, padding: 14 }}>
-      <div style={{ fontSize: 12, opacity: 0.8 }}>{title}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: accent }}>{value}</div>
-    </div>
-  );
-}
-const compColor = (v: number) => (v >= 100 ? '#10b981' : v >= 80 ? '#eab308' : '#f87171');
-
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '12px 14px',
-  borderBottom: '1px solid #223047',
-  fontWeight: 800,
-  position: 'sticky',
-  top: 0,
-  zIndex: 1,
-  fontSize: 14,
-};
-const tdStyle: React.CSSProperties = {
-  padding: '12px 14px',
-  fontSize: 14,
-};

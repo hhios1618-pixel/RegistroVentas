@@ -1,10 +1,8 @@
-// src/middleware.ts
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME || 'fenix_session';
 
-/** Rutas públicas (sin sesión) */
 const PUBLIC_PREFIXES = [
   '/login',
   '/endpoints/auth',
@@ -12,11 +10,10 @@ const PUBLIC_PREFIXES = [
   '/robots.txt',
   '/sitemap.xml',
   '/manifest.json',
-  '/_next',     // assets Next
-  '/public',    // estáticos propios
+  '/_next',
+  '/public',
 ];
 
-/** Extensiones de archivos estáticos */
 const STATIC_EXTS = new Set([
   'png','jpg','jpeg','webp','svg','gif','ico',
   'css','js','map','txt','woff','woff2','ttf','otf',
@@ -33,38 +30,28 @@ function isStaticAsset(pathname: string) {
   return STATIC_EXTS.has(ext);
 }
 
-/* =========================
-   Allowlists por rol
-   ========================= */
-
-/** ASESOR: captura asesores, devoluciones (si aplica), asistencia personal */
+// ====== ALLOWLISTS ======
 const ASESOR_ALLOW: RegExp[] = [
-  /^\/asesoras(?:\/.*)?$/,                    // legacy/alias si lo usas
-  /^\/dashboard\/Asesores(?:\/.*)?$/,         // legacy
-  /^\/dashboard\/captura(?:\/.*)?$/,          // legacy
-  /^\/captura\/asesores(?:\/.*)?$/,           // nueva ruta
-  /^\/devoluciones(?:\/.*)?$/,                // módulo devoluciones
-  /^\/asistencia(?:\/.*)?$/,                  // marcar + mi-resumen
-  /^\/playbook(?:\/.*)?$/,
-  /^\/$/,                                     // home
+  /^\/dashboard\/asesores\/HOME(?:\/.*)?$/,
+  /^\/dashboard\/asesores\/registro(?:\/.*)?$/,
+  /^\/dashboard\/asesores\/devoluciones(?:\/.*)?$/,
+  /^\/dashboard\/asesores\/playbook-whatsapp(?:\/.*)?$/,
+  /^\/asistencia(?:\/.*)?$/,
+  /^\/mi\/resumen(?:\/.*)?$/,
+  /^\/$/, // dashboard root
 ];
 
-/** PROMOTOR: solo captura promotores + playbook (sin asistencia) */
 const PROMOTOR_ALLOW: RegExp[] = [
-  /^\/dashboard\/promotores(?:\/.*)?$/,       // legacy
-  /^\/captura\/promotores(?:\/.*)?$/,         // nueva ruta
-  /^\/playbook(?:\/.*)?$/,
-  /^\/$/,                                     // home
+  /^\/dashboard\/promotores(?:\/.*)?$/,         // resumen promotores
+  /^\/dashboard\/promotores\/registro(?:\/.*)?$/, // captura promotores
+  /^\/$/, // dashboard root
 ];
 
-/* =========================
-   Decodificación JWT (Edge-safe)
-   ========================= */
 function b64urlToJSON(b64url: string): any | null {
   try {
     const pad = '='.repeat((4 - (b64url.length % 4)) % 4);
     const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
-    const jsonStr = atob(b64); // Edge runtime: atob disponible
+    const jsonStr = Buffer.from(b64, 'base64').toString('utf8');
     return JSON.parse(jsonStr);
   } catch {
     return null;
@@ -81,26 +68,20 @@ function readRoleFromCookie(req: NextRequest): string | null {
   return r ? String(r).toUpperCase() : null;
 }
 
-/* =========================
-   Middleware principal
-   ========================= */
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Preflight / públicos / estáticos
   if (req.method === 'OPTIONS' || isPublic(pathname) || isStaticAsset(pathname)) {
     return NextResponse.next();
   }
 
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
 
-  // Endpoints server: requieren sesión
   if (pathname.startsWith('/endpoints/')) {
-    if (!hasSession) return NextResponse.json({ ok: false, error: 'no_session' }, { status: 401 });
+    if (!hasSession) return NextResponse.json({ ok:false, error:'no_session' }, { status:401 });
     return NextResponse.next();
   }
 
-  // Si no hay sesión → /login
   if (!hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
@@ -108,14 +89,13 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Con sesión: control por rol
   const role = readRoleFromCookie(req);
 
   if (role === 'PROMOTOR' || role === 'PROMOTORA') {
     const allowed = PROMOTOR_ALLOW.some((rx) => rx.test(pathname));
     if (!allowed) {
       const url = req.nextUrl.clone();
-      url.pathname = '/dashboard/promotores'; // aterrizaje promotor
+      url.pathname = '/dashboard/promotores';
       url.searchParams.delete('redirectTo');
       return NextResponse.redirect(url);
     }
@@ -125,14 +105,13 @@ export function middleware(req: NextRequest) {
     const allowed = ASESOR_ALLOW.some((rx) => rx.test(pathname));
     if (!allowed) {
       const url = req.nextUrl.clone();
-      // Aterrizaje asesor: si ya usas /captura/asesores, puedes cambiarlo aquí
-      url.pathname = '/captura/asesores';
+      url.pathname = '/dashboard/asesores/HOME';
       url.searchParams.delete('redirectTo');
       return NextResponse.redirect(url);
     }
   }
 
-  // Otros roles (admin, líder, coordinador, etc.) pasan libre
+  // admin / lider / coordinador / logística → sin restricciones específicas aquí
   return NextResponse.next();
 }
 
