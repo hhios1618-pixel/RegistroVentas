@@ -2,25 +2,30 @@
 
 import Link from 'next/link';
 import { useEffect, useState, useMemo, useRef, type SVGProps, type FC, type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import useSWR from 'swr';
+import LogoutButton from '@/components/LogoutButton';
 
 /* ============================== THEME ============================== */
 const DynamicGlobalStyles = () => (
   <style jsx global>{`
     :root {
       --bg-dark: #0D1117;
-      --bg-medium: #161B22;
-      --border-color: #30363D;
+      --bg-medium: #10151d;
+      --bg-elev: #0f1420;
+      --border-color: #263041;
       --text-primary: #C9D1D9;
       --text-secondary: #8B949E;
       --accent-cyan: #22d3ee;
-      --accent-cyan-dark: #0e7490;
+      --accent-cyan-dark: #0ea5b7;
+      --glow: 0 10px 30px rgba(34,211,238,.15);
     }
     body { background-color: var(--bg-dark); color: var(--text-primary); }
     @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .fade-in-animation { animation: fade-in 0.5s ease-out forwards; }
-    .glass-pane { background-color: rgba(22,27,34,.5); backdrop-filter: blur(12px); border: 1px solid var(--border-color); }
-    .chart-bar:hover { fill: var(--accent-cyan); }
+    .glass-pane { background: linear-gradient(180deg, rgba(18,24,33,.7), rgba(16,21,29,.6)); backdrop-filter: blur(10px); border: 1px solid var(--border-color); }
+    .nav-hover { transition: background .2s ease, color .2s ease; }
+    .nav-hover:hover { background: #0e1521; color: #e6faff; }
   `}</style>
 );
 
@@ -78,16 +83,16 @@ const normalizeRole = (raw?: string): Role => {
 const NavLink: FC<{ link: NavLinkItem; isActive?: boolean }> = ({ link, isActive = false }) => (
   <Link
     href={link.href}
-    className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors group relative
-      ${isActive ? 'bg-[var(--bg-medium)] text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-medium)]'}`}
+    className={`nav-hover relative flex items-center px-3.5 py-2.5 text-sm rounded-lg
+      ${isActive ? 'bg-[#0e1521] text-white shadow-[var(--glow)]' : 'text-[var(--text-primary)]'}`}
   >
-    {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 bg-cyan-400 rounded-r-full" />}
-    <span className={`transition-colors ${isActive ? 'text-cyan-400' : 'text-[var(--text-secondary)] group-hover:text-cyan-400'}`}>
+    {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-cyan-400" />}
+    <span className={`mr-3 ${isActive ? 'text-cyan-400' : 'text-[var(--text-secondary)] group-hover:text-cyan-300'}`}>
       {link.icon}
     </span>
-    <span className="ml-4 flex-1">{link.label}</span>
+    <span className="flex-1">{link.label}</span>
     {link.shortcut && (
-      <span className="text-xs font-mono text-gray-500 border border-gray-700 rounded px-1.5 py-0.5">
+      <span className="text-[10px] font-mono text-gray-500 border border-gray-700/60 rounded px-1.5 py-0.5">
         {link.shortcut}
       </span>
     )}
@@ -95,6 +100,8 @@ const NavLink: FC<{ link: NavLinkItem; isActive?: boolean }> = ({ link, isActive
 );
 
 const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, userName }) => {
+  const pathname = usePathname();
+
   const sections: { title: string; links: NavLinkItem[] }[] = [
     {
       title: 'ANÁLISIS Y REPORTES',
@@ -124,39 +131,57 @@ const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, userName 
   ];
 
   return (
-    <aside className="w-64 fixed top-16 left-0 h-[calc(100vh-4rem)] bg-[var(--bg-dark)] flex flex-col border-r border-[var(--border-color)] z-30">
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+    <aside className="w-72 fixed left-0 top-0 h-screen border-r border-[var(--border-color)] bg-[var(--bg-elev)]/80 backdrop-blur-xl z-30">
+      {/* Brand */}
+      <div className="px-4 py-4 border-b border-[var(--border-color)] bg-[var(--bg-elev)] sticky top-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-700 text-white font-bold flex items-center justify-center shadow-[var(--glow)]">
+            F
+          </div>
+          <div className="leading-tight">
+            <p className="text-sm font-semibold text-white">Fenix Store</p>
+            <p className="text-[11px] text-[var(--text-secondary)]">Sistema de Gestión</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Navegación */}
+      <nav className="flex-1 p-4 overflow-y-auto space-y-2">
         <NavLink
-          key="nav-/home"
+          key="nav-/"
           link={{ cap: 'view:kpis', href: '/', icon: <IconDashboard className="w-5 h-5" />, label: 'Dashboard', shortcut: 'H' }}
-          isActive
+          isActive={pathname === '/'}
         />
         {sections.map((section) => {
           const accessibleLinks = section.links.filter((l) => can(userRole, l.cap));
           if (accessibleLinks.length === 0) return null;
           return (
-            <div key={`sec-${section.title}`} className="pt-4">
-              <h3 className="px-4 text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+            <div key={`sec-${section.title}`} className="pt-3">
+              <h3 className="px-2 text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
                 {section.title}
               </h3>
-              {accessibleLinks.map((l) => (
-                <NavLink key={`nav-${l.href}`} link={l} />
-              ))}
+              <div className="space-y-1">
+                {accessibleLinks.map((l) => (
+                  <NavLink key={`nav-${l.href}`} link={l} isActive={pathname.startsWith(l.href)} />
+                ))}
+              </div>
             </div>
           );
         })}
       </nav>
 
-      <div className="p-4 border-t border-[var(--border-color)]">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[var(--bg-medium)] flex items-center justify-center font-bold text-cyan-400">
+      {/* Usuario + Logout */}
+      <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-elev)]">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-full bg-[#0e1521] ring-1 ring-[var(--border-color)] flex items-center justify-center font-bold text-cyan-300">
             {userName?.charAt(0) || 'U'}
           </div>
-          <div>
-            <p className="text-sm font-semibold text-white">{userName || 'Usuario'}</p>
-            <p className="text-xs text-[var(--text-secondary)] capitalize">{userRole}</p>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white truncate">{userName || 'Usuario'}</p>
+            <p className="text-[11px] text-[var(--text-secondary)] capitalize truncate">{userRole}</p>
           </div>
         </div>
+        <LogoutButton className="w-full justify-center px-3 py-2 text-sm font-medium rounded-md bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white shadow-[var(--glow)]" />
       </div>
     </aside>
   );
@@ -196,7 +221,7 @@ const AnimatedValue: FC<{ value: number; isCurrency?: boolean }> = ({ value, isC
   useEffect(() => {
     const el = ref.current; if (!el) return;
     const initial = parseFloat(el.textContent?.replace(/[^\d,-]/g, '').replace(',', '.') || '0');
-    let start: number; const dur = 1000;
+    let start: number; const dur = 900;
     const frame = (t: number) => {
       if (!start) start = t;
       const prog = Math.min((t - start) / dur, 1);
@@ -216,7 +241,7 @@ const AnimatedValue: FC<{ value: number; isCurrency?: boolean }> = ({ value, isC
 const KpiCard: FC<{ icon: ReactNode; title: string; value: number; trend: string; isCurrency?: boolean; delay?: number }> =
 ({ icon, title, value, trend, isCurrency = false, delay = 0 }) => (
   <div className="p-5 glass-pane rounded-lg fade-in-animation flex items-center" style={{ animationDelay: `${delay}ms` }}>
-    <div className="w-10 h-10 flex items-center justify-center bg-[var(--bg-medium)] rounded-lg mr-4 text-cyan-400">{icon}</div>
+    <div className="w-10 h-10 flex items-center justify-center bg-[#0e1521] rounded-lg mr-4 text-cyan-400 ring-1 ring-[var(--border-color)]">{icon}</div>
     <div className="flex-1">
       <h3 className="text-sm text-[var(--text-secondary)] font-medium">{title}</h3>
       <div className="flex items-baseline gap-2">
@@ -250,7 +275,7 @@ const SalesChart = () => {
             return (
               <g key={d.day}>
                 <title>{`${d.day}: Bs ${d.sales.toLocaleString('es-BO')}`}</title>
-                <rect x={40 + i * 65} y={220 - h} width="40" height={h} rx="2" className="chart-bar transition-all" fill="var(--accent-cyan-dark)" />
+                <rect x={40 + i * 65} y={220 - h} width="40" height={h} rx="2" className="transition-all" fill="var(--accent-cyan-dark)" />
                 <text x={60 + i * 65} y="235" textAnchor="middle" fontSize="12" fill="currentColor">{d.day}</text>
               </g>
             );
@@ -276,7 +301,7 @@ const NotificationsFeed = () => {
       <ul className="space-y-4">
         {notifications.map((n, i) => (
           <li key={`notif-${i}`} className="flex items-start gap-3">
-            <div className={`p-2 rounded-full bg-[var(--bg-medium)] ${i === 0 ? 'text-cyan-400' : 'text-[var(--text-secondary)]'}`}>{n.icon}</div>
+            <div className={`p-2 rounded-full bg-[#0e1521] ring-1 ring-[var(--border-color)] ${i === 0 ? 'text-cyan-400' : 'text-[var(--text-secondary)]'}`}>{n.icon}</div>
             <div>
               <p className="text-sm text-[var(--text-primary)]">{n.text}</p>
               <p className="text-xs text-[var(--text-secondary)]">{n.time}</p>
@@ -304,7 +329,7 @@ const TopPerformers = () => {
               <span className="font-medium text-[var(--text-primary)]">{p.name}</span>
               <span className="text-[var(--text-secondary)]">Bs {p.sales.toLocaleString('es-BO')}</span>
             </div>
-            <div className="w-full bg-[var(--bg-medium)] rounded-full h-1.5">
+            <div className="w-full bg-[#0e1521] rounded-full h-1.5">
               <div className={`${p.color} h-1.5 rounded-full`} style={{ width: `${(p.sales / performers[0].sales) * 100}%` }} />
             </div>
           </li>
@@ -362,7 +387,7 @@ export default function HomePage() {
       <DynamicGlobalStyles />
       <div className="flex min-h-screen bg-[var(--bg-dark)] font-sans">
         <Sidebar userRole={role} userName={userName} />
-        <main className="flex-1 ml-64 pt-16">
+        <main className="flex-1 ml-72">
           <div className="p-8 max-w-7xl mx-auto space-y-8">
             <HeaderBar greeting={greeting} userName={firstName} />
             {can(role, 'view:kpis') && (
@@ -427,22 +452,6 @@ const IconSalesReport: FC<SVGProps<SVGSVGElement>> = (p) => (
     <line x1="16" y1="16" x2="16" y2="9"/><line x1="8" y1="16" x2="8" y2="14"/>
   </svg>
 );
-const IconVendedores: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/>
-    <path d="M20 8v6m-3-3h6"/>
-  </svg>
-);
-const IconReturn: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
-  </svg>
-);
-const IconRegistro: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-  </svg>
-);
 const IconResumen: FC<SVGProps<SVGSVGElement>> = (p) => (
   <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -469,5 +478,17 @@ const IconUsersAdmin: FC<SVGProps<SVGSVGElement>> = (p) => (
   <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/>
     <circle cx="18" cy="18" r="3"/><line x1="20.5" y1="15.5" x2="23" y2="13"/>
+  </svg>
+);
+
+const IconRegistro: React.FC<SVGProps<SVGSVGElement>> = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+  </svg>
+);
+
+const IconReturn: React.FC<SVGProps<SVGSVGElement>> = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
   </svg>
 );

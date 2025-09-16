@@ -50,6 +50,12 @@ const weekRange = (date:Date) => {
   };
 };
 
+// ✅ parser de fecha local (sin desfase UTC)
+const parseLocalISO = (s:string) => {
+  const [y,m,d] = s.split('-').map(n=>parseInt(n,10));
+  return new Date(y, (m-1), d);
+};
+
 export default function MisVentasPromotor() {
   const [from, setFrom] = useState(iso(startOfMonth()));
   const [to, setTo]     = useState(iso(endOfMonth()));
@@ -98,6 +104,29 @@ export default function MisVentasPromotor() {
     }
     return Object.values(g).sort((a,b)=>a.key.localeCompare(b.key));
   }, [data?.rows, groupBy]);
+
+  // ✅ Comisión mensual corregida
+  const commission = useMemo(()=>{
+    const rows = data?.rows || [];
+    const base = parseLocalISO(from || iso(new Date()));  // mes desde fecha local
+    const mStart = iso(startOfMonth(base));
+    const mEnd   = iso(endOfMonth(base));
+
+    let totalMonth = 0;
+    for (const r of rows) {
+      const dstr = (r.sale_date || r.created_at).slice(0,10);
+      if (dstr >= mStart && dstr <= mEnd) {
+        totalMonth += (Number(r.quantity)||0) * (Number(r.unit_price)||0);
+      }
+    }
+    const rate = 0.15;
+    return {
+      periodLabel: `${new Date(mStart).toLocaleDateString('es-BO',{day:'2-digit',month:'short'})} – ${new Date(mEnd).toLocaleDateString('es-BO',{day:'2-digit',month:'short',year:'numeric'})}`,
+      totalMonth,
+      rate,
+      commission: totalMonth * rate
+    };
+  }, [data?.rows, from]);
 
   return (
     <div className="min-h-screen text-[#C9D1D9]">
@@ -175,6 +204,28 @@ export default function MisVentasPromotor() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Comisión mensual */}
+      <div className="mb-6 border border-emerald-700/40 bg-emerald-500/5 rounded-lg overflow-hidden shadow-lg">
+        <div className="px-4 py-3 border-b border-emerald-700/40 flex justify-between items-center">
+          <span className="text-sm text-emerald-300">Comisión del mes ({commission.periodLabel})</span>
+          <span className="text-xs text-[#8B949E]">Esquema 15% plano sobre ventas del mes calendario.</span>
+        </div>
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-xs text-[#8B949E] mb-1">Ventas del mes</div>
+            <div className="text-lg font-bold text-white">{fmtBs(commission.totalMonth)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-[#8B949E] mb-1">Porcentaje</div>
+            <div className="text-lg font-bold text-emerald-400">{(commission.rate*100).toFixed(0)}%</div>
+          </div>
+          <div>
+            <div className="text-xs text-[#8B949E] mb-1">Comisión estimada</div>
+            <div className="text-lg font-bold text-emerald-400">{fmtBs(commission.commission)}</div>
+          </div>
+        </div>
       </div>
 
       {/* Detalle */}
