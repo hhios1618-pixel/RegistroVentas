@@ -1,495 +1,705 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import useSWR from 'swr';
-import { createClient } from '@supabase/supabase-js';
+import { useEffect, useMemo, useState } from 'react';
 
-// ==================
-// Configuración
-// ==================
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* =========================================================================
+   Helpers
+   ========================================================================= */
+const fmtBs = (n: number) =>
+  `Bs ${n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtInt = (n: number) => n.toLocaleString('es-BO');
 
-const fetcher = (url: string) =>
-  fetch(url).then((res) => {
-    if (!res.ok) throw new Error('Error al cargar datos');
-    return res.json();
-  });
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const startOfMonth = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), 1);
+const endOfMonth = (d = new Date()) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
 
-// ==================
-// Tipos
-// ==================
-type Origin = 'cochabamba' | 'lapaz' | 'elalto' | 'santacruz' | 'sucre' | 'tienda';
+// Función para obtener el número de semana
+const getWeekNumber = (date: Date) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
 
-interface ProductRow {
+// Función para obtener el rango de fechas de una semana
+const getWeekRange = (date: Date) => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Lunes como primer día
+  const monday = new Date(d.setDate(diff));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  
+  return {
+    start: monday.toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit' }),
+    end: sunday.toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit' }),
+    year: monday.getFullYear()
+  };
+};
+
+/* =========================================================================
+   Tipos de respuesta de nuestros endpoints
+   ========================================================================= */
+type SalesRow = {
   id: string;
-  code: string;
-  name: string;
-  stock: number;
-}
-
-interface SaleLine {
-  product_id: string | null;
+  created_at: string;
+  sale_date: string;
+  promoter_name: string;
+  origin: 'cochabamba' | 'lapaz' | 'elalto' | 'santacruz' | 'sucre' | 'encomienda' | 'tienda';
   product_name: string;
   quantity: number;
   unit_price: number;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  notes?: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
   warehouse_origin?: string | null;
   district?: string | null;
-}
-
-// ==================
-// Utils
-// ==================
-const dbPhoneOrNull = (raw?: string | null) => {
-  if (!raw) return null;
-  const v = raw.trim();
-  return /^(\+)?\d{8,15}$/.test(v) ? v : null;
 };
 
-const ALLOWED_WAREHOUSES = new Set([
-  'cochabamba',
-  'lapaz',
-  'elalto',
-  'santacruz',
-  'sucre',
-  'tienda',
-]);
-
-const cleanWarehouse = (w?: string | null) => {
-  const v = (w || '').toLowerCase().trim();
-  return ALLOWED_WAREHOUSES.has(v) ? v : null;
+type SummaryResp = {
+  range: { from: string; to: string };
+  rows: {
+    sale_date: string;
+    promoter_name: string;
+    items: number;
+    total_bs: number;
+    cochabamba: number;
+    lapaz: number;
+    elalto: number;
+    santacruz: number;
+    sucre: number;
+    encomienda: number;
+    tienda: number;
+  }[];
 };
 
-const getInitials = (name?: string) => {
-  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return 'U';
-  return parts.slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join('');
+type SalesResp = {
+  rows: SalesRow[];
+  summary: { promoter: string; items: number; total_bs: number }[];
+  totalRows: number;
+  totalItems: number;
+  totalBs: number;
 };
 
-// ==================
-// Página
-// ==================
-export default function SalesEntry() {
-  // Identidad
-  const { data: me, isLoading: meLoading } = useSWR('/endpoints/me', fetcher);
-  const promoterName = useMemo(() => me?.full_name || '', [me?.full_name]);
-  const initials = useMemo(() => getInitials(promoterName), [promoterName]);
-  const canAccess = !!me?.ok;
+type GroupingType = 'day' | 'week' | 'month' | 'promoter' | 'origin';
 
-  // Cabecera
-  const [saleDate, setSaleDate] = useState<string>(
-    new Date().toISOString().slice(0, 10),
-  );
-  const [origin, setOrigin] = useState<Origin>('santacruz');
-  const [warehouse, setWarehouse] = useState<string>('');
+/* =========================================================================
+   Página
+   ========================================================================= */
+export default function PromotoresResumenPage() {
+  const [from, setFrom] = useState(iso(startOfMonth()));
+  const [to, setTo] = useState(iso(endOfMonth()));
+  const [q, setQ] = useState('');
+  const [groupBy, setGroupBy] = useState<GroupingType>('week');
+  const [selectedPromoter, setSelectedPromoter] = useState('');
+  const [selectedOrigin, setSelectedOrigin] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<SummaryResp['rows']>([]);
+  const [rows, setRows] = useState<SalesRow[]>([]);
 
-  // Línea en edición
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<ProductRow[]>([]);
-  const [productName, setProductName] = useState('');
-  const [quantity, setQuantity] = useState<number>(1);
-  const [unitPrice, setUnitPrice] = useState<number>(0);
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [notes, setNotes] = useState('');
-  const [district, setDistrict] = useState('');
+  const load = async () => {
+    setLoading(true);
 
-  // Líneas acumuladas
-  const [lines, setLines] = useState<SaleLine[]>([]);
-  const [saving, setSaving] = useState(false);
+    const qs = new URLSearchParams({ from, to });
+    const qs2 = new URLSearchParams({ from, to, q });
 
-  const total = useMemo(
-    () => lines.reduce((s: number, l: SaleLine) => s + l.quantity * l.unit_price, 0),
-    [lines],
-  );
-
-  // Buscar productos
-  const searchProducts = async (q: string) => {
-    setQuery(q);
-    if (q.length < 3) {
-      setResults([]);
-      return;
-    }
-    const { data } = await supabase
-      .from('products')
-      .select('id, code, name, stock')
-      .ilike('name', `%${q}%`)
-      .limit(5);
-    setResults(data || []);
-  };
-
-  // Agregar línea
-  const addLine = () => {
-    if (!productName || quantity <= 0 || unitPrice <= 0) return;
-    setLines((prev) => [
-      ...prev,
-      {
-        product_id: null,
-        product_name: productName,
-        quantity,
-        unit_price: unitPrice,
-        customer_name: customerName || null,
-        customer_phone: customerPhone || null,
-        notes: notes || null,
-        warehouse_origin: warehouse || null,
-        district: district || null,
-      },
+    const [r1, r2] = await Promise.allSettled([
+      fetch(`/endpoints/promoters/summary?${qs.toString()}`, { cache: 'no-store' }),
+      fetch(`/endpoints/promoters/sales?${qs2.toString()}`, { cache: 'no-store' }),
     ]);
-    setProductName('');
-    setQuantity(1);
-    setUnitPrice(0);
-    setCustomerName('');
-    setCustomerPhone('');
-    setNotes('');
-    setDistrict('');
-    setQuery('');
-    setResults([]);
-  };
 
-  // Guardar
-  const saveAll = async () => {
-    if (lines.length === 0) return;
-    setSaving(true);
-
-    const payload = lines.map((l) => ({
-      promoter_name: promoterName,
-      sale_date: saleDate,
-      origin,
-      product_id: l.product_id,
-      product_name: l.product_name,
-      quantity: l.quantity,
-      unit_price: l.unit_price,
-      customer_name: l.customer_name ?? null,
-      customer_phone: dbPhoneOrNull(l.customer_phone),
-      notes: l.notes ?? null,
-      warehouse_origin: cleanWarehouse(l.warehouse_origin),
-      district: l.district ?? null,
-    }));
-
-    const { error } = await supabase.from('promoter_sales').insert(payload);
-
-    if (error) {
-      alert('Error al guardar: ' + error.message);
+    if (r1.status === 'fulfilled' && r1.value.ok) {
+      const json: SummaryResp = await r1.value.json();
+      setSummary(json.rows || []);
     } else {
-      setLines([]);
-      alert('✅ Ventas registradas con éxito.');
+      setSummary([]);
     }
-    setSaving(false);
+
+    if (r2.status === 'fulfilled' && r2.value.ok) {
+      const json: SalesResp = await r2.value.json();
+      setRows(json.rows || []);
+    } else {
+      setRows([]);
+    }
+
+    setLoading(false);
   };
 
-  if (meLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex items-center space-x-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-700"></div>
-            <span className="text-slate-600 font-medium">Cargando sistema...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (!canAccess) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-red-200">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Acceso Denegado</h3>
-            <p className="text-slate-600">No tienes permisos para acceder a esta sección.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Filtros únicos para dropdowns
+  const uniquePromoters = useMemo(() => {
+    const promoters = [...new Set(rows.map(r => r.promoter_name).filter(Boolean))];
+    return promoters.sort();
+  }, [rows]);
 
-  // ==================
-  // Render
-  // ==================
+  const uniqueOrigins = useMemo(() => {
+    const origins = [...new Set(rows.map(r => r.origin))];
+    return origins.sort();
+  }, [rows]);
+
+  // Datos filtrados
+  const filteredRows = useMemo(() => {
+    let filtered = rows;
+
+    if (selectedPromoter) {
+      filtered = filtered.filter(r => r.promoter_name === selectedPromoter);
+    }
+
+    if (selectedOrigin) {
+      filtered = filtered.filter(r => r.origin === selectedOrigin);
+    }
+
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      filtered = filtered.filter((r) =>
+        (r.promoter_name || '').toLowerCase().includes(needle) ||
+        (r.customer_name || '').toLowerCase().includes(needle) ||
+        (r.customer_phone || '').toLowerCase().includes(needle) ||
+        (r.product_name || '').toLowerCase().includes(needle) ||
+        (r.origin || '').toLowerCase().includes(needle)
+      );
+    }
+
+    return filtered;
+  }, [rows, selectedPromoter, selectedOrigin, q]);
+
+  /* ---------------- KPIs ---------------- */
+  const kpis = useMemo(() => {
+    const totalLines = filteredRows.length;
+    const items = filteredRows.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    const totalBs = filteredRows.reduce((s, r) => s + (Number(r.quantity) * Number(r.unit_price)), 0);
+
+    const byOrigin: Record<string, number> = {};
+    for (const r of filteredRows) {
+      byOrigin[r.origin] = (byOrigin[r.origin] || 0) + (r.quantity * r.unit_price);
+    }
+
+    return { totalLines, items, totalBs, byOrigin };
+  }, [filteredRows]);
+
+  /* --------- Agrupaciones inteligentes --------- */
+  const groupedData = useMemo(() => {
+    const groups: Record<string, {
+      key: string;
+      label: string;
+      items: number;
+      totalBs: number;
+      rows: SalesRow[];
+      promoters: Set<string>;
+      origins: Set<string>;
+    }> = {};
+
+    for (const row of filteredRows) {
+      let groupKey = '';
+      let groupLabel = '';
+
+      const saleDate = new Date(row.sale_date || row.created_at);
+
+      switch (groupBy) {
+        case 'day':
+          groupKey = row.sale_date || row.created_at.split('T')[0];
+          groupLabel = saleDate.toLocaleDateString('es-BO', { 
+            weekday: 'short', 
+            day: '2-digit', 
+            month: '2-digit',
+            year: '2-digit'
+          });
+          break;
+        case 'week':
+          const weekNum = getWeekNumber(saleDate);
+          const weekRange = getWeekRange(saleDate);
+          groupKey = `${saleDate.getFullYear()}-W${weekNum}`;
+          groupLabel = `Sem ${weekNum} (${weekRange.start} - ${weekRange.end})`;
+          break;
+        case 'month':
+          groupKey = `${saleDate.getFullYear()}-${saleDate.getMonth() + 1}`;
+          groupLabel = saleDate.toLocaleDateString('es-BO', { year: '2-digit', month: 'short' });
+          break;
+        case 'promoter':
+          groupKey = row.promoter_name || 'Sin promotor';
+          groupLabel = row.promoter_name || 'Sin promotor';
+          break;
+        case 'origin':
+          groupKey = row.origin;
+          groupLabel = row.origin.toUpperCase();
+          break;
+      }
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          key: groupKey,
+          label: groupLabel,
+          items: 0,
+          totalBs: 0,
+          rows: [],
+          promoters: new Set(),
+          origins: new Set()
+        };
+      }
+
+      const group = groups[groupKey];
+      group.items += row.quantity;
+      group.totalBs += row.quantity * row.unit_price;
+      group.rows.push(row);
+      group.promoters.add(row.promoter_name || 'Sin promotor');
+      group.origins.add(row.origin);
+    }
+
+    return Object.values(groups).sort((a, b) => {
+      if (groupBy === 'promoter' || groupBy === 'origin') {
+        return b.totalBs - a.totalBs; // Por valor descendente
+      }
+      return a.key.localeCompare(b.key); // Por fecha/tiempo ascendente
+    });
+  }, [filteredRows, groupBy]);
+
+  /* --------- Top promotores (top 10) --------- */
+  const topPromoters = useMemo(() => {
+    const map: Record<string, { items: number; bs: number }> = {};
+    for (const r of filteredRows) {
+      const k = r.promoter_name || '—';
+      if (!map[k]) map[k] = { items: 0, bs: 0 };
+      map[k].items += r.quantity;
+      map[k].bs += r.quantity * r.unit_price;
+    }
+    const arr = Object.entries(map).map(([promoter, v]) => ({ promoter, ...v }));
+    arr.sort((a, b) => b.bs - a.bs);
+    return arr.slice(0, 10);
+  }, [filteredRows]);
+
+  /* ---------------- UI ---------------- */
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
-          <div className="px-6 py-8 border-b border-slate-200">
-            <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-black text-white">
+      {/* Header glassmorphism */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border-b border-white/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
               <div>
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">Sistema de Registro de Ventas</h1>
-                <p className="text-slate-600">Gestiona y registra las ventas de manera eficiente</p>
+                <h1 className="text-xl font-semibold text-white">
+                  Dashboard Promotores
+                </h1>
               </div>
-              <div className="flex items-center space-x-4">
-                <div className="text-right">
-                  <p className="text-sm text-slate-500 mb-1">Usuario activo</p>
-                  <p className="font-semibold text-slate-900">{promoterName}</p>
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-white/20 to-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center border border-white/20">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
                 </div>
-                <div className="w-12 h-12 bg-slate-700 text-white font-bold rounded-xl flex items-center justify-center text-lg">
-                  {initials}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Configuración de venta */}
-          <div className="px-6 py-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Configuración de Venta</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Fecha de venta</label>
-                <input
-                  type="date"
-                  value={saleDate}
-                  onChange={(e) => setSaleDate(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Ciudad de origen</label>
-                <select
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value as Origin)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                >
-                  <option value="santacruz">Santa Cruz</option>
-                  <option value="lapaz">La Paz</option>
-                  <option value="elalto">El Alto</option>
-                  <option value="cochabamba">Cochabamba</option>
-                  <option value="sucre">Sucre</option>
-                  <option value="tienda">Tienda</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Bodega de origen</label>
-                <input
-                  type="text"
-                  value={warehouse}
-                  onChange={(e) => setWarehouse(e.target.value)}
-                  placeholder="Especifica la bodega (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Formulario de línea */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
-          <div className="px-6 py-6 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">Agregar Producto</h2>
-            <p className="text-slate-600 mt-1">Completa los detalles del producto para añadirlo a la venta</p>
-          </div>
-          
-          <div className="px-6 py-6">
-            {/* Primera fila - Producto y cantidades */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="md:col-span-2 space-y-2 relative">
-                <label className="block text-sm font-medium text-slate-700">Producto</label>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => searchProducts(e.target.value)}
-                  placeholder="Buscar producto (mín. 3 caracteres)..."
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-                {results.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border border-slate-300 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {results.map((r) => (
-                      <div
-                        key={r.id}
-                        className="p-4 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0 transition-colors duration-200"
-                        onClick={() => {
-                          setProductName(r.name);
-                          setQuery(r.name);
-                          setResults([]);
-                        }}
-                      >
-                        <div className="font-medium text-slate-900">{r.name}</div>
-                        <div className="text-sm text-slate-500">Stock disponible: {r.stock} unidades</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Cantidad</label>
-                <input
-                  type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                  min="1"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Precio unitario (Bs.)</label>
-                <input
-                  type="number"
-                  value={unitPrice}
-                  onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
-                  min="0"
-                  step="0.01"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                />
-              </div>
-            </div>
-
-            {/* Segunda fila - Información del cliente */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Nombre del cliente</label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Nombre completo (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Teléfono de contacto</label>
-                <input
-                  type="tel"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="Número de teléfono (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-            </div>
-
-            {/* Tercera fila - Información adicional */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Notas adicionales</label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Observaciones o comentarios (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Distrito / Zona</label>
-                <input
-                  type="text"
-                  value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  placeholder="Ubicación de entrega (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-            </div>
-
-            {/* Botón para agregar */}
-            <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-              <div className="text-sm text-slate-500">
-                {productName && quantity > 0 && unitPrice > 0 && (
-                  <span>Subtotal: <span className="font-semibold text-slate-900">Bs. {(quantity * unitPrice).toFixed(2)}</span></span>
-                )}
-              </div>
-              <button
-                onClick={addLine}
-                disabled={!productName || quantity <= 0 || unitPrice <= 0}
-                className="px-6 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-200 focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
-              >
-                Agregar al Registro
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabla de líneas */}
-        {lines.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
-            <div className="px-6 py-6 border-b border-slate-200">
-              <div className="flex justify-between items-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Panel de filtros glassmorphism */}
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10 rounded-lg"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
+            <div className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Resumen de Venta</h2>
-                  <p className="text-slate-600 mt-1">{lines.length} productos registrados</p>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Desde</label>
+                  <input
+                    type="date"
+                    value={from}
+                    onChange={(e) => setFrom(e.target.value)}
+                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
+                  />
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-500">Total de la venta</p>
-                  <p className="text-2xl font-bold text-slate-900">Bs. {total.toFixed(2)}</p>
+                
+                <div>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Hasta</label>
+                  <input
+                    type="date"
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Agrupar</label>
+                  <select
+                    value={groupBy}
+                    onChange={(e) => setGroupBy(e.target.value as GroupingType)}
+                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
+                  >
+                    <option value="day" className="bg-black">Día</option>
+                    <option value="week" className="bg-black">Semana</option>
+                    <option value="month" className="bg-black">Mes</option>
+                    <option value="promoter" className="bg-black">Promotor</option>
+                    <option value="origin" className="bg-black">Origen</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Promotor</label>
+                  <select
+                    value={selectedPromoter}
+                    onChange={(e) => setSelectedPromoter(e.target.value)}
+                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
+                  >
+                    <option value="" className="bg-black">Todos</option>
+                    {uniquePromoters.map(promoter => (
+                      <option key={promoter} value={promoter} className="bg-black">{promoter}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-white/70 mb-1">Origen</label>
+                  <select
+                    value={selectedOrigin}
+                    onChange={(e) => setSelectedOrigin(e.target.value)}
+                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
+                  >
+                    <option value="" className="bg-black">Todos</option>
+                    {uniqueOrigins.map(origin => (
+                      <option key={origin} value={origin} className="bg-black">{origin.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    onClick={load}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-white/20 to-white/10 hover:from-white/30 hover:to-white/20 disabled:from-white/5 disabled:to-white/5 backdrop-blur-sm border border-white/20 text-white text-xs font-medium px-3 py-1.5 rounded-md transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-white/30"
+                  >
+                    {loading ? 'Cargando...' : 'Actualizar'}
+                  </button>
                 </div>
               </div>
+
+              <div>
+                <label className="block text-xs font-medium text-white/70 mb-1">Búsqueda</label>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar por cliente, promotor, origen, producto..."
+                  className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* KPIs glassmorphism */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <KpiCard 
+            title="Total Registros" 
+            value={fmtInt(kpis.totalLines)} 
+            gradient="from-blue-500/20 to-cyan-500/20"
+            border="border-blue-500/30"
+          />
+          <KpiCard 
+            title="Items Vendidos" 
+            value={fmtInt(kpis.items)} 
+            gradient="from-green-500/20 to-emerald-500/20"
+            border="border-green-500/30"
+          />
+          <KpiCard 
+            title="Ingresos Totales" 
+            value={fmtBs(kpis.totalBs)} 
+            gradient="from-yellow-500/20 to-orange-500/20"
+            border="border-yellow-500/30"
+            emphasize
+          />
+          <OriginCard byOrigin={kpis.byOrigin} />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Columna izquierda - Top Promotores glassmorphism */}
+          <div className="lg:col-span-1">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+              <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
+                <div className="p-4 border-b border-white/10">
+                  <h3 className="text-sm font-semibold text-white">Top 10 Promotores</h3>
+                </div>
+                
+                <div className="p-4">
+                  {topPromoters.length === 0 ? (
+                    <EmptyState />
+                  ) : (
+                    <div className="space-y-2">
+                      {topPromoters.map((p, i) => {
+                        const pct = p.bs > 0 ? (p.bs / (topPromoters[0].bs || 1)) * 100 : 0;
+                        
+                        return (
+                          <div key={p.promoter} className="flex items-center justify-between p-2 rounded-md hover:bg-white/5 transition-colors duration-150 border border-white/5">
+                            <div className="flex items-center space-x-2 min-w-0 flex-1">
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium backdrop-blur-sm border ${
+                                i === 0 ? 'bg-gradient-to-r from-yellow-500/30 to-orange-500/30 border-yellow-500/50 text-yellow-200' :
+                                i === 1 ? 'bg-gradient-to-r from-gray-400/30 to-gray-500/30 border-gray-400/50 text-gray-200' :
+                                i === 2 ? 'bg-gradient-to-r from-orange-500/30 to-red-500/30 border-orange-500/50 text-orange-200' :
+                                'bg-white/10 border-white/20 text-white/70'
+                              }`}>
+                                {i + 1}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-medium text-white truncate">{p.promoter}</div>
+                                <div className="text-xs text-white/60">{fmtInt(p.items)} items</div>
+                              </div>
+                            </div>
+                            
+                            <div className="text-right ml-2">
+                              <div className="text-xs font-semibold text-white">{fmtBs(p.bs)}</div>
+                              <div className="w-16 h-1 bg-white/20 rounded-full mt-1 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-1000 ${
+                                    i === 0 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
+                                    i === 1 ? 'bg-gradient-to-r from-gray-400 to-gray-500' :
+                                    i === 2 ? 'bg-gradient-to-r from-orange-500 to-red-500' :
+                                    'bg-gradient-to-r from-white/40 to-white/60'
+                                  }`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Columna derecha - Datos agrupados glassmorphism */}
+          <div className="lg:col-span-2">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+              <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
+                <div className="p-4 border-b border-white/10">
+                  <h3 className="text-sm font-semibold text-white">
+                    Datos por {groupBy === 'day' ? 'Día' : groupBy === 'week' ? 'Semana' : groupBy === 'month' ? 'Mes' : groupBy === 'promoter' ? 'Promotor' : 'Origen'}
+                  </h3>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  {loading ? (
+                    <div className="p-8 text-center">
+                      <div className="inline-flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span className="text-xs text-white/70">Cargando...</span>
+                      </div>
+                    </div>
+                  ) : groupedData.length === 0 ? (
+                    <div className="p-8">
+                      <EmptyState />
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-white/10">
+                          <th className="text-left text-xs font-medium text-white/70 px-4 py-2">
+                            {groupBy === 'day' ? 'Día' : groupBy === 'week' ? 'Semana' : groupBy === 'month' ? 'Mes' : groupBy === 'promoter' ? 'Promotor' : 'Origen'}
+                          </th>
+                          <th className="text-right text-xs font-medium text-white/70 px-4 py-2">Items</th>
+                          <th className="text-right text-xs font-medium text-white/70 px-4 py-2">Total Bs</th>
+                          <th className="text-center text-xs font-medium text-white/70 px-4 py-2">Prom.</th>
+                          <th className="text-center text-xs font-medium text-white/70 px-4 py-2">Orig.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groupedData.map((group, i) => (
+                          <tr key={group.key} className="border-b border-white/5 hover:bg-white/5 transition-colors duration-150">
+                            <td className="px-4 py-2">
+                              <div className="text-xs font-medium text-white">{group.label}</div>
+                            </td>
+                            <td className="px-4 py-2 text-right text-xs font-mono text-white/80">
+                              {fmtInt(group.items)}
+                            </td>
+                            <td className="px-4 py-2 text-right text-xs font-mono font-semibold text-green-400">
+                              {fmtBs(group.totalBs)}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                {group.promoters.size}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                {group.origins.size}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabla de detalle glassmorphism */}
+        <div className="mt-6 relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-sm font-semibold text-white">
+                Detalle de Transacciones ({fmtInt(filteredRows.length)} registros)
+              </h3>
             </div>
             
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Producto</th>
-                    <th className="text-center px-6 py-4 text-sm font-semibold text-slate-900">Cantidad</th>
-                    <th className="text-right px-6 py-4 text-sm font-semibold text-slate-900">Precio Unit.</th>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Cliente</th>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Teléfono</th>
-                    <th className="text-right px-6 py-4 text-sm font-semibold text-slate-900">Subtotal</th>
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Fecha</th>
+                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Promotor</th>
+                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Origen</th>
+                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Producto</th>
+                    <th className="text-right text-xs font-medium text-white/70 px-3 py-2">Cant.</th>
+                    <th className="text-right text-xs font-medium text-white/70 px-3 py-2">P. Unit.</th>
+                    <th className="text-right text-xs font-medium text-white/70 px-3 py-2">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {lines.map((l, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors duration-200">
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900">{l.product_name}</div>
-                        {l.notes && <div className="text-sm text-slate-500 mt-1">{l.notes}</div>}
-                      </td>
-                      <td className="px-6 py-4 text-center text-slate-900">{l.quantity}</td>
-                      <td className="px-6 py-4 text-right text-slate-900">Bs. {l.unit_price.toFixed(2)}</td>
-                      <td className="px-6 py-4">
-                        <div className="text-slate-900">{l.customer_name || '-'}</div>
-                        {l.district && <div className="text-sm text-slate-500 mt-1">{l.district}</div>}
-                      </td>
-                      <td className="px-6 py-4 text-slate-900">{l.customer_phone || '-'}</td>
-                      <td className="px-6 py-4 text-right font-semibold text-slate-900">
-                        Bs. {(l.quantity * l.unit_price).toFixed(2)}
+                <tbody>
+                  {loading && <SkeletonRows />}
+                  {!loading && filteredRows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center">
+                        <EmptyState />
                       </td>
                     </tr>
-                  ))}
+                  )}
+                  {!loading &&
+                    filteredRows.slice(0, 50).map((r) => {
+                      const total = r.quantity * r.unit_price;
+                      return (
+                        <tr key={r.id} className="border-b border-white/5 hover:bg-white/5 transition-colors duration-150">
+                          <td className="px-3 py-2 text-xs text-white/70">
+                            {new Date(r.sale_date || r.created_at).toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit' })}
+                          </td>
+                          <td className="px-3 py-2 text-xs font-medium text-blue-300">{r.promoter_name}</td>
+                          <td className="px-3 py-2">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 uppercase">
+                              {r.origin}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-white/80 truncate max-w-xs" title={r.product_name}>
+                            {r.product_name}
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs font-mono text-white/80">{fmtInt(r.quantity)}</td>
+                          <td className="px-3 py-2 text-right text-xs font-mono text-white/70">{fmtBs(r.unit_price)}</td>
+                          <td className="px-3 py-2 text-right text-xs font-mono font-semibold text-green-400">{fmtBs(total)}</td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
-            </div>
-          </div>
-        )}
-
-        {/* Botón de guardar */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-          <div className="px-6 py-6">
-            <div className="flex justify-between items-center">
-              <div className="text-slate-600">
-                {lines.length === 0 ? 'No hay productos en el registro' : `${lines.length} productos listos para guardar`}
-              </div>
-              <button
-                onClick={saveAll}
-                disabled={saving || lines.length === 0}
-                className="px-8 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-200 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 flex items-center space-x-2"
-              >
-                {saving ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    <span>Guardando...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>Guardar Registro</span>
-                  </>
-                )}
-              </button>
+              
+              {!loading && filteredRows.length > 50 && (
+                <div className="p-3 text-center border-t border-white/10">
+                  <p className="text-xs text-white/60">
+                    Mostrando los primeros 50 registros de {fmtInt(filteredRows.length)} total.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function KpiCard({ 
+  title, 
+  value, 
+  gradient,
+  border,
+  emphasize = false 
+}: { 
+  title: string; 
+  value: string; 
+  gradient: string;
+  border: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <div className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-lg`}></div>
+      <div className={`relative backdrop-blur-xl bg-white/5 border ${border} rounded-lg p-4 shadow-2xl ${emphasize ? 'ring-1 ring-white/20' : ''}`}>
+        <div className="text-xs font-medium text-white/70 mb-1">{title}</div>
+        <div className={`text-lg font-bold text-white ${emphasize ? 'text-xl' : ''}`}>
+          {value}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OriginCard({ byOrigin }: { byOrigin: Record<string, number> }) {
+  const total = Object.values(byOrigin).reduce((s, v) => s + v, 0);
+  const topOrigin = Object.entries(byOrigin).sort(([,a], [,b]) => b - a)[0];
+
+  return (
+    <div className="relative">
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg"></div>
+      <div className="relative backdrop-blur-xl bg-white/5 border border-purple-500/30 rounded-lg p-4 shadow-2xl">
+        <div className="text-xs font-medium text-white/70 mb-1">Origen Principal</div>
+        <div className="text-lg font-bold text-white mb-2">
+          {topOrigin ? topOrigin[0].toUpperCase() : '—'}
+        </div>
+        
+        <div className="space-y-1">
+          {Object.entries(byOrigin)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 3)
+            .map(([origin, value]) => {
+              const pct = total > 0 ? (value / total) * 100 : 0;
+              return (
+                <div key={origin} className="flex items-center justify-between text-xs">
+                  <span className="text-white/80 uppercase font-medium">{origin}</span>
+                  <span className="text-white/60">{pct.toFixed(1)}%</span>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonRows() {
+  return (
+    <>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <tr key={i} className="border-b border-white/5">
+          {Array.from({ length: 7 }).map((__, j) => (
+            <td key={j} className="px-3 py-2">
+              <div className="h-3 bg-white/10 rounded animate-pulse" style={{ width: `${60 + Math.random() * 40}%` }} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="text-center py-8">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center">
+        <svg className="w-6 h-6 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2-2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+        </svg>
+      </div>
+      <h4 className="text-sm font-medium text-white mb-1">Sin datos</h4>
+      <p className="text-xs text-white/60">No hay registros que coincidan con los filtros</p>
     </div>
   );
 }

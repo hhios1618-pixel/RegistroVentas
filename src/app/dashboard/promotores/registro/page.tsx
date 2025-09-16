@@ -1,362 +1,495 @@
 'use client';
-import { useState, useEffect } from 'react';
+
+import { useState, useMemo } from 'react';
+import useSWR from 'swr';
 import { createClient } from '@supabase/supabase-js';
 
-// --- DEFINICIÓN DE TIPOS ---
-interface ProductSearchResult {
-  id: number;
+// ==================
+// Configuración
+// ==================
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const fetcher = (url: string) =>
+  fetch(url).then((res) => {
+    if (!res.ok) throw new Error('Error al cargar datos');
+    return res.json();
+  });
+
+// ==================
+// Tipos
+// ==================
+type Origin = 'cochabamba' | 'lapaz' | 'elalto' | 'santacruz' | 'sucre' | 'tienda';
+
+interface ProductRow {
+  id: string;
+  code: string;
   name: string;
-  stock: number | null;
+  stock: number;
 }
 
-interface OrderItem {
-  name: string;
-  qty: number;
+interface SaleLine {
+  product_id: string | null;
+  product_name: string;
+  quantity: number;
   unit_price: number;
-  sale_type: 'mayor' | 'detalle' | null;
-  is_recognized: boolean;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  notes?: string | null;
+  warehouse_origin?: string | null;
+  district?: string | null;
 }
 
-interface OrderState {
-  items: OrderItem[];
-  customer_name: string;
-  customer_phone: string;
-  is_encomienda: boolean | null;
-  location: string | null;
-  destino: string;
-  payment_method: string;
-  seller_id: string;
-}
+// ==================
+// Utils
+// ==================
+const dbPhoneOrNull = (raw?: string | null) => {
+  if (!raw) return null;
+  const v = raw.trim();
+  return /^(\+)?\d{8,15}$/.test(v) ? v : null;
+};
 
-interface NewItemState {
-    name: string;
-    qty: number;
-    unit_price: string;
-    sale_type: 'mayor' | 'detalle' | null;
-    is_recognized: boolean;
-}
+const ALLOWED_WAREHOUSES = new Set([
+  'cochabamba',
+  'lapaz',
+  'elalto',
+  'santacruz',
+  'sucre',
+  'tienda',
+]);
 
-interface SuccessInfo {
-  id: number;
-  order_no: number | string | null;
-}
+const cleanWarehouse = (w?: string | null) => {
+  const v = (w || '').toLowerCase().trim();
+  return ALLOWED_WAREHOUSES.has(v) ? v : null;
+};
 
-// --- CONFIGURACIÓN ---
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const getInitials = (name?: string) => {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'U';
+  return parts.slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join('');
+};
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.error("Supabase URL o Anon Key no están definidas en las variables de entorno.");
-}
+// ==================
+// Página
+// ==================
+export default function SalesEntry() {
+  // Identidad
+  const { data: me, isLoading: meLoading } = useSWR('/endpoints/me', fetcher);
+  const promoterName = useMemo(() => me?.full_name || '', [me?.full_name]);
+  const initials = useMemo(() => getInitials(promoterName), [promoterName]);
+  const canAccess = !!me?.ok;
 
-const supabase = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+  // Cabecera
+  const [saleDate, setSaleDate] = useState<string>(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [origin, setOrigin] = useState<Origin>('santacruz');
+  const [warehouse, setWarehouse] = useState<string>('');
 
-const getInitialOrderState = (): OrderState => ({
-    items: [],
-    customer_name: '',
-    customer_phone: '',
-    is_encomienda: null,
-    location: null,
-    destino: '',
-    payment_method: '',
-    seller_id: 'UUID-DEL-VENDEDOR-LOGUEADO' // Placeholder
-});
+  // Línea en edición
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<ProductRow[]>([]);
+  const [productName, setProductName] = useState('');
+  const [quantity, setQuantity] = useState<number>(1);
+  const [unitPrice, setUnitPrice] = useState<number>(0);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [notes, setNotes] = useState('');
+  const [district, setDistrict] = useState('');
 
-// --- COMPONENTE PRINCIPAL ---
-export default function SalesRegistryPage() {
-    const [order, setOrder] = useState<OrderState>(getInitialOrderState());
-    const [currentStep, setCurrentStep] = useState('products');
-    const [isLoading, setIsLoading] = useState(false);
-    const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null);
+  // Líneas acumuladas
+  const [lines, setLines] = useState<SaleLine[]>([]);
+  const [saving, setSaving] = useState(false);
 
-    const [productQuery, setProductQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<ProductSearchResult[]>([]);
-    const [newItem, setNewItem] = useState<NewItemState>({ name: '', qty: 1, unit_price: '', sale_type: null, is_recognized: false });
+  const total = useMemo(
+    () => lines.reduce((s: number, l: SaleLine) => s + l.quantity * l.unit_price, 0),
+    [lines],
+  );
 
-    useEffect(() => {
-        const search = async () => {
-            if (productQuery.length < 3) {
-                setSearchResults([]);
-                return;
-            }
-            const { data } = await supabase.from('products').select('id, name, stock').ilike('name', `%${productQuery}%`).limit(5);
-            setSearchResults(data || []);
-        };
-        const timeoutId = setTimeout(search, 300);
-        return () => clearTimeout(timeoutId);
-    }, [productQuery]);
-
-    const handleAddItem = () => {
-        if (!newItem.name || !newItem.qty) return;
-        const finalItem: OrderItem = {
-            ...newItem,
-            unit_price: parseFloat(newItem.unit_price) || 0,
-        };
-        setOrder(prev => ({ ...prev, items: [...prev.items, finalItem] }));
-        setNewItem({ name: '', qty: 1, unit_price: '', sale_type: null, is_recognized: false });
-        setProductQuery('');
-    };
-
-    const handleRemoveItem = (indexToRemove: number) => {
-        setOrder(prev => ({ ...prev, items: prev.items.filter((_, index) => index !== indexToRemove) }));
-    };
-    
-    // --- CAMBIO CLAVE: Función para manejar el teléfono ---
-    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        // Esta expresión regular comprueba si el valor contiene solo números (o está vacío)
-        if (/^[0-9]*$/.test(value)) {
-            setOrder(p => ({ ...p, customer_phone: value }));
-        }
-    };
-
-    const updateItem = (index: number, updates: Partial<OrderItem>) => {
-        setOrder(prev => ({
-            ...prev,
-            items: prev.items.map((item, i) => i === index ? { ...item, ...updates } : item)
-        }));
-    };
-
-    const advanceFlow = () => {
-        const itemWithoutSaleType = order.items.findIndex(item => !item.sale_type);
-        if (itemWithoutSaleType !== -1) {
-            setCurrentStep(`awaiting_sale_type_${itemWithoutSaleType}`);
-            return;
-        }
-        
-        const itemWithoutPrice = order.items.findIndex(item => item.unit_price === null || item.unit_price === undefined);
-         if (itemWithoutPrice !== -1) {
-            setCurrentStep(`awaiting_price_${itemWithoutPrice}`);
-            return;
-        }
-
-        if (!order.customer_name || !order.customer_phone) {
-            setCurrentStep('awaiting_customer');
-            return;
-        }
-
-        if (order.is_encomienda === null) {
-            setCurrentStep('awaiting_order_type');
-            return;
-        }
-        
-        if (order.is_encomienda && !order.destino) {
-            setCurrentStep('awaiting_destination');
-            return;
-        }
-        if (!order.is_encomienda && !order.location) {
-            setCurrentStep('awaiting_location');
-            return;
-        }
-        
-        if (!order.payment_method) {
-            setCurrentStep('awaiting_payment');
-            return;
-        }
-
-        setCurrentStep('confirming');
-    };
-
-    const handleSaveOrder = async () => {
-        setIsLoading(true);
-        const total_amount = order.items.reduce((sum, item) => sum + (item.qty * item.unit_price), 0);
-        
-        const { data: orderData, error: orderError } = await supabase.from('orders').insert({
-            customer_name: order.customer_name,
-            customer_phone: order.customer_phone,
-            is_encomienda: order.is_encomienda,
-            location: order.is_encomienda ? null : { address: order.location },
-            destino: order.is_encomienda ? order.destino : null,
-            payment_method: order.payment_method,
-            seller_id: order.seller_id,
-            total_amount,
-            status: 'pending'
-        }).select('id, order_no').single();
-
-        if (orderError) {
-            alert(`Error al guardar pedido: ${orderError.message}`);
-            setIsLoading(false);
-            return;
-        }
-
-        const orderId = orderData.id;
-        const orderItemsPayload = order.items.map(item => ({
-            order_id: orderId,
-            product_name: item.name,
-            quantity: item.qty,
-            unit_price: item.unit_price,
-            sale_type: item.sale_type
-        }));
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
-
-        if (itemsError) {
-            alert(`Pedido #${orderId} guardado, pero falló al guardar productos: ${itemsError.message}`);
-            setIsLoading(false);
-            return;
-        }
-
-        setSuccessInfo({ id: orderData.id, order_no: orderData.order_no });
-        setIsLoading(false);
-    };
-
-    if (successInfo) {
-        return (
-            <div className="text-center p-8 bg-gray-800 rounded-lg max-w-lg mx-auto">
-                <h2 className="text-3xl font-bold text-green-400 mb-4">¡Pedido Guardado con Éxito!</h2>
-                <p className="text-lg text-gray-300">Se ha registrado el pedido: <strong className="text-white">#{successInfo.order_no || successInfo.id}</strong></p>
-                <button onClick={() => { setOrder(getInitialOrderState()); setCurrentStep('products'); setSuccessInfo(null); }} className="mt-8 bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded-lg text-lg">
-                    Registrar Nuevo Pedido
-                </button>
-            </div>
-        );
+  // Buscar productos
+  const searchProducts = async (q: string) => {
+    setQuery(q);
+    if (q.length < 3) {
+      setResults([]);
+      return;
     }
-    
-    const renderStepContent = () => {
-        if (currentStep.startsWith('awaiting_sale_type_')) {
-            const index = parseInt(currentStep.split('_')[3]);
-            const item = order.items[index];
-            return (
-                <div>
-                    <h3 className="text-lg mb-4">Para <strong>{item?.name}</strong>, ¿es venta por mayor o detalle?</h3>
-                    <div className="flex gap-4">
-                        <button onClick={() => { updateItem(index, { sale_type: 'mayor' }); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">📦 Por Mayor</button>
-                        <button onClick={() => { updateItem(index, { sale_type: 'detalle' }); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">🛍️ Al Detalle</button>
-                    </div>
-                </div>
-            );
-        }
-        
-         if (currentStep.startsWith('awaiting_price_')) {
-            const index = parseInt(currentStep.split('_')[2]);
-            const item = order.items[index];
-            return (
-                <div>
-                    <h3 className="text-lg mb-2">¿Cuál es el precio unitario (Bs.) para <strong>{item?.name}</strong>?</h3>
-                    <input type="number" onBlur={(e) => updateItem(index, { unit_price: parseFloat(e.target.value) || 0 })} placeholder="Ej: 80.00" autoFocus className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
-                    <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Confirmar Precio</button>
-                </div>
-            );
-        }
+    const { data } = await supabase
+      .from('products')
+      .select('id, code, name, stock')
+      .ilike('name', `%${q}%`)
+      .limit(5);
+    setResults(data || []);
+  };
 
-        switch (currentStep) {
-            case 'awaiting_customer':
-                return (
-                    <div>
-                        <h3 className="text-lg mb-2">Datos del Cliente</h3>
-                        <input type="text" value={order.customer_name} onChange={e => setOrder(p => ({...p, customer_name: e.target.value}))} placeholder="Nombre Completo" className="w-full bg-gray-700 rounded p-2 border border-gray-600 mb-2" />
-                        {/* --- CAMBIO CLAVE: Se usa la nueva función de validación --- */}
-                        <input type="tel" value={order.customer_phone} onChange={handlePhoneChange} placeholder="Teléfono (solo números)" className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
-                        <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Siguiente</button>
-                    </div>
-                );
-            case 'awaiting_order_type':
-                 return (
-                    <div>
-                        <h3 className="text-lg mb-4">¿El pedido es para entrega local o encomienda?</h3>
-                        <div className="flex gap-4">
-                            <button onClick={() => { setOrder(p => ({...p, is_encomienda: false})); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">🛵 Entrega Local</button>
-                            <button onClick={() => { setOrder(p => ({...p, is_encomienda: true})); advanceFlow(); }} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">📦 Encomienda</button>
-                        </div>
-                    </div>
-                );
-            case 'awaiting_destination':
-                 return (
-                    <div>
-                        <h3 className="text-lg mb-2">Destino de la Encomienda</h3>
-                        <input type="text" defaultValue={order.destino} onBlur={(e) => setOrder(p => ({...p, destino: e.target.value}))} placeholder="Ciudad o Departamento" autoFocus className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
-                        <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Siguiente</button>
-                    </div>
-                );
-             case 'awaiting_location':
-                 return (
-                    <div>
-                        <h3 className="text-lg mb-2">Ubicación de Entrega Local</h3>
-                        <input type="text" defaultValue={order.location || ''} onBlur={(e) => setOrder(p => ({...p, location: e.target.value}))} placeholder="Dirección o link de Google Maps" autoFocus className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
-                        <button onClick={advanceFlow} className="mt-4 w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-2 px-4 rounded">Siguiente</button>
-                    </div>
-                );
-            case 'awaiting_payment':
-                 return (
-                    <div>
-                        <h3 className="text-lg mb-4">Método de Pago</h3>
-                        <div className="flex flex-col gap-2">
-                            <button onClick={() => { setOrder(p => ({...p, payment_method: 'Efectivo'})); advanceFlow(); }} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">💵 Efectivo</button>
-                            <button onClick={() => { setOrder(p => ({...p, payment_method: 'QR'})); advanceFlow(); }} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">📲 QR</button>
-                            <button onClick={() => { setOrder(p => ({...p, payment_method: 'Transferencia'})); advanceFlow(); }} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">🏦 Transferencia</button>
-                        </div>
-                    </div>
-                );
-            case 'confirming':
-                const total = order.items.reduce((sum, item) => sum + (item.qty * item.unit_price), 0);
-                return (
-                    <div>
-                        <h3 className="text-xl font-bold mb-2">Resumen Final</h3>
-                        <div className="space-y-1 text-left bg-gray-700/50 p-4 rounded">
-                            <p><strong>Cliente:</strong> {order.customer_name} ({order.customer_phone})</p>
-                            <p><strong>Entrega:</strong> {order.is_encomienda ? `Encomienda a ${order.destino}` : `Local en ${order.location}`}</p>
-                            <p><strong>Pago:</strong> {order.payment_method}</p>
-                            <ul className="list-disc list-inside pt-2">
-                                {order.items.map((item, i) => <li key={i}>{item.qty} x {item.name} ({item.sale_type}) @ Bs. {item.unit_price.toFixed(2)}</li>)}
-                            </ul>
-                            <p className="text-xl font-bold mt-2 border-t border-gray-600 pt-2">Total: Bs. {total.toFixed(2)}</p>
-                        </div>
-                        <button onClick={handleSaveOrder} disabled={isLoading} className="mt-4 w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded text-lg disabled:bg-gray-500">
-                             {isLoading ? 'Guardando...' : 'Confirmar y Guardar Pedido'}
-                         </button>
-                    </div>
-                );
-            default:
-                return null;
-        }
-    };
-    
+  // Agregar línea
+  const addLine = () => {
+    if (!productName || quantity <= 0 || unitPrice <= 0) return;
+    setLines((prev) => [
+      ...prev,
+      {
+        product_id: null,
+        product_name: productName,
+        quantity,
+        unit_price: unitPrice,
+        customer_name: customerName || null,
+        customer_phone: customerPhone || null,
+        notes: notes || null,
+        warehouse_origin: warehouse || null,
+        district: district || null,
+      },
+    ]);
+    setProductName('');
+    setQuantity(1);
+    setUnitPrice(0);
+    setCustomerName('');
+    setCustomerPhone('');
+    setNotes('');
+    setDistrict('');
+    setQuery('');
+    setResults([]);
+  };
+
+  // Guardar
+  const saveAll = async () => {
+    if (lines.length === 0) return;
+    setSaving(true);
+
+    const payload = lines.map((l) => ({
+      promoter_name: promoterName,
+      sale_date: saleDate,
+      origin,
+      product_id: l.product_id,
+      product_name: l.product_name,
+      quantity: l.quantity,
+      unit_price: l.unit_price,
+      customer_name: l.customer_name ?? null,
+      customer_phone: dbPhoneOrNull(l.customer_phone),
+      notes: l.notes ?? null,
+      warehouse_origin: cleanWarehouse(l.warehouse_origin),
+      district: l.district ?? null,
+    }));
+
+    const { error } = await supabase.from('promoter_sales').insert(payload);
+
+    if (error) {
+      alert('Error al guardar: ' + error.message);
+    } else {
+      setLines([]);
+      alert('✅ Ventas registradas con éxito.');
+    }
+    setSaving(false);
+  };
+
+  if (meLoading) {
     return (
-        <div className="bg-gray-800 rounded-lg shadow-lg p-6 md:p-8">
-            <h1 className="text-3xl font-bold text-yellow-400 mb-6">Nuevo Pedido</h1>
-            
-            <section>
-                <h2 className="text-xl font-semibold mb-2">Productos</h2>
-                 <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end p-4 border border-gray-700 rounded-lg">
-                    <div className="md:col-span-3 relative">
-                        <label className="block text-sm font-medium text-gray-300">Buscar Producto</label>
-                        <input type="text" value={productQuery} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProductQuery(e.target.value)} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
-                        {searchResults.length > 0 && (
-                            <div className="absolute z-10 w-full bg-gray-900 rounded-b-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                                {searchResults.map(p => <div key={p.id} onClick={() => { setNewItem({ ...newItem, name: p.name, is_recognized: true }); setProductQuery(p.name); setSearchResults([]); }} className="p-3 hover:bg-gray-700 cursor-pointer">{p.name}</div>)}
-                            </div>
-                        )}
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300">Cant.</label>
-                        <input type="number" value={newItem.qty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItem(p => ({...p, qty: parseInt(e.target.value) || 1}))} className="w-full bg-gray-700 rounded p-2 border border-gray-600" />
-                    </div>
-                    <div className="md:col-span-2">
-                        <button onClick={handleAddItem} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">Añadir al Pedido</button>
-                    </div>
-                </div>
-                <div className="mt-4 space-y-2">
-                    {order.items.map((item, index) => (
-                        <div key={index} className="flex justify-between items-center bg-gray-700 p-2 rounded">
-                            <span>{item.qty} x {item.name} {item.sale_type ? `(${item.sale_type})` : ''}</span>
-                            <button onClick={() => handleRemoveItem(index)} className="text-red-400 hover:text-red-300 text-xl">&times;</button>
-                        </div>
-                    ))}
-                </div>
-            </section>
-            
-            {currentStep !== 'products' && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-                    <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md border border-yellow-400">
-                       {renderStepContent()}
-                    </div>
-                </div>
-            )}
-            
-            {currentStep === 'products' && order.items.length > 0 && (
-                 <div className="mt-8 pt-4 border-t border-gray-700 text-right">
-                    <button onClick={advanceFlow} className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold py-3 px-6 rounded text-lg">Continuar con el Pedido</button>
-                </div>
-            )}
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+          <div className="flex items-center space-x-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-700"></div>
+            <span className="text-slate-600 font-medium">Cargando sistema...</span>
+          </div>
         </div>
+      </div>
     );
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-red-200">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Acceso Denegado</h3>
+            <p className="text-slate-600">No tienes permisos para acceder a esta sección.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==================
+  // Render
+  // ==================
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
+          <div className="px-6 py-8 border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900 mb-2">Sistema de Registro de Ventas</h1>
+                <p className="text-slate-600">Gestiona y registra las ventas de manera eficiente</p>
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className="text-right">
+                  <p className="text-sm text-slate-500 mb-1">Usuario activo</p>
+                  <p className="font-semibold text-slate-900">{promoterName}</p>
+                </div>
+                <div className="w-12 h-12 bg-slate-700 text-white font-bold rounded-xl flex items-center justify-center text-lg">
+                  {initials}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Configuración de venta */}
+          <div className="px-6 py-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Configuración de Venta</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Fecha de venta</label>
+                <input
+                  type="date"
+                  value={saleDate}
+                  onChange={(e) => setSaleDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Ciudad de origen</label>
+                <select
+                  value={origin}
+                  onChange={(e) => setOrigin(e.target.value as Origin)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
+                >
+                  <option value="santacruz">Santa Cruz</option>
+                  <option value="lapaz">La Paz</option>
+                  <option value="elalto">El Alto</option>
+                  <option value="cochabamba">Cochabamba</option>
+                  <option value="sucre">Sucre</option>
+                  <option value="tienda">Tienda</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Bodega de origen</label>
+                <input
+                  type="text"
+                  value={warehouse}
+                  onChange={(e) => setWarehouse(e.target.value)}
+                  placeholder="Especifica la bodega (opcional)"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Formulario de línea */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
+          <div className="px-6 py-6 border-b border-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900">Agregar Producto</h2>
+            <p className="text-slate-600 mt-1">Completa los detalles del producto para añadirlo a la venta</p>
+          </div>
+          
+          <div className="px-6 py-6">
+            {/* Primera fila - Producto y cantidades */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="md:col-span-2 space-y-2 relative">
+                <label className="block text-sm font-medium text-slate-700">Producto</label>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => searchProducts(e.target.value)}
+                  placeholder="Buscar producto (mín. 3 caracteres)..."
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
+                />
+                {results.length > 0 && (
+                  <div className="absolute z-50 w-full bg-white border border-slate-300 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                    {results.map((r) => (
+                      <div
+                        key={r.id}
+                        className="p-4 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0 transition-colors duration-200"
+                        onClick={() => {
+                          setProductName(r.name);
+                          setQuery(r.name);
+                          setResults([]);
+                        }}
+                      >
+                        <div className="font-medium text-slate-900">{r.name}</div>
+                        <div className="text-sm text-slate-500">Stock disponible: {r.stock} unidades</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Cantidad</label>
+                <input
+                  type="number"
+                  value={quantity}
+                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  min="1"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Precio unitario (Bs.)</label>
+                <input
+                  type="number"
+                  value={unitPrice}
+                  onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
+                  min="0"
+                  step="0.01"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
+                />
+              </div>
+            </div>
+
+            {/* Segunda fila - Información del cliente */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Nombre del cliente</label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Nombre completo (opcional)"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Teléfono de contacto</label>
+                <input
+                  type="tel"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="Número de teléfono (opcional)"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
+                />
+              </div>
+            </div>
+
+            {/* Tercera fila - Información adicional */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Notas adicionales</label>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Observaciones o comentarios (opcional)"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">Distrito / Zona</label>
+                <input
+                  type="text"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  placeholder="Ubicación de entrega (opcional)"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
+                />
+              </div>
+            </div>
+
+            {/* Botón para agregar */}
+            <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+              <div className="text-sm text-slate-500">
+                {productName && quantity > 0 && unitPrice > 0 && (
+                  <span>Subtotal: <span className="font-semibold text-slate-900">Bs. {(quantity * unitPrice).toFixed(2)}</span></span>
+                )}
+              </div>
+              <button
+                onClick={addLine}
+                disabled={!productName || quantity <= 0 || unitPrice <= 0}
+                className="px-6 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-200 focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+              >
+                Agregar al Registro
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabla de líneas */}
+        {lines.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
+            <div className="px-6 py-6 border-b border-slate-200">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Resumen de Venta</h2>
+                  <p className="text-slate-600 mt-1">{lines.length} productos registrados</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-slate-500">Total de la venta</p>
+                  <p className="text-2xl font-bold text-slate-900">Bs. {total.toFixed(2)}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Producto</th>
+                    <th className="text-center px-6 py-4 text-sm font-semibold text-slate-900">Cantidad</th>
+                    <th className="text-right px-6 py-4 text-sm font-semibold text-slate-900">Precio Unit.</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Cliente</th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Teléfono</th>
+                    <th className="text-right px-6 py-4 text-sm font-semibold text-slate-900">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {lines.map((l, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors duration-200">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-slate-900">{l.product_name}</div>
+                        {l.notes && <div className="text-sm text-slate-500 mt-1">{l.notes}</div>}
+                      </td>
+                      <td className="px-6 py-4 text-center text-slate-900">{l.quantity}</td>
+                      <td className="px-6 py-4 text-right text-slate-900">Bs. {l.unit_price.toFixed(2)}</td>
+                      <td className="px-6 py-4">
+                        <div className="text-slate-900">{l.customer_name || '-'}</div>
+                        {l.district && <div className="text-sm text-slate-500 mt-1">{l.district}</div>}
+                      </td>
+                      <td className="px-6 py-4 text-slate-900">{l.customer_phone || '-'}</td>
+                      <td className="px-6 py-4 text-right font-semibold text-slate-900">
+                        Bs. {(l.quantity * l.unit_price).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Botón de guardar */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+          <div className="px-6 py-6">
+            <div className="flex justify-between items-center">
+              <div className="text-slate-600">
+                {lines.length === 0 ? 'No hay productos en el registro' : `${lines.length} productos listos para guardar`}
+              </div>
+              <button
+                onClick={saveAll}
+                disabled={saving || lines.length === 0}
+                className="px-8 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-200 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 flex items-center space-x-2"
+              >
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Guardar Registro</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
