@@ -16,22 +16,16 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-
-      // 🔥 Aliases explícitos para case-sensitive en Vercel
       "@/components/input": ["./src/components/Input"],
       "@/components/textarea": ["./src/components/Textarea"],
       "@/components/checkbox": ["./src/components/Checkbox"],
       "@/components/ui/label": ["./src/components/label"]
     }
   },
-  "include": [
-    "next-env.d.ts",
-    "src/**/*",
-    ".next/types/**/*.ts"
-  ],
+  "include": ["next-env.d.ts", "src/**/*", ".next/types/**/*.ts"],
   "exclude": [
     "node_modules",
-    "supabase",
-    "supabase/**/*"
+    ".next",
+    "supabase/functions"   // ⬅️ ignora solo las Edge Functions (mejor que excluir todo supabase/)
   ]
 }

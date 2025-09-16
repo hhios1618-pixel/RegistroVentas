@@ -38,6 +38,9 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      deno:
+        specifier: ^2.5.0
+        version: 2.5.0
       framer-motion:
         specifier: ^12.23.12
         version: 12.23.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -154,17 +157,47 @@ packages:
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
 
+  '@deno/darwin-arm64@2.5.0':
+    resolution: {integrity: sha512-1x8VmjfO7nPhVdKuRO0vVCSyxbzbhoiYpwTsM6c1dI1LLjLq/yLszHyStH0SE0gd+9XMVgrXLdrRPWrePW7WmQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@deno/darwin-x64@2.5.0':
+    resolution: {integrity: sha512-yiWqH+L4G7DLX/LSr/x2kImn1DaDh/G14TLdLuLBzcdwZ9XuM/lNjgSe7xc35WlhyXAkf0J/K2yi7kNqHJoItw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@deno/linux-arm64-glibc@2.5.0':
+    resolution: {integrity: sha512-bkx6ITvYh9xS/GVbzzriotM3MA+3RIzDxohvmPosYfDzIckcROzTvvXkl73pLwvAnDfdbw7DF1qpUmU480vv4w==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@deno/linux-x64-glibc@2.5.0':
+    resolution: {integrity: sha512-0u3VXBU6yGAsCRATxi9uC9VW91/9MlhoqrURbbxJy0gPihrYoEWoUqi0b07BI4AIfy2EPUYvf82IcgTxemb0jw==}
+    cpu: [x64]
+    os: [linux]
+
+  '@deno/win32-arm64@2.5.0':
+    resolution: {integrity: sha512-5mehFHYvMV/Kz9331FUnKwmocJBxvp/9dfwVK9Zn8MY1koLuvn8F6c0Tg0Vg+uZ9kwDSv9mhEvrkKLv2ZF2CPw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@deno/win32-x64@2.5.0':
+    resolution: {integrity: sha512-5k0eYnFn55NV2/i6LwSi/BM1pUkDdmMlAyxKSb3PhiPd+EpS1cxAFEwn92MRmQq7mG2uoUixR1n4A3MrfU259w==}
+    cpu: [x64]
+    os: [win32]
+
   '@discoveryjs/json-ext@0.5.7':
     resolution: {integrity: sha512-dBVuXR082gk3jsFp7Rd/JI4kytwGHecnCoTtXFb7DB6CNHp4rg5k1bhg0nWdLGLnOV71lmDzGQaLMy8iPLY0pw==}
     engines: {node: '>=10.0.0'}
 
-  '@emnendpoints/core@1.5.0':
+  '@emnapi/core@1.5.0':
     resolution: {integrity: sha512-sbP8GzB1WDzacS8fgNPpHlp6C9VZe+SJP3F90W9rLemaQj2PzIuTEl1qDOYQf58YIpyjViI24y9aPWCjEzY2cg==}
 
-  '@emnendpoints/runtime@1.5.0':
+  '@emnapi/runtime@1.5.0':
     resolution: {integrity: sha512-97/BJ3iXHww3djw6hYIfErCZFee7qCtrneuLa20UXFCOTCfBM2cvQHjWJ2EG0s0MtdNwInarqCTz35i4wWXHsQ==}
 
-  '@emnendpoints/wasi-threads@1.1.0':
+  '@emnapi/wasi-threads@1.1.0':
     resolution: {integrity: sha512-WI0DdZ8xFSbgMjR1sFsKABJ/C5OnRrjT06JXbZKexJGrDuPTzZdDYfFlsgcCXCyf+suG5QU2e/y1Wo2V/OapLQ==}
 
   '@eslint-community/eslint-utils@4.9.0':
@@ -1479,6 +1512,10 @@ packages:
   define-properties@1.2.1:
     resolution: {integrity: sha512-8QmQKqEASLd5nx0U1B1okLElbUuuttJ/AnYmRXbbbGDWh6uS208EjD4Xqq/I9wK7u0v6O08XhTWnt5XtEbR6Dg==}
     engines: {node: '>= 0.4'}
+
+  deno@2.5.0:
+    resolution: {integrity: sha512-GMqK9VJzwFhluLPfPP1iM/qbDnug9t5CsMTv4jpowQoWCJbdghi1aL4+2oiXNm0WPI5e/q5QAcoc1PUfhnL6LA==}
+    hasBin: true
 
   dequal@2.0.3:
     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
@@ -2985,20 +3022,38 @@ snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
 
+  '@deno/darwin-arm64@2.5.0':
+    optional: true
+
+  '@deno/darwin-x64@2.5.0':
+    optional: true
+
+  '@deno/linux-arm64-glibc@2.5.0':
+    optional: true
+
+  '@deno/linux-x64-glibc@2.5.0':
+    optional: true
+
+  '@deno/win32-arm64@2.5.0':
+    optional: true
+
+  '@deno/win32-x64@2.5.0':
+    optional: true
+
   '@discoveryjs/json-ext@0.5.7': {}
 
-  '@emnendpoints/core@1.5.0':
+  '@emnapi/core@1.5.0':
     dependencies:
-      '@emnendpoints/wasi-threads': 1.1.0
+      '@emnapi/wasi-threads': 1.1.0
       tslib: 2.8.1
     optional: true
 
-  '@emnendpoints/runtime@1.5.0':
+  '@emnapi/runtime@1.5.0':
     dependencies:
       tslib: 2.8.1
     optional: true
 
-  '@emnendpoints/wasi-threads@1.1.0':
+  '@emnapi/wasi-threads@1.1.0':
     dependencies:
       tslib: 2.8.1
     optional: true
@@ -3221,12 +3276,12 @@ snapshots:
 
   '@img/sharp-wasm32@0.33.5':
     dependencies:
-      '@emnendpoints/runtime': 1.5.0
+      '@emnapi/runtime': 1.5.0
     optional: true
 
   '@img/sharp-wasm32@0.34.3':
     dependencies:
-      '@emnendpoints/runtime': 1.5.0
+      '@emnapi/runtime': 1.5.0
     optional: true
 
   '@img/sharp-win32-arm64@0.34.3':
@@ -3269,8 +3324,8 @@ snapshots:
 
   '@napi-rs/wasm-runtime@0.2.12':
     dependencies:
-      '@emnendpoints/core': 1.5.0
-      '@emnendpoints/runtime': 1.5.0
+      '@emnapi/core': 1.5.0
+      '@emnapi/runtime': 1.5.0
       '@tybys/wasm-util': 0.10.0
     optional: true
 
@@ -4214,6 +4269,15 @@ snapshots:
       define-data-property: 1.1.4
       has-property-descriptors: 1.0.2
       object-keys: 1.1.1
+
+  deno@2.5.0:
+    optionalDependencies:
+      '@deno/darwin-arm64': 2.5.0
+      '@deno/darwin-x64': 2.5.0
+      '@deno/linux-arm64-glibc': 2.5.0
+      '@deno/linux-x64-glibc': 2.5.0
+      '@deno/win32-arm64': 2.5.0
+      '@deno/win32-x64': 2.5.0
 
   dequal@2.0.3: {}
 
