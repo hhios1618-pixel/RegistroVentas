@@ -54,7 +54,7 @@ const ROLE_CAPS: Record<Role, Cap[]> = {
     'view:resumen-asesores','view:registro-asesores','view:asistencia','view:playbook','view:mi-resumen'
   ],
   promotor: [
-    'view:resumen-promotores','view:registro-promotores'
+    'view:registro-promotores','view:mi-resumen'
   ],
   unknown: [],
 };
