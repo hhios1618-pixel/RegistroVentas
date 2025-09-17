@@ -30,7 +30,7 @@ function isStaticAsset(pathname: string) {
   return STATIC_EXTS.has(ext);
 }
 
-// ====== ALLOWLISTS ======
+// ====== ALLOWLISTS (⚠️ sin "/") ======
 const ASESOR_ALLOW: RegExp[] = [
   /^\/dashboard\/asesores\/HOME(?:\/.*)?$/,
   /^\/dashboard\/asesores\/registro(?:\/.*)?$/,
@@ -38,13 +38,11 @@ const ASESOR_ALLOW: RegExp[] = [
   /^\/dashboard\/asesores\/playbook-whatsapp(?:\/.*)?$/,
   /^\/asistencia(?:\/.*)?$/,
   /^\/mi\/resumen(?:\/.*)?$/,
-  /^\/$/, // dashboard root
 ];
 
 const PROMOTOR_ALLOW: RegExp[] = [
-  /^\/dashboard\/promotores(?:\/.*)?$/,         // resumen promotores
-  /^\/dashboard\/promotores\/registro(?:\/.*)?$/, // captura promotores
-  /^\/$/, // dashboard root
+  /^\/dashboard\/promotores(?:\/.*)?$/,
+  /^\/dashboard\/promotores\/registro(?:\/.*)?$/,
 ];
 
 function b64urlToJSON(b64url: string): any | null {
@@ -77,18 +75,45 @@ export function middleware(req: NextRequest) {
 
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
 
+  // Endpoints
   if (pathname.startsWith('/endpoints/')) {
-    if (!hasSession) return NextResponse.json({ ok:false, error:'no_session' }, { status:401 });
-    return NextResponse.next();
+    if (!hasSession) {
+      return NextResponse.json({ ok:false, error:'no_session' }, { status:401 });
+    }
+    const res = NextResponse.next();
+    res.headers.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.headers.set('Pragma','no-cache'); res.headers.set('Expires','0');
+    return res;
   }
 
+  // Sin sesión → a /login
   if (!hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectTo', pathname + (req.nextUrl.search || ''));
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    res.headers.set('Cache-Control','no-store');
+    return res;
   }
 
+  // Con sesión en "/" → redirige según rol (✅ evita ver landing vieja)
+  if (pathname === '/') {
+    const role = readRoleFromCookie(req);
+    const url = req.nextUrl.clone();
+    if (role === 'PROMOTOR' || role === 'PROMOTORA') {
+      url.pathname = '/dashboard/promotores';
+    } else if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'VENDEDORA') {
+      url.pathname = '/dashboard/asesores/HOME';
+    } else {
+      // admin/líder/coordinador/logística: ajusta si tienes home específica
+      url.pathname = '/dashboard';
+    }
+    const res = NextResponse.redirect(url);
+    res.headers.set('Cache-Control','no-store');
+    return res;
+  }
+
+  // Reglas por rol en otras rutas
   const role = readRoleFromCookie(req);
 
   if (role === 'PROMOTOR' || role === 'PROMOTORA') {
@@ -97,7 +122,9 @@ export function middleware(req: NextRequest) {
       const url = req.nextUrl.clone();
       url.pathname = '/dashboard/promotores';
       url.searchParams.delete('redirectTo');
-      return NextResponse.redirect(url);
+      const res = NextResponse.redirect(url);
+      res.headers.set('Cache-Control','no-store');
+      return res;
     }
   }
 
@@ -107,12 +134,17 @@ export function middleware(req: NextRequest) {
       const url = req.nextUrl.clone();
       url.pathname = '/dashboard/asesores/HOME';
       url.searchParams.delete('redirectTo');
-      return NextResponse.redirect(url);
+      const res = NextResponse.redirect(url);
+      res.headers.set('Cache-Control','no-store');
+      return res;
     }
   }
 
-  // admin / lider / coordinador / logística → sin restricciones específicas aquí
-  return NextResponse.next();
+  // Admin / líder / coordinador / logística → pasa
+  const res = NextResponse.next();
+  res.headers.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.headers.set('Pragma','no-cache'); res.headers.set('Expires','0');
+  return res;
 }
 
 export const config = {
