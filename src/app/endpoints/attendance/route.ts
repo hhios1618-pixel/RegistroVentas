@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
 import { supabaseService } from "@/lib/supabaseClient";
 
-/**
- * GET /endpoints/attendance?start=YYYY-MM-DD&end=YYYY-MM-DD&site_id=...&q=texto
- * Responde: { data: Array<{ ..., person, site }> }
- */
+const normUpper = (s?: string | null) => (s || "").trim().toUpperCase();
+
 export async function GET(req: Request) {
   try {
     const supabase = supabaseService();
     const { searchParams } = new URL(req.url);
 
-    const start = searchParams.get("start"); // inclusive
-    const end   = searchParams.get("end");   // inclusive
+    const start = searchParams.get("start");
+    const end   = searchParams.get("end");
     const site  = searchParams.get("site_id");
-    const q     = (searchParams.get("q") || "").toLowerCase(); // filtro por nombre
+    const q     = (searchParams.get("q") || "").toLowerCase();
 
-    // 1) Pull crudo de attendance
+    // roles dinámicos (si se pasan desde el front)
+    const includeRoles = searchParams.getAll("include_roles[]").map(normUpper);
+    const excludeRoles = searchParams.getAll("exclude_roles[]").map(normUpper);
+
+    // 1) attendance
     let att = supabase
       .from("attendance")
       .select(`
@@ -41,15 +43,18 @@ export async function GET(req: Request) {
       console.error("[attendance] attendance error:", Aerr);
       return NextResponse.json({ error: Aerr.message }, { status: 500 });
     }
+    if (!rows?.length) return NextResponse.json({ data: [] }, { headers: { "Cache-Control": "no-store" } });
 
-    if (!rows?.length) return NextResponse.json({ data: [] });
-
-    // 2) Join manual con people / sites
+    // 2) joins
     const personIds = Array.from(new Set(rows.map(r => r.person_id).filter(Boolean)));
     const siteIds   = Array.from(new Set(rows.map(r => r.site_id).filter(Boolean)));
 
+    let qp = supabase.from("people").select("id, full_name, role, local").in("id", personIds);
+    if (includeRoles.length) qp = qp.in("role", includeRoles);
+    if (excludeRoles.length) qp = qp.not("role", "in", excludeRoles);
+
     const [{ data: P, error: Perr }, { data: S, error: Serr }] = await Promise.all([
-      supabase.from("people").select("id, full_name, role, local").in("id", personIds),
+      qp,
       supabase.from("sites").select("id, name").in("id", siteIds),
     ]);
 
@@ -65,26 +70,33 @@ export async function GET(req: Request) {
     const pMap = new Map((P ?? []).map(p => [p.id, p]));
     const sMap = new Map((S ?? []).map(s => [s.id, s]));
 
-    // 3) Armar salida
-    const out = (rows ?? []).map(r => ({
-      id: r.id,
-      created_at: r.created_at,
-      type: r.type,                      // incluye 'in' | 'out' | 'lunch_out' | 'lunch_in'
-      lat: r.lat,
-      lng: r.lng,
-      accuracy_m: r.accuracy_m,
-      device_id: r.device_id,
-      selfie_path: r.selfie_path,
-      person_id: r.person_id,
-      site_id: r.site_id,
-      person: pMap.get(r.person_id) || null,
-      site:   sMap.get(r.site_id)   || null,
-    }))
-    .filter(row => {
-      if (!q) return true;
-      const name = (row.person?.full_name || "").toLowerCase();
-      return name.includes(q);
-    });
+    // 3) salida + filtros
+    const out = (rows ?? [])
+      .map(r => ({
+        id: r.id,
+        created_at: r.created_at,
+        type: r.type,
+        lat: r.lat,
+        lng: r.lng,
+        accuracy_m: r.accuracy_m,
+        device_id: r.device_id,
+        selfie_path: r.selfie_path,
+        person_id: r.person_id,
+        site_id: r.site_id,
+        person: pMap.get(r.person_id) || null,
+        site:   sMap.get(r.site_id)   || null,
+      }))
+      .filter(row => {
+        if (q) {
+          const name = (row.person?.full_name || "").toLowerCase();
+          if (!name.includes(q)) return false;
+        }
+        // si se pasó include/exclude por query
+        const role = normUpper(row.person?.role);
+        if (includeRoles.length && !includeRoles.includes(role)) return false;
+        if (excludeRoles.length && excludeRoles.includes(role)) return false;
+        return true;
+      });
 
     return NextResponse.json({ data: out }, { headers: { "Cache-Control": "no-store" } });
   } catch (e:any) {
