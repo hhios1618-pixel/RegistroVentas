@@ -1,10 +1,8 @@
+// src/app/page.tsx
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState, useMemo, useRef, type SVGProps, type FC, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState, type FC, type SVGProps, type ReactNode } from 'react';
 import useSWR from 'swr';
-import LogoutButton from '@/components/LogoutButton';
 
 /* ============================== THEME ============================== */
 const DynamicGlobalStyles = () => (
@@ -24,49 +22,24 @@ const DynamicGlobalStyles = () => (
     @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .fade-in-animation { animation: fade-in 0.5s ease-out forwards; }
     .glass-pane { background: linear-gradient(180deg, rgba(18,24,33,.7), rgba(16,21,29,.6)); backdrop-filter: blur(10px); border: 1px solid var(--border-color); }
-    .nav-hover { transition: background .2s ease, color .2s ease; }
-    .nav-hover:hover { background: #0e1521; color: #e6faff; }
   `}</style>
 );
 
 /* ============================== TYPES & CAPS ============================== */
 type Role = 'admin' | 'promotor' | 'coordinador' | 'lider' | 'asesor' | 'unknown';
 type Cap =
-  | 'view:kpis'
-  | 'view:sales-report'
-  | 'view:resumen-asesores'
-  | 'view:reporte-asistencia'
-  | 'view:logistica'
-  | 'view:registro-ventas'
-  | 'view:captura-embudo'
-  | 'view:devoluciones'
-  | 'view:asistencia'
-  | 'view:playbook'
-  | 'view:users-admin';
-
-type NavLinkItem = { cap: Cap; href: string; icon: ReactNode; label: string; shortcut?: string };
+  | 'view:kpis' | 'view:sales-report' | 'view:resumen-asesores' | 'view:reporte-asistencia'
+  | 'view:logistica' | 'view:registro-ventas' | 'view:captura-embudo'
+  | 'view:devoluciones' | 'view:asistencia' | 'view:playbook' | 'view:users-admin';
 
 const ROLE_CAPS: Record<Role, Cap[]> = {
-  admin: [
-    'view:kpis','view:sales-report','view:resumen-asesores','view:reporte-asistencia',
-    'view:logistica','view:registro-ventas','view:captura-embudo','view:devoluciones','view:asistencia',
-    'view:playbook','view:users-admin'
-  ],
-  coordinador: [
-    'view:kpis','view:logistica','view:asistencia','view:captura-embudo','view:reporte-asistencia','view:playbook'
-  ],
-  lider: [
-    'view:kpis','view:resumen-asesores','view:reporte-asistencia','view:logistica','view:asistencia','view:captura-embudo','view:sales-report','view:playbook'
-  ],
-  asesor: [
-    'view:sales-report','view:registro-ventas','view:captura-embudo','view:asistencia','view:playbook'
-  ],
-  promotor: [
-    'view:registro-ventas','view:captura-embudo','view:playbook'
-  ],
+  admin: ['view:kpis','view:sales-report','view:resumen-asesores','view:reporte-asistencia','view:logistica','view:registro-ventas','view:captura-embudo','view:devoluciones','view:asistencia','view:playbook','view:users-admin'],
+  coordinador: ['view:kpis','view:logistica','view:asistencia','view:captura-embudo','view:reporte-asistencia','view:playbook'],
+  lider: ['view:kpis','view:resumen-asesores','view:reporte-asistencia','view:logistica','view:asistencia','view:captura-embudo','view:sales-report','view:playbook'],
+  asesor: ['view:sales-report','view:registro-ventas','view:captura-embudo','view:asistencia','view:playbook'],
+  promotor: ['view:registro-ventas','view:captura-embudo','view:playbook'],
   unknown: [],
 };
-
 const can = (role: Role, cap: Cap) => (ROLE_CAPS[role] ?? []).includes(cap);
 const fetcher = (url: string) => fetch(url).then((r) => r.ok ? r.json() : Promise.reject(new Error('fetch error')));
 const normalizeRole = (raw?: string): Role => {
@@ -79,114 +52,7 @@ const normalizeRole = (raw?: string): Role => {
   return 'unknown';
 };
 
-/* ============================== UI BITS ============================== */
-const NavLink: FC<{ link: NavLinkItem; isActive?: boolean }> = ({ link, isActive = false }) => (
-  <Link
-    href={link.href}
-    className={`nav-hover relative flex items-center px-3.5 py-2.5 text-sm rounded-lg
-      ${isActive ? 'bg-[#0e1521] text-white shadow-[var(--glow)]' : 'text-[var(--text-primary)]'}`}
-  >
-    {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-cyan-400" />}
-    <span className={`mr-3 ${isActive ? 'text-cyan-400' : 'text-[var(--text-secondary)] group-hover:text-cyan-300'}`}>
-      {link.icon}
-    </span>
-    <span className="flex-1">{link.label}</span>
-    {link.shortcut && (
-      <span className="text-[10px] font-mono text-gray-500 border border-gray-700/60 rounded px-1.5 py-0.5">
-        {link.shortcut}
-      </span>
-    )}
-  </Link>
-);
-
-const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, userName }) => {
-  const pathname = usePathname();
-
-  const sections: { title: string; links: NavLinkItem[] }[] = [
-    {
-      title: 'ANÁLISIS Y REPORTES',
-      links: [
-        { cap: 'view:sales-report',      href: '/dashboard/sales-report',       icon: <IconSalesReport className="w-5 h-5" />, label: 'Reporte de Ventas',      shortcut: '2' },
-        { cap: 'view:resumen-asesores',  href: '/dashboard/asesores/HOME',      icon: <IconResumen className="w-5 h-5" />,     label: 'Resumen Asesores',       shortcut: '7' },
-        { cap: 'view:reporte-asistencia',href: '/dashboard/admin/resumen',      icon: <IconAsistencia className="w-5 h-5" />,  label: 'Reporte de Asistencia',  shortcut: 'R' },
-      ],
-    },
-    {
-      title: 'OPERACIONES Y CAPTURA',
-      links: [
-        { cap: 'view:logistica',        href: '/logistica',                          icon: <IconTruck className="w-5 h-5" />,    label: 'Logística',          shortcut: '1' },
-        { cap: 'view:registro-ventas',  href: '/dashboard/asesores/registro',        icon: <IconRegistro className="w-5 h-5" />,  label: 'Registro Ventas',    shortcut: '6' },
-        { cap: 'view:captura-embudo',   href: '/dashboard/captura',                  icon: <IconEmbudo className="w-5 h-5" />,   label: 'Captura / Embudo',   shortcut: 'C' },
-        { cap: 'view:devoluciones',     href: '/dashboard/asesores/devoluciones',    icon: <IconReturn className="w-5 h-5" />,   label: 'Devoluciones',       shortcut: '4' },
-        { cap: 'view:asistencia',       href: '/asistencia',                         icon: <IconAsistencia className="w-5 h-5" />,label: 'Asistencia',         shortcut: 'A' },
-      ],
-    },
-    {
-      title: 'ADMINISTRACIÓN',
-      links: [
-        { cap: 'view:playbook',     href: '/dashboard/asesores/playbook-whatsapp', icon: <IconPlaybook className="w-5 h-5" />, label: 'Playbook',         shortcut: '5' },
-        { cap: 'view:users-admin',  href: '/dashboard/admin/usuarios',             icon: <IconUsersAdmin className="w-5 h-5" />,label: 'Admin Usuarios',  shortcut: '8' },
-      ],
-    },
-  ];
-
-  return (
-    <aside className="w-72 fixed left-0 top-0 h-screen border-r border-[var(--border-color)] bg-[var(--bg-elev)]/80 backdrop-blur-xl z-30">
-      {/* Brand */}
-      <div className="px-4 py-4 border-b border-[var(--border-color)] bg-[var(--bg-elev)] sticky top-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-700 text-white font-bold flex items-center justify-center shadow-[var(--glow)]">
-            F
-          </div>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-white">Fenix Store</p>
-            <p className="text-[11px] text-[var(--text-secondary)]">Sistema de Gestión</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Navegación */}
-      <nav className="flex-1 p-4 overflow-y-auto space-y-2">
-        <NavLink
-          key="nav-/"
-          link={{ cap: 'view:kpis', href: '/', icon: <IconDashboard className="w-5 h-5" />, label: 'Dashboard', shortcut: 'H' }}
-          isActive={pathname === '/'}
-        />
-        {sections.map((section) => {
-          const accessibleLinks = section.links.filter((l) => can(userRole, l.cap));
-          if (accessibleLinks.length === 0) return null;
-          return (
-            <div key={`sec-${section.title}`} className="pt-3">
-              <h3 className="px-2 text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-                {section.title}
-              </h3>
-              <div className="space-y-1">
-                {accessibleLinks.map((l) => (
-                  <NavLink key={`nav-${l.href}`} link={l} isActive={pathname.startsWith(l.href)} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </nav>
-
-      {/* Usuario + Logout */}
-      <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-elev)]">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-[#0e1521] ring-1 ring-[var(--border-color)] flex items-center justify-center font-bold text-cyan-300">
-            {userName?.charAt(0) || 'U'}
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-white truncate">{userName || 'Usuario'}</p>
-            <p className="text-[11px] text-[var(--text-secondary)] capitalize truncate">{userRole}</p>
-          </div>
-        </div>
-        <LogoutButton className="w-full justify-center px-3 py-2 text-sm font-medium rounded-md bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white shadow-[var(--glow)]" />
-      </div>
-    </aside>
-  );
-};
-
+/* ============================== HEADER ============================== */
 const HeaderBar: FC<{ greeting: string; userName: string }> = ({ greeting, userName }) => {
   const [time, setTime] = useState(new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' }));
   useEffect(() => {
@@ -358,6 +224,7 @@ export default function HomePage() {
     };
   }, [salesReport]);
 
+  // Atajos (opcional; no depende del sidebar)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
@@ -385,43 +252,35 @@ export default function HomePage() {
   return (
     <>
       <DynamicGlobalStyles />
-      <div className="flex min-h-screen bg-[var(--bg-dark)] font-sans">
-        <Sidebar userRole={role} userName={userName} />
-        <main className="flex-1 ml-72">
-          <div className="p-8 max-w-7xl mx-auto space-y-8">
-            <HeaderBar greeting={greeting} userName={firstName} />
-            {can(role, 'view:kpis') && (
-              <section>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <KpiCard icon={<IconChart className="w-6 h-6" />}    title="Ventas del Día"       value={kpi.sales}   trend="+5%"      delay={100} />
-                  <KpiCard icon={<IconPackage className="w-6 h-6" />}  title="Pedidos Facturados"  value={kpi.orders}  trend="+2%"      delay={200} />
-                  <KpiCard icon={<IconWallet className="w-6 h-6" />}   title="Ingresos (Hoy)"       value={kpi.revenue} trend="+12.5%"   isCurrency delay={300} />
-                  <KpiCard icon={<IconReturn className="w-6 h-6" />}   title="Devoluciones"         value={kpi.returns} trend="-1%"      delay={400} />
-                </div>
-              </section>
-            )}
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 glass-pane rounded-lg p-6 min-h-[350px] fade-in-animation" style={{ animationDelay: '500ms' }}>
-                <SalesChart />
+      <main className="min-h-screen">
+        <div className="p-8 max-w-7xl mx-auto space-y-8">
+          <HeaderBar greeting={greeting} userName={firstName} />
+          {can(role, 'view:kpis') && (
+            <section>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <KpiCard icon={<IconChart className="w-6 h-6" />}    title="Ventas del Día"       value={kpi.sales}   trend="+5%"      delay={100} />
+                <KpiCard icon={<IconPackage className="w-6 h-6" />}  title="Pedidos Facturados"  value={kpi.orders}  trend="+2%"      delay={200} />
+                <KpiCard icon={<IconWallet className="w-6 h-6" />}   title="Ingresos (Hoy)"       value={kpi.revenue} trend="+12.5%"   isCurrency delay={300} />
+                <KpiCard icon={<IconReturn className="w-6 h-6" />}   title="Devoluciones"         value={kpi.returns} trend="-1%"      delay={400} />
               </div>
-              <div className="lg:col-span-1 glass-pane rounded-lg p-6 fade-in-animation" style={{ animationDelay: '600ms' }}>
-                <NotificationsFeed />
-              </div>
-              <TopPerformers />
             </section>
-          </div>
-        </main>
-      </div>
+          )}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 glass-pane rounded-lg p-6 min-h-[350px] fade-in-animation" style={{ animationDelay: '500ms' }}>
+              <SalesChart />
+            </div>
+            <div className="lg:col-span-1 glass-pane rounded-lg p-6 fade-in-animation" style={{ animationDelay: '600ms' }}>
+              <NotificationsFeed />
+            </div>
+            <TopPerformers />
+          </section>
+        </div>
+      </main>
     </>
   );
 }
 
 /* ============================== ICONS ============================== */
-const IconDashboard: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-  </svg>
-);
 const IconChart: FC<SVGProps<SVGSVGElement>> = (p) => (
   <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3" />
@@ -439,39 +298,15 @@ const IconWallet: FC<SVGProps<SVGSVGElement>> = (p) => (
     <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M18 12a2 2 0 0 0-2 2h-4a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4h-4a2 2 0 0 1-2-2"/>
   </svg>
 );
+const IconReturn: FC<SVGProps<SVGSVGElement>> = (p) => (
+  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+  </svg>
+);
 const IconTruck: FC<SVGProps<SVGSVGElement>> = (p) => (
   <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
     <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-  </svg>
-);
-const IconSalesReport: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-3"/>
-    <rect x="8" y="1" width="8" height="4" rx="1" ry="1"/><line x1="12" y1="16" x2="12" y2="12"/>
-    <line x1="16" y1="16" x2="16" y2="9"/><line x1="8" y1="16" x2="8" y2="14"/>
-  </svg>
-);
-const IconResumen: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-    <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-  </svg>
-);
-const IconAsistencia: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-    <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/>
-  </svg>
-);
-const IconEmbudo: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 2h18v4l-8 8v6l-4 2v-8L3 6V2z"/>
-  </svg>
-);
-const IconPlaybook: FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v15H6.5A2.5 2.5 0 0 1 4 14.5v-10A2.5 2.5 0 0 1 6.5 2z"/>
   </svg>
 );
 const IconUsersAdmin: FC<SVGProps<SVGSVGElement>> = (p) => (
@@ -480,15 +315,8 @@ const IconUsersAdmin: FC<SVGProps<SVGSVGElement>> = (p) => (
     <circle cx="18" cy="18" r="3"/><line x1="20.5" y1="15.5" x2="23" y2="13"/>
   </svg>
 );
-
-const IconRegistro: React.FC<SVGProps<SVGSVGElement>> = (p) => (
+const IconEmbudo: FC<SVGProps<SVGSVGElement>> = (p) => (
   <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-  </svg>
-);
-
-const IconReturn: React.FC<SVGProps<SVGSVGElement>> = (p) => (
-  <svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+    <path d="M3 2h18v4l-8 8v6l-4 2v-8L3 6V2z"/>
   </svg>
 );
