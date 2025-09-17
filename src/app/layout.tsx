@@ -16,11 +16,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className="dark">
       <body className="font-sans antialiased bg-app text-app-foreground selection:bg-apple-blue/30">
-        {/* Neutraliza overlays (solo dev) */}
         <DevOverlayKiller />
-        <main className="min-h-screen fade-in">
-          {children}
-        </main>
+        <main className="min-h-screen fade-in">{children}</main>
       </body>
     </html>
   );
