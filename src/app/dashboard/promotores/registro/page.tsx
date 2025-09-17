@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import useSWR from 'swr';
 import { createClient } from '@supabase/supabase-js';
 
@@ -23,14 +23,13 @@ const fetcher = (url: string) =>
 type Origin = 'cochabamba' | 'lapaz' | 'elalto' | 'santacruz' | 'sucre' | 'tienda';
 
 interface ProductRow {
-  id: string;
-  code: string;
+  code: string;   // <- no hay id; usamos code como clave
   name: string;
   stock: number;
 }
 
 interface SaleLine {
-  product_id: string | null;
+  product_id: string | null; // lo mantenemos por compatibilidad; guardamos null
   product_name: string;
   quantity: number;
   unit_price: number;
@@ -90,6 +89,10 @@ export default function SalesEntry() {
   // Línea en edición
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ProductRow[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const lastReqIdRef = useRef(0);
+
   const [productName, setProductName] = useState('');
   const [quantity, setQuantity] = useState<number>(1);
   const [unitPrice, setUnitPrice] = useState<number>(0);
@@ -107,28 +110,67 @@ export default function SalesEntry() {
     [lines]
   );
 
-  // Buscar productos
-  const searchProducts = async (q: string) => {
-    setQuery(q);
-    if (q.length < 3) {
-      setResults([]);
-      return;
-    }
-    const { data } = await supabase
-      .from('products')
-      .select('id, code, name, stock')
-      .ilike('name', `%${q}%`)
-      .limit(6);
-    setResults(data || []);
-  };
+  // ==================
+  // Autosuggest (debounce + anti-race) usando code|name|stock
+  // ==================
+  useEffect(() => {
+    let active = true;
 
-  // Agregar línea
+    const run = async () => {
+      const q = query.trim();
+      setProductName(q);
+      setSearchError(null);
+
+      if (q.length < 3) {
+        setResults([]);
+        return;
+      }
+
+      setSearching(true);
+      const reqId = ++lastReqIdRef.current;
+
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('code, name, stock')
+          .or(`name.ilike.%${q}%,code.ilike.%${q}%`)
+          .limit(6);
+
+        if (!active || reqId !== lastReqIdRef.current) return;
+
+        if (error) {
+          console.warn('[products search] error:', error);
+          setSearchError('Búsqueda no disponible.');
+          setResults([]);
+        } else {
+          setResults((data as ProductRow[]) || []);
+        }
+      } catch (err: any) {
+        if (!active) return;
+        console.warn('[products search] unexpected:', err);
+        setSearchError('Error inesperado en búsqueda.');
+        setResults([]);
+      } finally {
+        if (active) setSearching(false);
+      }
+    };
+
+    const t = setTimeout(run, 300);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [query]);
+
+  // ==================
+  // Acciones
+  // ==================
   const addLine = () => {
     if (!productName || quantity <= 0 || unitPrice <= 0) return;
     setLines((prev) => [
       ...prev,
       {
-        product_id: null,
+        product_id: null, // no hay id en products; mantenemos null
         product_name: productName,
         quantity,
         unit_price: unitPrice,
@@ -150,12 +192,10 @@ export default function SalesEntry() {
     setResults([]);
   };
 
-  // Eliminar línea
   const removeLine = (idx: number) => {
     setLines((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Guardar
   const saveAll = async () => {
     if (lines.length === 0) return;
     setSaving(true);
@@ -164,7 +204,7 @@ export default function SalesEntry() {
       promoter_name: promoterName,
       sale_date: saleDate,
       origin,
-      product_id: l.product_id,
+      product_id: l.product_id, // sigue null
       product_name: l.product_name,
       quantity: l.quantity,
       unit_price: l.unit_price,
@@ -324,15 +364,18 @@ export default function SalesEntry() {
                   <input
                     type="text"
                     value={query}
-                    onChange={(e) => searchProducts(e.target.value)}
+                    onChange={(e) => setQuery(e.target.value)}
                     placeholder="Buscar producto (mín. 3 caracteres)…"
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setResults([]);
+                    }}
                   />
                   {results.length > 0 && (
                     <div className="absolute z-50 w-full bg-black/80 border border-white/20 rounded-lg shadow-2xl mt-1 max-h-56 overflow-y-auto backdrop-blur-md">
                       {results.map((r) => (
                         <button
-                          key={r.id}
+                          key={r.code} // <- usamos code como key
                           type="button"
                           className="w-full text-left p-3 hover:bg-white/10 border-b border-white/10 last:border-b-0"
                           onClick={() => {
@@ -346,6 +389,12 @@ export default function SalesEntry() {
                         </button>
                       ))}
                     </div>
+                  )}
+                  {searching && query.trim().length >= 3 && results.length === 0 && (
+                    <div className="mt-2 text-xs text-white/50">Buscando…</div>
+                  )}
+                  {searchError && (
+                    <div className="mt-2 text-xs text-rose-300">{searchError}</div>
                   )}
                 </div>
                 <div className="space-y-2">
