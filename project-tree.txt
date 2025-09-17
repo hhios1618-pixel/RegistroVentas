@@ -1,0 +1,106 @@
+.
+├── bulk-password-generator.js
+├── eslint.config.mjs
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── pnpm-lock.yaml
+├── postcss.config.js
+├── project-tree.txt
+├── provisioned-users.csv
+├── public
+│   ├── 1.mp4
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── scripts
+│   ├── force-sync-all.js
+│   ├── provision-all.js
+│   └── sql
+│       └── 2025-09-10_sites_seed.sql
+├── src
+│   ├── app
+│   │   ├── (auth)
+│   │   ├── asistencia
+│   │   ├── auth
+│   │   ├── dashboard
+│   │   ├── delivery
+│   │   ├── endpoints
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── logistica
+│   │   ├── mi
+│   │   ├── page.tsx
+│   │   ├── post-login
+│   │   └── returns-dashboard
+│   ├── components
+│   │   ├── AddressSearch.tsx
+│   │   ├── attendance
+│   │   ├── badge.tsx
+│   │   ├── Button.tsx
+│   │   ├── Card.tsx
+│   │   ├── Checkbox.tsx
+│   │   ├── ClientMap.tsx
+│   │   ├── DeliveryCard.tsx
+│   │   ├── DeliveryDetailsModal.tsx
+│   │   ├── DevOverlayKiller.tsx
+│   │   ├── EfficiencyChart.tsx
+│   │   ├── forms
+│   │   ├── Input.tsx
+│   │   ├── label.tsx
+│   │   ├── LoadingSpinner.tsx
+│   │   ├── LogoutButton.tsx
+│   │   ├── MapOverviewModal.tsx
+│   │   ├── MapOverviewModalClient.tsx
+│   │   ├── MapPicker.tsx
+│   │   ├── nav
+│   │   ├── NavCard.tsx
+│   │   ├── OrderCard.tsx
+│   │   ├── OrderDetailsModal.tsx
+│   │   ├── OrdersChart.tsx
+│   │   ├── OrderTable.tsx
+│   │   ├── select.tsx
+│   │   ├── separator.tsx
+│   │   ├── SettlementTable.tsx
+│   │   ├── StatusBadge.tsx
+│   │   ├── StockManager.tsx
+│   │   ├── switch.tsx
+│   │   ├── Textarea.tsx
+│   │   └── widgets
+│   ├── hooks
+│   │   └── useLogisticsData.ts
+│   ├── lib
+│   │   ├── attendance
+│   │   ├── auth
+│   │   ├── catalog.ts
+│   │   ├── device.ts
+│   │   ├── geo.ts
+│   │   ├── geocode.ts
+│   │   ├── image.ts
+│   │   ├── nav.ts
+│   │   ├── normalize.ts
+│   │   ├── people.ts
+│   │   ├── stock.ts
+│   │   ├── supabaseAdmin.ts
+│   │   ├── supabaseClient.ts
+│   │   ├── supabaseServer.ts
+│   │   ├── types.ts
+│   │   ├── utils
+│   │   └── utils.ts
+│   └── middleware.ts
+├── supabase
+│   └── functions
+│       ├── checkin
+│       ├── deno.json
+│       ├── process-campaign-name
+│       └── qr
+├── tailwind.config.ts
+├── tsconfig.json
+└── tsconfig.tsbuildinfo
+
+31 directories, 73 files

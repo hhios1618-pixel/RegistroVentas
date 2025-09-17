@@ -70,6 +70,8 @@ const getInitials = (name?: string) => {
   return parts.slice(0, 2).map((p: string) => p.charAt(0).toUpperCase()).join('');
 };
 
+const fmt = (n: number) => `Bs. ${n.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`;
+
 // ==================
 // Página
 // ==================
@@ -81,9 +83,7 @@ export default function SalesEntry() {
   const canAccess = !!me?.ok;
 
   // Cabecera
-  const [saleDate, setSaleDate] = useState<string>(
-    new Date().toISOString().slice(0, 10),
-  );
+  const [saleDate, setSaleDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [origin, setOrigin] = useState<Origin>('santacruz');
   const [warehouse, setWarehouse] = useState<string>('');
 
@@ -104,7 +104,7 @@ export default function SalesEntry() {
 
   const total = useMemo(
     () => lines.reduce((s: number, l: SaleLine) => s + l.quantity * l.unit_price, 0),
-    [lines],
+    [lines]
   );
 
   // Buscar productos
@@ -118,7 +118,7 @@ export default function SalesEntry() {
       .from('products')
       .select('id, code, name, stock')
       .ilike('name', `%${q}%`)
-      .limit(5);
+      .limit(6);
     setResults(data || []);
   };
 
@@ -148,6 +148,11 @@ export default function SalesEntry() {
     setDistrict('');
     setQuery('');
     setResults([]);
+  };
+
+  // Eliminar línea
+  const removeLine = (idx: number) => {
+    setLines((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // Guardar
@@ -181,14 +186,15 @@ export default function SalesEntry() {
     setSaving(false);
   };
 
+  // ==================
+  // Loading / Guard Clauses
+  // ==================
   if (meLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex items-center space-x-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-700"></div>
-            <span className="text-slate-600 font-medium">Cargando sistema...</span>
-          </div>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-8">
+          <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-white/70 animate-spin mx-auto mb-4" />
+          <p className="text-white/80 font-medium">Cargando sistema…</p>
         </div>
       </div>
     );
@@ -196,300 +202,332 @@ export default function SalesEntry() {
 
   if (!canAccess) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-red-200">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Acceso Denegado</h3>
-            <p className="text-slate-600">No tienes permisos para acceder a esta sección.</p>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="relative backdrop-blur-xl bg-white/5 border border-rose-300/30 rounded-xl p-8 text-center">
+          <div className="w-16 h-16 bg-rose-400/20 border border-rose-300/40 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-rose-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M4.08 15.5h15.84c1.54 0 2.5-1.67 1.73-2.5L13.73 4c-.77-.83-1.96-.83-2.73 0L2.35 13c-.77.83.19 2.5 1.73 2.5z" />
+            </svg>
           </div>
+          <h3 className="text-white text-lg font-semibold mb-1">Acceso denegado</h3>
+          <p className="text-white/70">No tienes permisos para esta sección.</p>
         </div>
       </div>
     );
   }
 
   // ==================
-  // Render
+  // Render (dark + glassmorphism)
   // ==================
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
-          <div className="px-6 py-8 border-b border-slate-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">Sistema de Registro de Ventas</h1>
-                <p className="text-slate-600">Gestiona y registra las ventas de manera eficiente</p>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="text-right">
-                  <p className="text-sm text-slate-500 mb-1">Usuario activo</p>
-                  <p className="font-semibold text-slate-900">{promoterName}</p>
-                </div>
-                <div className="w-12 h-12 bg-slate-700 text-white font-bold rounded-xl flex items-center justify-center text-lg">
-                  {initials}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Configuración de venta */}
-          <div className="px-6 py-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Configuración de Venta</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Fecha de venta</label>
-                <input
-                  type="date"
-                  value={saleDate}
-                  onChange={(e) => setSaleDate(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Ciudad de origen</label>
-                <select
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value as Origin)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                >
-                  <option value="santacruz">Santa Cruz</option>
-                  <option value="lapaz">La Paz</option>
-                  <option value="elalto">El Alto</option>
-                  <option value="cochabamba">Cochabamba</option>
-                  <option value="sucre">Sucre</option>
-                  <option value="tienda">Tienda</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Bodega de origen</label>
-                <input
-                  type="text"
-                  value={warehouse}
-                  onChange={(e) => setWarehouse(e.target.value)}
-                  placeholder="Especifica la bodega (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Formulario de línea */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
-          <div className="px-6 py-6 border-b border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">Agregar Producto</h2>
-            <p className="text-slate-600 mt-1">Completa los detalles del producto para añadirlo a la venta</p>
-          </div>
-          
-          <div className="px-6 py-6">
-            {/* Primera fila - Producto y cantidades */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="md:col-span-2 space-y-2 relative">
-                <label className="block text-sm font-medium text-slate-700">Producto</label>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => searchProducts(e.target.value)}
-                  placeholder="Buscar producto (mín. 3 caracteres)..."
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-                {results.length > 0 && (
-                  <div className="absolute z-50 w-full bg-white border border-slate-300 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                    {results.map((r) => (
-                      <div
-                        key={r.id}
-                        className="p-4 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0 transition-colors duration-200"
-                        onClick={() => {
-                          setProductName(r.name);
-                          setQuery(r.name);
-                          setResults([]);
-                        }}
-                      >
-                        <div className="font-medium text-slate-900">{r.name}</div>
-                        <div className="text-sm text-slate-500">Stock disponible: {r.stock} unidades</div>
-                      </div>
-                    ))}
+    <div className="min-h-screen bg-black text-white">
+      {/* Header */}
+      <header className="sticky top-0 z-40">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10" />
+          <div className="relative backdrop-blur-xl bg-white/5 border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-6 py-6">
+              <div className="flex items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-gradient-to-r from-blue-500/30 to-purple-500/30 border border-blue-400/30 rounded-xl">
+                    <svg width="26" height="26" viewBox="0 0 24 24" className="text-white"><path fill="currentColor" d="M7 3h10v2H7zm10 16H7v2h10zM3 7h2v10H3zm16 0h2v10h-2zM8 8h8v8H8z"/></svg>
                   </div>
-                )}
+                  <div>
+                    <h1 className="text-2xl md:text-3xl font-bold">Registro de Ventas (Promotores)</h1>
+                    <p className="text-white/60 text-sm">Captura rápida de líneas de venta con validación básica</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-xs text-white/60">Usuario activo</p>
+                    <p className="font-semibold">{promoterName}</p>
+                  </div>
+                  <div className="w-11 h-11 bg-white/10 border border-white/20 rounded-xl flex items-center justify-center font-bold">
+                    {initials}
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Cantidad</label>
-                <input
-                  type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                  min="1"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Precio unitario (Bs.)</label>
-                <input
-                  type="number"
-                  value={unitPrice}
-                  onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
-                  min="0"
-                  step="0.01"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900"
-                />
-              </div>
-            </div>
-
-            {/* Segunda fila - Información del cliente */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Nombre del cliente</label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Nombre completo (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Teléfono de contacto</label>
-                <input
-                  type="tel"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="Número de teléfono (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-            </div>
-
-            {/* Tercera fila - Información adicional */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Notas adicionales</label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Observaciones o comentarios (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">Distrito / Zona</label>
-                <input
-                  type="text"
-                  value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                  placeholder="Ubicación de entrega (opcional)"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 text-slate-900 placeholder-slate-400"
-                />
-              </div>
-            </div>
-
-            {/* Botón para agregar */}
-            <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-              <div className="text-sm text-slate-500">
-                {productName && quantity > 0 && unitPrice > 0 && (
-                  <span>Subtotal: <span className="font-semibold text-slate-900">Bs. {(quantity * unitPrice).toFixed(2)}</span></span>
-                )}
-              </div>
-              <button
-                onClick={addLine}
-                disabled={!productName || quantity <= 0 || unitPrice <= 0}
-                className="px-6 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-200 focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
-              >
-                Agregar al Registro
-              </button>
             </div>
           </div>
         </div>
+      </header>
 
-        {/* Tabla de líneas */}
-        {lines.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
-            <div className="px-6 py-6 border-b border-slate-200">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Resumen de Venta</h2>
-                  <p className="text-slate-600 mt-1">{lines.length} productos registrados</p>
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        {/* Configuración de Venta */}
+        <section className="relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-xl" />
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-6 py-5 border-b border-white/10">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-blue-400" />
+                Configuración de Venta
+              </h2>
+            </div>
+            <div className="px-6 py-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Fecha de venta</label>
+                  <input
+                    type="date"
+                    value={saleDate}
+                    onChange={(e) => setSaleDate(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-500">Total de la venta</p>
-                  <p className="text-2xl font-bold text-slate-900">Bs. {total.toFixed(2)}</p>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Ciudad de origen</label>
+                  <select
+                    value={origin}
+                    onChange={(e) => setOrigin(e.target.value as Origin)}
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  >
+                    <option className="bg-black" value="santacruz">Santa Cruz</option>
+                    <option className="bg-black" value="lapaz">La Paz</option>
+                    <option className="bg-black" value="elalto">El Alto</option>
+                    <option className="bg-black" value="cochabamba">Cochabamba</option>
+                    <option className="bg-black" value="sucre">Sucre</option>
+                    <option className="bg-black" value="tienda">Tienda</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Bodega de origen</label>
+                  <input
+                    type="text"
+                    value={warehouse}
+                    onChange={(e) => setWarehouse(e.target.value)}
+                    placeholder="Especifica la bodega (opcional)"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
                 </div>
               </div>
             </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Producto</th>
-                    <th className="text-center px-6 py-4 text-sm font-semibold text-slate-900">Cantidad</th>
-                    <th className="text-right px-6 py-4 text-sm font-semibold text-slate-900">Precio Unit.</th>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Cliente</th>
-                    <th className="text-left px-6 py-4 text-sm font-semibold text-slate-900">Teléfono</th>
-                    <th className="text-right px-6 py-4 text-sm font-semibold text-slate-900">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {lines.map((l, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors duration-200">
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900">{l.product_name}</div>
-                        {l.notes && <div className="text-sm text-slate-500 mt-1">{l.notes}</div>}
-                      </td>
-                      <td className="px-6 py-4 text-center text-slate-900">{l.quantity}</td>
-                      <td className="px-6 py-4 text-right text-slate-900">Bs. {l.unit_price.toFixed(2)}</td>
-                      <td className="px-6 py-4">
-                        <div className="text-slate-900">{l.customer_name || '-'}</div>
-                        {l.district && <div className="text-sm text-slate-500 mt-1">{l.district}</div>}
-                      </td>
-                      <td className="px-6 py-4 text-slate-900">{l.customer_phone || '-'}</td>
-                      <td className="px-6 py-4 text-right font-semibold text-slate-900">
-                        Bs. {(l.quantity * l.unit_price).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </div>
+        </section>
+
+        {/* Agregar Producto */}
+        <section className="relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-xl" />
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-6 py-5 border-b border-white/10">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
+                Agregar Producto
+              </h2>
+              <p className="text-white/60 text-sm">Completa los detalles y añádelo al registro</p>
+            </div>
+
+            <div className="px-6 py-6">
+              {/* Primera fila */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="md:col-span-2 space-y-2 relative">
+                  <label className="block text-sm font-semibold text-white/70">Producto</label>
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => searchProducts(e.target.value)}
+                    placeholder="Buscar producto (mín. 3 caracteres)…"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
+                  {results.length > 0 && (
+                    <div className="absolute z-50 w-full bg-black/80 border border-white/20 rounded-lg shadow-2xl mt-1 max-h-56 overflow-y-auto backdrop-blur-md">
+                      {results.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          className="w-full text-left p-3 hover:bg-white/10 border-b border-white/10 last:border-b-0"
+                          onClick={() => {
+                            setProductName(r.name);
+                            setQuery(r.name);
+                            setResults([]);
+                          }}
+                        >
+                          <div className="font-medium">{r.name}</div>
+                          <div className="text-xs text-white/70">Stock: {r.stock} • Código: {r.code}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Cantidad</label>
+                  <input
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    min="1"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Precio unitario (Bs.)</label>
+                  <input
+                    type="number"
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
+                </div>
+              </div>
+
+              {/* Segunda fila */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Nombre del cliente</label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Nombre completo (opcional)"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Teléfono de contacto</label>
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="Número de teléfono (opcional)"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
+                </div>
+              </div>
+
+              {/* Tercera fila */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Notas adicionales</label>
+                  <input
+                    type="text"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Observaciones o comentarios (opcional)"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-white/70">Distrito / Zona</label>
+                  <input
+                    type="text"
+                    value={district}
+                    onChange={(e) => setDistrict(e.target.value)}
+                    placeholder="Ubicación de entrega (opcional)"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50"
+                  />
+                </div>
+              </div>
+
+              {/* Acción Agregar */}
+              <div className="flex justify-between items-center pt-4 border-t border-white/10">
+                <div className="text-sm text-white/70">
+                  {productName && quantity > 0 && unitPrice > 0 && (
+                    <span>Subtotal: <span className="font-semibold text-white">{fmt(quantity * unitPrice)}</span></span>
+                  )}
+                </div>
+                <button
+                  onClick={addLine}
+                  disabled={!productName || quantity <= 0 || unitPrice <= 0}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500/30 to-blue-600/30 border border-blue-400/30 text-white font-semibold rounded-lg hover:from-blue-500/40 hover:to-blue-600/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Agregar al Registro
+                </button>
+              </div>
             </div>
           </div>
+        </section>
+
+        {/* Resumen de Venta / Tabla */}
+        {lines.length > 0 && (
+          <section className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-xl" />
+            <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+              <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-cyan-400" />
+                    Resumen de Venta
+                  </h2>
+                  <p className="text-white/60 text-sm">{lines.length} productos registrados</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-white/60">Total</p>
+                  <p className="text-2xl font-extrabold text-white">{fmt(total)}</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-white/5 border-b border-white/10">
+                    <tr>
+                      <th className="text-left px-6 py-4 text-xs font-bold text-white/70 uppercase">Producto</th>
+                      <th className="text-center px-6 py-4 text-xs font-bold text-white/70 uppercase">Cantidad</th>
+                      <th className="text-right px-6 py-4 text-xs font-bold text-white/70 uppercase">Precio Unit.</th>
+                      <th className="text-left px-6 py-4 text-xs font-bold text-white/70 uppercase">Cliente</th>
+                      <th className="text-left px-6 py-4 text-xs font-bold text-white/70 uppercase">Teléfono</th>
+                      <th className="text-right px-6 py-4 text-xs font-bold text-white/70 uppercase">Subtotal</th>
+                      <th className="px-6 py-4" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10">
+                    {lines.map((l, idx) => (
+                      <tr key={`${l.product_name}-${idx}`} className="hover:bg-white/5 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-medium">{l.product_name}</div>
+                          {l.notes && <div className="text-xs text-white/60 mt-1">{l.notes}</div>}
+                          <div className="text-[11px] text-white/50 mt-1">
+                            {l.district ? `Zona: ${l.district}` : ''}{l.warehouse_origin ? ` • Bodega: ${l.warehouse_origin}` : ''}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">{l.quantity}</td>
+                        <td className="px-6 py-4 text-right">{fmt(l.unit_price)}</td>
+                        <td className="px-6 py-4">
+                          <div>{l.customer_name || '-'}</div>
+                        </td>
+                        <td className="px-6 py-4">{l.customer_phone || '-'}</td>
+                        <td className="px-6 py-4 text-right font-semibold">{fmt(l.quantity * l.unit_price)}</td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => removeLine(idx)}
+                            className="px-3 py-1.5 text-xs rounded-md bg-white/10 border border-white/20 hover:bg-white/20 transition-colors"
+                          >
+                            Quitar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer acciones */}
+              <div className="px-6 py-5 border-t border-white/10 flex items-center justify-between">
+                <div className="text-sm text-white/60">
+                  {lines.length === 0 ? 'No hay productos en el registro' : `${lines.length} productos listos para guardar`}
+                </div>
+                <button
+                  onClick={saveAll}
+                  disabled={saving || lines.length === 0}
+                  className="px-8 py-3 bg-emerald-500/30 border border-emerald-400/40 text-white font-semibold rounded-lg hover:bg-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {saving ? 'Guardando…' : 'Guardar Registro'}
+                </button>
+              </div>
+            </div>
+          </section>
         )}
 
-        {/* Botón de guardar */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-          <div className="px-6 py-6">
-            <div className="flex justify-between items-center">
-              <div className="text-slate-600">
-                {lines.length === 0 ? 'No hay productos en el registro' : `${lines.length} productos listos para guardar`}
-              </div>
-              <button
-                onClick={saveAll}
-                disabled={saving || lines.length === 0}
-                className="px-8 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-200 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 flex items-center space-x-2"
-              >
-                {saving ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    <span>Guardando...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>Guardar Registro</span>
-                  </>
-                )}
-              </button>
+        {/* Estado vacío persistente */}
+        {lines.length === 0 && (
+          <section className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-xl" />
+            <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-8 text-center">
+              <p className="text-white/70">Agrega productos para iniciar el registro.</p>
             </div>
-          </div>
-        </div>
-      </div>
+          </section>
+        )}
+      </main>
     </div>
   );
 }
