@@ -1,4 +1,4 @@
-// src/app/endpoints/my/sales/route.ts
+// app/endpoints/my/sales/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const month = url.searchParams.get('month') || new Date().toISOString().slice(0,7);
+
     const cookie = req.cookies.get(COOKIE)?.value;
     if (!cookie) return NextResponse.json({ ok:false, error:'no_session' }, { status:401 });
 
@@ -25,30 +26,45 @@ export async function GET(req: NextRequest) {
     const role = String(payload.role || '').toLowerCase();
 
     const monthStart = `${month}-01`;
-    const monthEnd = new Date(
+    const nextMonth = new Date(
       new Date(`${monthStart}T00:00:00Z`).getUTCFullYear(),
       new Date(`${monthStart}T00:00:00Z`).getUTCMonth() + 1,
       1
     ).toISOString().slice(0,10);
 
-    // Tabla según rol
-    const table = role.includes('promotor') ? 'promoter_sales' : 'sales';
+    // 1º intento: si no existe 'sales', PostgREST devuelve PGRST205 -> fallback
+    const primTable = role.includes('promotor') ? 'promoter_sales' : 'sales';
+    let table = primTable;
+    let rows:any[] = [];
 
-    const { data: rows, error } = await supabaseAdmin
-      .from(table)
-      .select('id, order_id, order_date, product_name, qty, total')
-      .eq('person_id', personId)
-      .gte('order_date', monthStart)
-      .lt('order_date', monthEnd)
-      .order('order_date', { ascending: true });
+    const run = async (tbl:string) => {
+      const { data, error } = await supabaseAdmin
+        .from(tbl)
+        .select('id, order_id, order_date, product_name, qty, total, person_id')
+        .eq('person_id', personId)
+        .gte('order_date', monthStart)
+        .lt('order_date', nextMonth)
+        .order('order_date', { ascending: true });
 
-    if (error) return NextResponse.json({ ok:false, error:'db_error', detail:error.message }, { status:500 });
+      if (error) {
+        console.error('[my/sales] supabase error:', error);
+        return { ok:false, data:[] as any[], error };
+      }
+      return { ok:true, data:data||[] };
+    };
 
-    const orders = new Set(rows?.map(r => r.order_id));
-    const total = (rows||[]).reduce((acc, r:any) => acc + (r.total || 0), 0);
+    let r = await run(table);
+    if (!r.ok && r.error?.code === 'PGRST205') {
+      table = table === 'sales' ? 'promoter_sales' : 'sales';
+      r = await run(table);
+    }
+    if (r.ok) rows = r.data;
+
+    const orders = new Set(rows.map(r => r.order_id));
+    const total = rows.reduce((acc, r) => acc + Number(r.total || 0), 0);
 
     const byProd: Record<string, { qty:number; amount:number }> = {};
-    for (const r of rows || []) {
+    for (const r of rows) {
       const k = r.product_name || 'Producto';
       if (!byProd[k]) byProd[k] = { qty:0, amount:0 };
       byProd[k].qty += Number(r.qty || 0);
@@ -61,12 +77,15 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok:true,
-      kpis: { ventas:(rows||[]).length, pedidos:orders.size, total },
+      kpis: { ventas: rows.length, pedidos: orders.size, total },
       topProducts,
       list: rows,
     }, { status:200, headers:{'Cache-Control':'no-store'} });
 
   } catch (e:any) {
-    return NextResponse.json({ ok:false, error:'server_error', message:e?.message }, { status:500 });
+    console.error('[my/sales] server_error:', e);
+    return NextResponse.json({
+      ok:true, kpis:{ ventas:0, pedidos:0, total:0 }, topProducts:[], list:[]
+    }, { status:200 });
   }
 }

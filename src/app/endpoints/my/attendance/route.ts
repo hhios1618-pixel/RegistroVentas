@@ -1,3 +1,4 @@
+// app/endpoints/my/attendance/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
@@ -9,16 +10,36 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-/**
- * GET /endpoints/my/attendance?month=YYYY-MM
- * Responde: { ok, kpis, days[], raw[] }
- * - Considera 'in' | 'out' | 'lunch_out' | 'lunch_in'
- * - Descunta colación de las horas trabajadas
- */
+const TZ = 'America/La_Paz';
+
+const dayKeyLocal = (iso: string) => {
+  const d = new Date(iso);
+  const y  = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric' }).format(d);
+  const m  = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, month: '2-digit' }).format(d);
+  const da = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, day: '2-digit' }).format(d);
+  return `${y}-${m}-${da}`;
+};
+
+const toLocalMinutes = (iso: string) => {
+  const d = new Date(iso);
+  const hh = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(d));
+  const mm = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, minute: '2-digit' }).format(d));
+  return hh * 60 + mm;
+};
+
+const normType = (t?: string | null) => {
+  const v = (t || '').toLowerCase().trim();
+  if (v === 'in' || v === 'entrada') return 'in';
+  if (v === 'out' || v === 'salida')  return 'out';
+  if (v === 'lunch_out') return 'lunch_out';
+  if (v === 'lunch_in')  return 'lunch_in';
+  return '';
+};
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const month = (url.searchParams.get('month') || new Date().toISOString().slice(0,7)); // YYYY-MM
+    const month = url.searchParams.get('month') || new Date().toISOString().slice(0, 7);
 
     const cookie = req.cookies.get(COOKIE)?.value;
     if (!cookie) return NextResponse.json({ ok:false, error:'no_session' }, { status:401 });
@@ -28,141 +49,98 @@ export async function GET(req: NextRequest) {
     catch { return NextResponse.json({ ok:false, error:'invalid_token' }, { status:401 }); }
 
     const personId = payload.sub as string;
+
     const monthStart = `${month}-01`;
-    const monthEnd = new Date(
+    const nextMonthIso = new Date(
       new Date(`${monthStart}T00:00:00Z`).getUTCFullYear(),
-      new Date(`${monthStart}T00:00:00Z`).getUTCMonth()+1,
+      new Date(`${monthStart}T00:00:00Z`).getUTCMonth() + 1,
       1
     ).toISOString().slice(0,10);
 
-    // Intentar con taken_at si existe; si no, usar created_at
-    const { data: rowsTry, error: errTry } = await supabaseAdmin
-      .from('attendance')
-      .select('id, person_id, site_id, type, taken_at, created_at, distance_m, within_geofence, site_name')
-      .eq('person_id', personId)
-      .gte('taken_at', monthStart)
-      .lt('taken_at', monthEnd)
-      .order('taken_at', { ascending: true });
-
-    if (!errTry) {
-      return NextResponse.json(buildResponse(rowsTry || [], 'taken_at'), { status:200, headers:{'Cache-Control':'no-store'} });
+    // helper genérico que NO selecciona columnas inexistentes
+    async function safeSelect(timeCol: 'taken_at' | 'created_at') {
+      const cols = timeCol === 'taken_at'
+        ? 'id, person_id, site_id, type, taken_at, created_at'
+        : 'id, person_id, site_id, type, created_at';
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('attendance')
+          .select(cols)
+          .eq('person_id', personId)
+          .gte(timeCol, monthStart)
+          .lt(timeCol, nextMonthIso)
+          .order(timeCol, { ascending: true });
+        if (error) {
+          console.error('[my/attendance] select error:', error);
+          return { rows: [] as any[], err: true };
+        }
+        return { rows: data || [], err: false };
+      } catch (e) {
+        console.error('[my/attendance] select thrown:', e);
+        return { rows: [] as any[], err: true };
+      }
     }
 
-    // Fallback a created_at
-    const { data: rows, error } = await supabaseAdmin
-      .from('attendance')
-      .select('id, person_id, site_id, type, created_at, distance_m, within_geofence, site_name')
-      .eq('person_id', personId)
-      .gte('created_at', monthStart)
-      .lt('created_at', monthEnd)
-      .order('created_at', { ascending: true });
-
-    if (error) return NextResponse.json({ ok:false, error:'db_error' }, { status:500 });
-    return NextResponse.json(buildResponse(rows || [], 'created_at'), { status:200, headers:{'Cache-Control':'no-store'} });
+    // 1) taken_at
+    let res = await safeSelect('taken_at');
+    // 2) fallback a created_at si vacío o error
+    if (res.err || res.rows.length === 0) {
+      res = await safeSelect('created_at');
+      if (res.err) return NextResponse.json({ ok:false, error:'db_error' }, { status:500 });
+      return NextResponse.json(buildResponse(res.rows, 'created_at'), { status:200, headers:{'Cache-Control':'no-store'} });
+    }
+    return NextResponse.json(buildResponse(res.rows, 'taken_at'), { status:200, headers:{'Cache-Control':'no-store'} });
 
   } catch (e:any) {
+    console.error('[my/attendance] server_error:', e);
     return NextResponse.json({ ok:false, error:'server_error', message:e?.message }, { status:500 });
   }
 }
 
-/* ================= Helpers ================= */
-
-const TZ = 'America/La_Paz';
-
-function dayKeyLocal(iso: string) {
-  const d = new Date(iso);
-  const y  = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric' }).format(d);
-  const mo = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, month: '2-digit' }).format(d);
-  const da = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, day: '2-digit' }).format(d);
-  return `${y}-${mo}-${da}`;
-}
-
-function toLocalMinutes(iso: string) {
-  const d = new Date(iso);
-  const hh = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(d));
-  const mm = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, minute: '2-digit' }).format(d));
-  return hh * 60 + mm;
-}
-
-function normType(t?: string | null) {
-  const v = (t || '').toLowerCase().trim();
-  if (v === 'in' || v === 'entrada') return 'in';
-  if (v === 'out' || v === 'salida') return 'out';
-  if (v === 'lunch_out') return 'lunch_out';
-  if (v === 'lunch_in')  return 'lunch_in';
-  return '';
-}
-
 function buildResponse(rows: any[], timeCol: 'taken_at'|'created_at') {
-  const getTime = (r:any) => (r[timeCol] ?? r['created_at']);
+  const getTime = (r:any) => r[timeCol] ?? r['created_at'];
 
-  // KPIs
-  const daysSet = new Set<string>();
-  let inCount = 0, outCount = 0, geoOk = 0;
-  for (const r of rows) {
-    const t = getTime(r);
-    if (!t) continue;
-    const day = String(t).slice(0,10);
-    daysSet.add(day);
-    const nt = normType(r.type);
-    if (nt === 'in') inCount++;
-    if (nt === 'out') outCount++;
-    if (r.within_geofence) geoOk++;
-  }
-  const kpis = {
-    dias_con_marca: daysSet.size,
-    entradas: inCount,
-    salidas: outCount,
-    pct_geocerca_ok: rows.length ? Math.round((geoOk / rows.length) * 100) : 0,
-  };
-
-  // Agrupar por día y calcular colación
+  // Agrupación local + KPIs (sin geofence porque no hay columnas)
   const byDay: Record<string, any[]> = {};
+  let entradas = 0, salidas = 0;
+
   for (const r of rows) {
     const t = getTime(r);
     if (!t) continue;
     const day = dayKeyLocal(String(t));
     (byDay[day] ||= []).push(r);
+
+    const nt = normType(r.type);
+    if (nt === 'in')  entradas++;
+    if (nt === 'out') salidas++;
   }
 
   const days = Object.entries(byDay).map(([date, marks]) => {
     const sorted = [...marks].sort((a:any,b:any)=>String(getTime(a)).localeCompare(String(getTime(b))));
-    let firstIn: string|null = null;
-    let lastOut: string|null = null;
-    let lunchOut: string|null = null;
-    let lunchIn: string|null = null;
+    let firstIn: string|null = null, lastOut: string|null = null;
+    let lunchOut: string|null = null, lunchIn: string|null = null;
 
     for (const m of sorted) {
       const t = String(getTime(m));
       const nt = normType(m.type);
       if (nt === 'in'  && !firstIn) firstIn = t;
-      if (nt === 'out') lastOut = t; // último OUT prevalece
+      if (nt === 'out') lastOut = t;
       if (nt === 'lunch_out' && !lunchOut) lunchOut = t;
-      if (nt === 'lunch_in')  lunchIn  = t; // último IN lunch prevalece
+      if (nt === 'lunch_in')  lunchIn  = t;
     }
 
     let worked = 0, lunchMin = 0;
-    if (firstIn && lastOut) {
-      worked = Math.max(0, toLocalMinutes(lastOut) - toLocalMinutes(firstIn));
-    }
+    if (firstIn && lastOut) worked = Math.max(0, toLocalMinutes(lastOut) - toLocalMinutes(firstIn));
     if (lunchOut && lunchIn) {
-      const lo = toLocalMinutes(lunchOut);
-      const li = toLocalMinutes(lunchIn);
+      const lo = toLocalMinutes(lunchOut), li = toLocalMinutes(lunchIn);
       lunchMin = Math.max(0, li - lo);
-      worked = Math.max(0, worked - lunchMin); // descuenta colación
+      worked   = Math.max(0, worked - lunchMin);
     }
 
-    return {
-      date,
-      marks: sorted,
-      first_in: firstIn,
-      last_out: lastOut,
-      lunch_out: lunchOut,
-      lunch_in: lunchIn,
-      lunch_minutes: lunchMin,
-      worked_minutes: worked,
-    };
+    return { date, marks: sorted, first_in:firstIn, last_out:lastOut, lunch_out:lunchOut, lunch_in:lunchIn, lunch_minutes:lunchMin, worked_minutes:worked };
   }).sort((a,b)=>a.date.localeCompare(b.date));
+
+  const kpis = { dias_con_marca: days.length, entradas, salidas, pct_geocerca_ok: 0 };
 
   return { ok: true, kpis, days, raw: rows };
 }
