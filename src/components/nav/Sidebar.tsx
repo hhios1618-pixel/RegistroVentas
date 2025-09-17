@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 import type { FC, ReactNode, SVGProps } from 'react';
 import { can, ROUTES, type Role } from './roles';
+import Image from 'next/image';
 
 /* ───────────────────────────────── NavItem ───────────────────────────────── */
 type NavLinkItem = {
@@ -23,20 +24,37 @@ const NavLink: FC<{ item: NavLinkItem; active?: boolean }> = ({ item, active }) 
     href={item.href}
     aria-current={active ? 'page' : undefined}
     className={[
-      'relative flex items-center px-3.5 py-2.5 text-sm rounded-lg transition-colors',
-      'border',
+      'group relative flex items-center px-3 py-2.5 text-sm rounded-lg transition-all duration-200',
+      'hover:transform hover:translate-x-1',
       active
-        ? 'bg-white/10 border-white/15 text-white'
-        : 'bg-transparent border-transparent text-[#C9D1D9] hover:bg-white/5 hover:border-white/10',
+        ? 'text-emerald-400 bg-emerald-500/10'
+        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50',
     ].join(' ')}
   >
+    {/* Active indicator */}
     {active && (
-      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-cyan-400" />
+      <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-emerald-400" />
     )}
-    <span className={`mr-3 ${active ? 'text-cyan-300' : 'text-[#8B949E]'}`}>{item.icon}</span>
-    <span className="flex-1 truncate">{item.label}</span>
+    
+    {/* Icon */}
+    <span className={[
+      'mr-3 transition-colors duration-200',
+      active ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-300'
+    ].join(' ')}>
+      {item.icon}
+    </span>
+    
+    <span className="flex-1 font-medium truncate">
+      {item.label}
+    </span>
+    
     {item.shortcut && (
-      <span className="text-[10px] font-mono text-white/60 border border-white/15 rounded px-1.5 py-0.5">
+      <span className={[
+        'text-xs font-mono px-1.5 py-0.5 rounded border transition-colors duration-200',
+        active 
+          ? 'text-emerald-400/80 border-emerald-400/30 bg-emerald-400/5' 
+          : 'text-slate-500 border-slate-600/50 group-hover:text-slate-400 group-hover:border-slate-500'
+      ].join(' ')}>
         {item.shortcut}
       </span>
     )}
@@ -49,30 +67,30 @@ export const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, us
 
   const SECTIONS: { title: string; items: NavLinkItem[] }[] = [
     {
-      title: 'ANÁLISIS Y REPORTES',
+      title: 'Análisis y Reportes',
       items: [
-        { href: ROUTES.SALES_REPORT,       icon: <IconSalesReport className="w-5 h-5" />, label: 'Reporte de Ventas',     shortcut: '2', req: 'view:sales-report' },
-        { href: ROUTES.REPORTE_VENDEDORES, icon: <IconResumen className="w-5 h-5" />,     label: 'Reporte Vendedores',    shortcut: '7', req: 'view:resumen-asesores' },
-        { href: ROUTES.REPORTE_PROMOTORES, icon: <IconResumen className="w-5 h-5" />,     label: 'Reporte Promotores',                 req: 'view:resumen-promotores' },
-        { href: ROUTES.ASISTENCIA_PANEL,   icon: <IconAsistencia className="w-5 h-5" />,  label: 'Reporte de Asistencia', shortcut: 'R', req: 'view:reporte-asistencia' },
+        { href: ROUTES.SALES_REPORT,       icon: <IconSalesReport className="w-4 h-4" />, label: 'Reporte de Ventas',     shortcut: '2', req: 'view:sales-report' },
+        { href: ROUTES.REPORTE_VENDEDORES, icon: <IconResumen className="w-4 h-4" />,     label: 'Reporte Vendedores',    shortcut: '7', req: 'view:resumen-asesores' },
+        { href: ROUTES.REPORTE_PROMOTORES, icon: <IconResumen className="w-4 h-4" />,     label: 'Reporte Promotores',                 req: 'view:resumen-promotores' },
+        { href: ROUTES.ASISTENCIA_PANEL,   icon: <IconAsistencia className="w-4 h-4" />,  label: 'Reporte de Asistencia', shortcut: 'R', req: 'view:reporte-asistencia' },
       ],
     },
     {
-      title: 'OPERACIONES',
+      title: 'Operaciones',
       items: [
-        { href: ROUTES.LOGISTICA,           icon: <IconTruck className="w-5 h-5" />,    label: 'Logística',           shortcut: '1', req: 'view:logistica' },
-        { href: ROUTES.REGISTRO_ASESORES,   icon: <IconRegistro className="w-5 h-5" />, label: 'Registro Asesores',   shortcut: '6', req: 'view:registro-asesores' },
-        { href: ROUTES.REGISTRO_PROMOTORES, icon: <IconRegistro className="w-5 h-5" />, label: 'Registro Promotores',              req: 'view:registro-promotores' },
-        { href: ROUTES.DEVOLUCIONES,        icon: <IconReturn className="w-5 h-5" />,   label: 'Devoluciones',        shortcut: '4', req: 'view:devoluciones' },
-        { href: ROUTES.ASISTENCIA,          icon: <IconAsistencia className="w-5 h-5" />,label: 'Asistencia',          shortcut: 'A', req: 'view:asistencia' },
-        { href: ROUTES.MI_RESUMEN,          icon: <IconResumen className="w-5 h-5" />,  label: 'Mi resumen',                       req: 'view:mi-resumen' },
+        { href: ROUTES.LOGISTICA,           icon: <IconTruck className="w-4 h-4" />,    label: 'Logística',           shortcut: '1', req: 'view:logistica' },
+        { href: ROUTES.REGISTRO_ASESORES,   icon: <IconRegistro className="w-4 h-4" />, label: 'Registro Asesores',   shortcut: '6', req: 'view:registro-asesores' },
+        { href: ROUTES.REGISTRO_PROMOTORES, icon: <IconRegistro className="w-4 h-4" />, label: 'Registro Promotores',              req: 'view:registro-promotores' },
+        { href: ROUTES.DEVOLUCIONES,        icon: <IconReturn className="w-4 h-4" />,   label: 'Devoluciones',        shortcut: '4', req: 'view:devoluciones' },
+        { href: ROUTES.ASISTENCIA,          icon: <IconAsistencia className="w-4 h-4" />,label: 'Asistencia',          shortcut: 'A', req: 'view:asistencia' },
+        { href: ROUTES.MI_RESUMEN,          icon: <IconResumen className="w-4 h-4" />,  label: 'Mi resumen',                       req: 'view:mi-resumen' },
       ],
     },
     {
-      title: 'ADMINISTRACIÓN',
+      title: 'Administración',
       items: [
-        { href: ROUTES.PLAYBOOK,    icon: <IconPlaybook className="w-5 h-5" />,    label: 'Playbook',        shortcut: '5', req: 'view:playbook' },
-        { href: ROUTES.USERS_ADMIN, icon: <IconUsersAdmin className="w-5 h-5" />, label: 'Admin Usuarios',  shortcut: '8', req: 'view:users-admin' },
+        { href: ROUTES.PLAYBOOK,    icon: <IconPlaybook className="w-4 h-4" />,    label: 'Playbook',        shortcut: '5', req: 'view:playbook' },
+        { href: ROUTES.USERS_ADMIN, icon: <IconUsersAdmin className="w-4 h-4" />, label: 'Admin Usuarios',  shortcut: '8', req: 'view:users-admin' },
       ],
     },
   ];
@@ -81,38 +99,70 @@ export const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, us
     <aside
       className={[
         'w-72 fixed left-0 top-0 h-screen z-30 hidden lg:flex flex-col',
-        'bg-[#0D1117]/95 backdrop-blur',
-        'border-r border-[#30363D]',
+        'bg-slate-950/95 backdrop-blur-sm',
+        'border-r border-slate-800/60',
       ].join(' ')}
     >
-      {/* Brand */}
-      <div className="p-4 border-b border-[#30363D]">
-        <Link href={ROUTES.DASH} className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-emerald-500 flex items-center justify-center font-extrabold text-black shadow-md">
-            F
+      {/* Brand Header */}
+      <div className="p-6 border-b border-slate-800/60">
+        <Link href={ROUTES.DASH} className="flex items-center gap-3 group">
+          {/* Logo */}
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+            <Image 
+              src="/1.png" 
+              alt="Fenix Store" 
+              width={32} 
+              height={32}
+              className="w-full h-full object-contain"
+            />
           </div>
-          <span className="font-semibold text-white tracking-tight">Fenix Store</span>
+          
+          <div className="min-w-0">
+            <div className="font-semibold text-white text-lg tracking-tight group-hover:text-emerald-400 transition-colors">
+              Fenix Store
+            </div>
+            <div className="text-xs text-slate-500 -mt-0.5">
+              Sistema de Gestión
+            </div>
+          </div>
         </Link>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-4 space-y-3 overflow-y-auto">
-        <NavLink
-          item={{ href: ROUTES.DASH, icon: <IconDashboard className="w-5 h-5" />, label: 'Dashboard', shortcut: 'H' }}
-          active={isActive(pathname, ROUTES.DASH)}
-        />
+      {/* Navigation */}
+      <nav className="flex-1 px-4 py-6 space-y-8 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+        {/* Dashboard */}
+        <div>
+          <NavLink
+            item={{ 
+              href: ROUTES.DASH, 
+              icon: <IconDashboard className="w-4 h-4" />, 
+              label: 'Dashboard', 
+              shortcut: 'H' 
+            }}
+            active={isActive(pathname, ROUTES.DASH)}
+          />
+        </div>
 
-        {SECTIONS.map((sec) => {
-          const items = sec.items.filter((i) => !i.req || can(userRole, i.req as any));
+        {/* Sections */}
+        {SECTIONS.map((section) => {
+          const items = section.items.filter((i) => !i.req || can(userRole, i.req as any));
           if (!items.length) return null;
+          
           return (
-            <div key={sec.title} className="pt-1">
-              <h3 className="px-3 text-[11px] font-semibold text-[#8B949E] uppercase tracking-widest mb-2">
-                {sec.title}
+            <div key={section.title} className="space-y-4">
+              {/* Section Title */}
+              <h3 className="px-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                {section.title}
               </h3>
+              
+              {/* Section Items */}
               <div className="space-y-1">
-                {items.map((i) => (
-                  <NavLink key={i.href} item={i} active={isActive(pathname, i.href)} />
+                {items.map((item) => (
+                  <NavLink 
+                    key={item.href} 
+                    item={item} 
+                    active={isActive(pathname, item.href)} 
+                  />
                 ))}
               </div>
             </div>
@@ -120,56 +170,67 @@ export const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, us
         })}
       </nav>
 
-      {/* Profile + Logout */}
-      <div className="p-4 border-t border-[#30363D]">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-[#161B22] flex items-center justify-center font-bold text-emerald-400 ring-1 ring-[#30363D]">
-            {userName?.charAt(0) || 'U'}
+      {/* User Profile */}
+      <div className="p-4 border-t border-slate-800/60">
+        {/* User Info */}
+        <div className="flex items-center gap-3 mb-4 p-2 rounded-lg hover:bg-slate-900/50 transition-colors">
+          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-emerald-400 font-medium text-sm border border-slate-700">
+            {userName?.charAt(0)?.toUpperCase() || 'U'}
           </div>
-        <div className="min-w-0">
-            <p className="text-sm font-semibold text-white truncate">{userName || 'Usuario'}</p>
-            <p className="text-[11px] text-[#8B949E] capitalize">Sesión activa</p>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-slate-200 truncate">
+              {userName || 'Usuario'}
+            </div>
+            <div className="text-xs text-slate-500 flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400"></div>
+              En línea
+            </div>
           </div>
         </div>
-        <LogoutButton className="w-full justify-center px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition shadow-sm" />
+        
+        {/* Logout */}
+        <LogoutButton className="w-full px-3 py-2 text-sm font-medium text-slate-400 hover:text-white bg-transparent hover:bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 rounded-lg transition-all duration-200" />
       </div>
     </aside>
   );
 };
 
-/* ── Íconos (mismos paths, con stroke inherente) ── */
+/* ── Minimalist Icons ── */
 const icon = (p: SVGProps<SVGSVGElement>) => ({
   ...p,
   fill: 'none',
   stroke: 'currentColor',
-  strokeWidth: 2,
+  strokeWidth: 1.5,
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
 } as SVGProps<SVGSVGElement>);
 
 const IconDashboard = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
-    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-    <polyline points="9 22 9 12 15 12 15 22"/>
+    <rect x="3" y="3" width="7" height="7"/>
+    <rect x="14" y="3" width="7" height="7"/>
+    <rect x="14" y="14" width="7" height="7"/>
+    <rect x="3" y="14" width="7" height="7"/>
   </svg>
 );
+
 const IconSalesReport = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
-    <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-3"/>
-    <rect x="8" y="1" width="8" height="4" rx="1" ry="1"/>
-    <line x1="12" y1="16" x2="12" y2="12"/>
-    <line x1="16" y1="16" x2="16" y2="9"/>
-    <line x1="8" y1="16" x2="8" y2="14"/>
+    <line x1="12" y1="20" x2="12" y2="10"/>
+    <line x1="18" y1="20" x2="18" y2="4"/>
+    <line x1="6" y1="20" x2="6" y2="16"/>
   </svg>
 );
+
 const IconResumen = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-    <polyline points="14 2 14 8 20 8"/>
+    <path d="m14 2 6 6"/>
     <line x1="16" y1="13" x2="8" y2="13"/>
     <line x1="16" y1="17" x2="8" y2="17"/>
   </svg>
 );
+
 const IconAsistencia = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
     <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -179,35 +240,44 @@ const IconAsistencia = (p: SVGProps<SVGSVGElement>) => (
     <path d="m9 16 2 2 4-4"/>
   </svg>
 );
+
 const IconTruck = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
-    <rect x="1" y="3" width="15" height="13"/>
-    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
-    <circle cx="5.5" cy="18.5" r="2.5"/>
-    <circle cx="18.5" cy="18.5" r="2.5"/>
+    <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+    <path d="M15 18H9"/>
+    <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
+    <circle cx="17" cy="18" r="2"/>
+    <circle cx="7" cy="18" r="2"/>
   </svg>
 );
+
 const IconRegistro = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
-    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+    <path d="m9 14 2 2 4-4"/>
   </svg>
 );
+
 const IconReturn = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
-    <polyline points="9 14 4 9 9 4"/>
-    <path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+    <path d="M9 14 4 9l5-5"/>
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>
   </svg>
 );
+
 const IconPlaybook = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
-    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-    <path d="M6.5 2H20v15H6.5A2.5 2.5 0 0 1 4 14.5v-10A2.5 2.5 0 0 1 6.5 2z"/>
+    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
   </svg>
 );
+
 const IconUsersAdmin = (p: SVGProps<SVGSVGElement>) => (
   <svg {...icon(p)} viewBox="0 0 24 24">
-    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-    <circle cx="8.5" cy="7" r="4"/>
-    <path d="M20 8v6m-3-3h6"/>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
   </svg>
 );
