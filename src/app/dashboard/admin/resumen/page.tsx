@@ -49,6 +49,13 @@ const mmToHhMm = (m: number) => {
 };
 const mmOrDash = (m: any) => (!isFiniteNum(m) || m <= 0 ? '—' : mmToHhMm(m));
 
+const fmtTime = (s: string | null) => {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('es-BO', { timeStyle: 'short', hour12: true }).format(d);
+};
+
 const fmtDT = (s: string | null) => {
   if (!s) return '—';
   const d = new Date(s);
@@ -82,15 +89,18 @@ const Kpi = ({ title, value, accent }: { title: string; value: string; accent?: 
    ============================================================================ */
 export default function AsistenciaResumenPage() {
   // Rango por defecto: mes actual
-  const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-  const [start, setStart] = useState(firstDay.toISOString().slice(0, 10));
-  const [end, setEnd] = useState(today.toISOString().slice(0, 10));
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().slice(0, 10);
+  const firstDayOfMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+  
+  const [start, setStart] = useState(firstDayOfMonth.toISOString().slice(0, 10));
+  const [end, setEnd] = useState(todayStr);
   const [siteIdFilter, setSiteIdFilter] = useState<string>(''); // opcional
   const [q, setQ] = useState('');
 
   const [sites, setSites] = useState<Site[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
+  const [todayRows, setTodayRows] = useState<Row[]>([]); // <<< NUEVO: Estado para datos de hoy
   const [marks, setMarks] = useState<AttendanceMark[]>([]); // solo para mapear persona→sucursal
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -113,18 +123,18 @@ export default function AsistenciaResumenPage() {
     setLoading(true);
     setErr(null);
     try {
-      // 1) SUMMARY (por persona y día)
+      // 1) SUMMARY para el rango seleccionado
       const p1 = new URLSearchParams();
       p1.set('start', start);
       p1.set('end', end);
       if (siteIdFilter) p1.set('site_id', siteIdFilter);
       if (q) p1.set('q', q);
-
       const r1 = await fetch(`/endpoints/attendance/summary?${p1.toString()}`, { cache: 'no-store' });
       const j1 = await r1.json();
       if (!r1.ok) throw new Error(j1?.error || 'summary_fetch_failed');
+      setRows(Array.isArray(j1.data) ? j1.data : []);
 
-      // 2) ATTENDANCE crudo para mapear persona → sucursal (según marks)
+      // 2) ATTENDANCE crudo para mapear persona → sucursal (en el rango)
       const p2 = new URLSearchParams();
       p2.set('start', start);
       p2.set('end', end);
@@ -132,9 +142,18 @@ export default function AsistenciaResumenPage() {
       const r2 = await fetch(`/endpoints/attendance?${p2.toString()}`, { cache: 'no-store' });
       const j2 = await r2.json();
       if (!r2.ok) throw new Error(j2?.error || 'attendance_fetch_failed');
-
-      setRows(Array.isArray(j1.data) ? j1.data : []);
       setMarks(Array.isArray(j2.data) ? j2.data : []);
+
+      // 3) <<< NUEVO: SUMMARY solo para el día de HOY
+      const p3 = new URLSearchParams();
+      p3.set('start', todayStr);
+      p3.set('end', todayStr);
+      // No aplicamos filtros de sucursal o persona a la vista de hoy para que sea global
+      const r3 = await fetch(`/endpoints/attendance/summary?${p3.toString()}`, { cache: 'no-store' });
+      const j3 = await r3.json();
+      if (!r3.ok) throw new Error(j3?.error || 'today_summary_fetch_failed');
+      setTodayRows(Array.isArray(j3.data) ? j3.data : []);
+
     } catch (e: any) {
       setErr(e?.message || 'error');
     } finally {
@@ -150,6 +169,7 @@ export default function AsistenciaResumenPage() {
   // Mapa persona → sucursal (derivado de ATTENDANCE en el rango)
   const personToSiteName = useMemo(() => {
     const map = new Map<string, string>();
+    // Usamos `marks` del rango completo para tener un mapeo más robusto
     for (const m of marks) {
       const pid = m.person?.id;
       const sname = (m.site?.name || '').trim();
@@ -157,8 +177,19 @@ export default function AsistenciaResumenPage() {
         if (!map.has(pid)) map.set(pid, sname);
       }
     }
+    // <<< NUEVO: Hacemos un segundo recorrido con los datos de hoy para asegurar que las personas activas hoy tengan sucursal
+    for (const r of todayRows) {
+        const siteName = map.get(r.person_id);
+        if (!siteName) {
+            // Si no encontramos la sucursal en el rango principal, la buscamos en las marcas de hoy
+            const markToday = marks.find(m => m.person?.id === r.person_id && m.site?.name);
+            if (markToday && markToday.site?.name) {
+                map.set(r.person_id, markToday.site.name);
+            }
+        }
+    }
     return map;
-  }, [marks]);
+  }, [marks, todayRows]);
 
   // Agrupar rows (summary) por sucursal → persona → días.
   const grouped = useMemo(() => {
@@ -402,6 +433,63 @@ export default function AsistenciaResumenPage() {
   const thStyle = "px-3 py-2 text-left text-xs font-bold text-white/70 uppercase tracking-wider";
   const tdStyle = "px-3 py-2 text-sm text-white/80";
 
+  // <<< NUEVO: Componente para la vista de hoy
+  const TodaySummary = () => {
+    const uniqueTodayRows = useMemo(() => {
+        // Agrupar por person_id para evitar duplicados
+        const uniqueMap = new Map<string, Row>();
+        for (const row of todayRows) {
+            if (!uniqueMap.has(row.person_id)) {
+                uniqueMap.set(row.person_id, row);
+            }
+        }
+        return Array.from(uniqueMap.values()).sort((a, b) => (a.person_name || '').localeCompare(b.person_name || ''));
+    }, [todayRows]);
+
+    if (loading || uniqueTodayRows.length === 0) return null;
+
+    return (
+        <div className="relative mb-6">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
+            <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg p-4 shadow-2xl">
+                <h2 className="text-lg font-bold text-white mb-3">Resumen del Día (Hoy)</h2>
+                <div className="overflow-x-auto">
+                    <table className="w-full border-collapse min-w-[700px]">
+                        <thead>
+                            <tr className="bg-white/5 border-b border-white/10">
+                                <th className={thStyle}>Persona</th>
+                                <th className={thStyle}>Sucursal</th>
+                                <th className={thStyle}>Primer Ingreso</th>
+                                <th className={thStyle}>Última Salida</th>
+                                <th className={thStyle}>Horas Trabajadas</th>
+                                <th className={thStyle}>Atraso</th>
+                                <th className={thStyle}>% Cumplimiento</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {uniqueTodayRows.map((r, i) => (
+                                <tr key={`today-${r.person_id}-${i}`} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${i % 2 ? 'bg-white/5' : ''}`}>
+                                    <td className={tdStyle}>{r.person_name || 'Sin Nombre'}</td>
+                                    <td className={tdStyle}>{personToSiteName.get(r.person_id) || 'N/A'}</td>
+                                    <td className={tdStyle}>{fmtTime(r.first_in)}</td>
+                                    <td className={tdStyle}>{fmtTime(r.last_out)}</td>
+                                    <td className={tdStyle}>{mmOrDash(r.worked_minutes)}</td>
+                                    <td className={`${tdStyle} ${isFiniteNum(r.late_minutes) && r.late_minutes > 0 ? 'text-red-400' : ''}`}>
+                                        {mmOrDash(r.late_minutes)}
+                                    </td>
+                                    <td className={`${tdStyle} font-bold`} style={{ color: isFiniteNum(r.compliance_pct) && (r.compliance_pct as number) >= 100 ? '#10b981' : (r.compliance_pct || 0) >= 80 ? '#eab308' : '#f87171' }}>
+                                        {isFiniteNum(r.compliance_pct) ? r.compliance_pct : 0}%
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* HEADER */}
@@ -511,7 +599,10 @@ export default function AsistenciaResumenPage() {
           <Kpi title="Tiempo en colación" value={mmOrDash(globalKpis.lunch)} />
         </div>
 
-        {/* CONTENIDO */}
+        {/* <<< NUEVO: VISTA GLOBAL DEL DÍA */}
+        <TodaySummary />
+
+        {/* CONTENIDO PRINCIPAL (POR RANGO) */}
         {loading ? (
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
