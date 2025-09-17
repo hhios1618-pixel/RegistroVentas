@@ -43,13 +43,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Usuario deshabilitado' }, { status: 403 });
     }
 
-    // Validación: acepta DEFAULT_PASSWORD global o hash por usuario si existe
-    let passOk = password === DEFAULT_PASSWORD;
-    if (!passOk && person.password_hash) {
+    // ✅ Reglas de password:
+    // - Si TIENE hash -> SOLO bcrypt (NO se acepta DEFAULT_PASSWORD).
+    // - Si NO tiene hash -> se acepta únicamente DEFAULT_PASSWORD.
+    let passOk = false;
+    if (person.password_hash) {
       try {
         passOk = await bcrypt.compare(password, person.password_hash);
-      } catch {}
+      } catch {
+        passOk = false;
+      }
+    } else {
+      passOk = password === DEFAULT_PASSWORD;
     }
+
     if (!passOk) {
       return NextResponse.json({ ok: false, error: 'Usuario o contraseña incorrectos' }, { status: 401 });
     }

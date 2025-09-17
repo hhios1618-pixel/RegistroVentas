@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, Variants } from 'framer-motion';
 
-// --- Iconos UI ---
 const UserIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
@@ -22,21 +21,31 @@ export const Spinner = () => (
   </svg>
 );
 
-// --- Componente ---
+const PASS_RULE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/; // ≥8, al menos 1 letra y 1 número, alfanumérica
+
 export function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [username, setUsername]   = useState('');
-  const [password, setPassword]   = useState('');
-  const [showPwd, setShowPwd]     = useState(false);
-  const [loading, setLoading]     = useState(false);
-  const [notice, setNotice]       = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
+  // Login
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+  const [loading, setLoading] = useState(false);
 
+  // Change password
+  const [showChange, setShowChange] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [newPwd2, setNewPwd2] = useState('');
+  const [changing, setChanging] = useState(false);
+
+  // Notices
+  const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
   const ui = {
-    ok: (m: string)  => setNotice({ type: 'success', msg: m }),
-    err: (m: string) => setNotice({ type: 'error',  msg: m }),
-    info:(m: string) => setNotice({ type: 'info',    msg: m }),
+    ok: (m: string) => setNotice({ type: 'success', msg: m }),
+    err: (m: string) => setNotice({ type: 'error', msg: m }),
+    info: (m: string) => setNotice({ type: 'info', msg: m }),
     clear: () => setNotice(null),
   };
 
@@ -55,9 +64,7 @@ export function LoginClient() {
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j?.ok) throw new Error(j?.error || 'Usuario o contraseña incorrectos.');
 
-      // 🚀 Ahora todos pasan por /post-login
       const dest = searchParams.get('redirectTo') || '/post-login';
-
       ui.ok('Acceso verificado. Redirigiendo…');
       setTimeout(() => router.replace(dest), 250);
     } catch {
@@ -67,8 +74,45 @@ export function LoginClient() {
     }
   }
 
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    ui.clear();
+
+    const u = username.trim().toLowerCase();
+    if (!u) return ui.err('Ingresa tu usuario (no email).');
+
+    if (!PASS_RULE.test(newPwd)) {
+      return ui.err('La nueva contraseña debe ser alfanumérica, mínimo 8 caracteres, con al menos 1 letra y 1 número.');
+    }
+    if (newPwd !== newPwd2) return ui.err('La confirmación no coincide.');
+
+    try {
+      setChanging(true);
+      const r = await fetch('/endpoints/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, currentPassword: currentPwd, newPassword: newPwd }),
+      });
+      const j = await r.json().catch(() => ({} as any));
+
+      if (!r.ok || !j?.ok) throw new Error(j?.error || 'No se pudo cambiar la contraseña.');
+
+      // éxito
+      ui.ok('¡Contraseña cambiada con éxito! Inicia sesión con tu nueva contraseña.');
+      setShowChange(false);
+      setPassword('');
+      setCurrentPwd('');
+      setNewPwd('');
+      setNewPwd2('');
+    } catch (err: any) {
+      ui.err(err?.message || 'No se pudo cambiar la contraseña.');
+    } finally {
+      setChanging(false);
+    }
+  }
+
   const containerVariants: Variants = {
-    hidden:  { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
   };
 
@@ -114,13 +158,14 @@ export function LoginClient() {
             </div>
           )}
 
+          {/* ============ LOGIN FORM ============ */}
           <form onSubmit={handlePassword} className="space-y-5">
             <div className="relative">
               <UserIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
               <input
                 type="text"
                 autoComplete="username"
-                placeholder="Usuario"
+                placeholder="Usuario (no email)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full h-12 rounded-lg bg-white/5 border border-white/15 px-10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 transition-all"
@@ -155,6 +200,83 @@ export function LoginClient() {
               {loading ? <Spinner /> : 'Ingresar'}
             </button>
           </form>
+
+          {/* Toggle cambiar contraseña */}
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => { setShowChange((v) => !v); ui.clear(); }}
+              className="text-xs text-cyan-300 hover:text-white underline underline-offset-4"
+            >
+              {showChange ? 'Cancelar cambio de contraseña' : 'Cambiar mi contraseña'}
+            </button>
+          </div>
+
+          {/* ============ CHANGE PASSWORD PANEL ============ */}
+          {showChange && (
+            <form onSubmit={handleChangePassword} className="mt-5 space-y-4 border-t border-white/10 pt-5">
+              <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+                <p className="text-xs text-white/70 font-medium mb-1">Requisitos de la nueva contraseña</p>
+                <ul className="text-[11px] text-white/60 list-disc list-inside space-y-0.5">
+                  <li>Mínimo 8 caracteres</li>
+                  <li>Debe ser <strong>alfanumérica</strong>: al menos 1 letra y 1 número</li>
+                  <li>Solo letras (A–Z, a–z) y números (0–9)</li>
+                </ul>
+              </div>
+
+              <div className="relative">
+                <UserIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                  type="text"
+                  placeholder="Tu usuario (no email)"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full h-11 rounded-lg bg-white/5 border border-white/15 px-10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-all"
+                />
+              </div>
+
+              <div className="relative">
+                <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                  type="password"
+                  placeholder="Contraseña actual"
+                  value={currentPwd}
+                  onChange={(e) => setCurrentPwd(e.target.value)}
+                  className="w-full h-11 rounded-lg bg-white/5 border border-white/15 px-10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-all"
+                />
+              </div>
+
+              <div className="relative">
+                <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                  type="password"
+                  placeholder="Nueva contraseña"
+                  value={newPwd}
+                  onChange={(e) => setNewPwd(e.target.value)}
+                  className="w-full h-11 rounded-lg bg-white/5 border border-white/15 px-10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-all"
+                />
+              </div>
+
+              <div className="relative">
+                <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                  type="password"
+                  placeholder="Confirmar nueva contraseña"
+                  value={newPwd2}
+                  onChange={(e) => setNewPwd2(e.target.value)}
+                  className="w-full h-11 rounded-lg bg-white/5 border border-white/15 px-10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 transition-all"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={changing}
+                className="w-full h-11 flex items-center justify-center rounded-lg font-semibold text-white bg-gradient-to-r from-emerald-500 to-cyan-500 hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed transition-opacity shadow-lg shadow-emerald-500/20"
+              >
+                {changing ? <Spinner /> : 'Guardar nueva contraseña'}
+              </button>
+            </form>
+          )}
 
           <div className="mt-8 text-center text-xs text-white/50">
             © {new Date().getFullYear()} Fenix Corp. Todos los derechos reservados.
