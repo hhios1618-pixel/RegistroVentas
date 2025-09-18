@@ -9,15 +9,20 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0B0F17',
+  themeColor: '#0e1118', // Un color base oscuro como slate-950
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className="dark">
-      <body className="font-sans antialiased bg-app text-app-foreground selection:bg-apple-blue/30">
+      {/* CAMBIO:
+        - Se establece 'bg-slate-950' como el fondo único para toda la aplicación.
+        - Se usa un color de texto base 'text-slate-300'.
+        - Se quita la etiqueta <main> de aquí para evitar anidación (tendrás un <main> en el DashboardLayout).
+      */}
+      <body className="font-sans antialiased bg-slate-950 text-slate-300 selection:bg-apple-blue/30">
         <DevOverlayKiller />
-        <main className="min-h-screen fade-in">{children}</main>
+        {children}
       </body>
     </html>
   );

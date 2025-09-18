@@ -67,12 +67,13 @@ export default function DashboardHome() {
   }, [wx]);
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    // ✅ CAMBIO REALIZADO AQUÍ: Se quitaron 'bg-black' y 'text-white'
+    <div className="min-h-screen">
       {/* Header */}
       <header className="sticky top-0 z-40">
         <div className="relative">
           <div className="absolute inset-0 bg-[radial-gradient(1000px_500px_at_0%_-20%,rgba(255,255,255,.06),transparent)]" />
-          <div className="relative backdrop-blur-xl bg-white/5 border-b border-white/10">
+          <div className="relative backdrop-blur-xl bg-slate-950/80 border-b border-white/10">
             <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-gradient-to-r from-cyan-500/30 to-blue-500/30 border border-cyan-400/30 rounded-xl">
@@ -206,7 +207,7 @@ function Panel({ children, className = '' }: { children: React.ReactNode; classN
   return (
     <div className={`relative ${className}`}>
       <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_80%_-20%,rgba(255,255,255,.06),transparent)] rounded-2xl" />
-      <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
+      <div className="relative backdrop-blur-xl bg-slate-900/70 border border-white/10 rounded-2xl p-6">
         {children}
       </div>
     </div>
@@ -223,7 +224,7 @@ function KpiCard({ title, value, hint }: { title: string; value: string; hint?: 
       transition={{ duration: .35 }}
     >
       <div className="absolute inset-0 bg-[radial-gradient(900px_400px_at_0%_-20%,rgba(255,255,255,.06),transparent)] rounded-xl" />
-      <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5">
+      <div className="relative backdrop-blur-xl bg-slate-900/70 border border-white/10 rounded-xl p-5">
         <div className="text-sm text-white/70">{title}</div>
         <div className="text-2xl font-extrabold tracking-tight">{value}</div>
         {hint && <div className="text-xs text-white/50 mt-1">{hint}</div>}
