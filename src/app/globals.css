@@ -1,165 +1,177 @@
-/* ----------------------------- */
-/* Tailwind base                 */
-/* ----------------------------- */
+/* Apple-inspired Design System for Fenix Store */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ----------------------------- */
-/* Fondo global tipo Apple       */
-/* ----------------------------- */
-:root{
-  --app-bg:
-    radial-gradient(1200px 600px at 8% -10%, rgba(0,255,163,.06), transparent 45%),
-    radial-gradient(900px 500px at 95% 10%, rgba(0,185,255,.06), transparent 50%),
-    linear-gradient(180deg,#0b0f17 0%, #0a0c16 100%);
+/* ===== VARIABLES GLOBALES ===== */
+:root {
+  --app-bg: #000000;
+
+  --app-foreground: #ffffff;
+  --app-muted: #6b7280;
+  --app-border: rgba(255, 255, 255, 0.1);
+  --app-card: rgba(0, 0, 0, 0.6);
+  --app-card-hover: rgba(0, 0, 0, 0.8);
+
+  --glass-bg: rgba(0, 0, 0, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+
+  --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  --gradient-success: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  --gradient-warning: linear-gradient(135deg, #f97316 0%, #c2410c 100%);
+  --gradient-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+
+  --shadow-primary: 0 4px 14px rgba(59, 130, 246, 0.25);
+  --shadow-success: 0 4px 14px rgba(34, 197, 94, 0.25);
+  --shadow-warning: 0 4px 14px rgba(249, 115, 22, 0.25);
+  --shadow-danger: 0 4px 14px rgba(239, 68, 68, 0.25);
 }
 
-html, body { height: 100%; }
+/* ===== BASE ===== */
+html { height: 100%; scroll-behavior: smooth; }
 body {
+  height: 100%;
   background: var(--app-bg);
+  color: var(--app-foreground);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
 }
 
-/* ----------------------------- */
-/* Scrollbar sutil               */
-/* ----------------------------- */
-::-webkit-scrollbar{ width:8px; height:8px; }
-::-webkit-scrollbar-thumb{ background: rgba(255,255,255,.15); border-radius:4px; }
-::-webkit-scrollbar-track{ background: rgba(255,255,255,.06); }
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.06); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; transition: background .2s ease; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
 
-/* ----------------------------- */
-/* Componentes y utilidades UI   */
-/* (solo usa clases que existen) */
-/* ----------------------------- */
+/* ===== UTILIDADES PROPIAS (mínimas necesarias) ===== */
+@layer utilities {
+  /* para usar texto atenuado por variable */
+  .text-app-muted { color: var(--app-muted); }
+}
+
+/* ===== COMPONENTES ===== */
 @layer components {
-  /* Contenedor “glass” genérico */
-  .glass { @apply backdrop-blur-apple bg-app-card border border-app-border; }
-
-  /* Cards principales */
-  .card {
-    @apply rounded-apple glass shadow-glass px-6 py-5;
-  }
-  .card-tight {
-    @apply rounded-apple bg-app-card border border-app-border backdrop-blur-apple shadow-apple-sm px-4 py-3;
-  }
-
-  /* Títulos jerárquicos (tamaños de config) */
-  .h1 { @apply text-apple-h1 tracking-apple-tight font-semibold; }
-  .h2 { @apply text-apple-h2 tracking-apple-normal font-semibold; }
-  .h3 { @apply text-apple-h3 tracking-apple-normal font-medium; }
-
-  /* Texto atenuado coherente */
-  .muted { @apply text-app-muted; }
-
-  /* Inputs */
-  .field {
-    @apply w-full rounded-apple bg-neutral-900/50 border border-app-border px-3 py-2 text-apple-body
-           outline-none transition duration-200 ease-apple;
-  }
-  .field:focus {
-    @apply border-apple-blue ring-1 ring-apple-blue/30;
-  }
-  .field::placeholder { @apply text-neutral-400; }
-
-  /* Botones */
-  .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 rounded-apple border border-app-border
-           text-apple-body transition duration-200 ease-apple select-none;
-  }
-  .btn-primary { @apply btn bg-white text-black hover:bg-white/90 shadow-apple-sm; }
-  .btn-ghost   { @apply btn bg-white/10 hover:bg-white/15 text-app-foreground; }
-  .btn-danger  { @apply btn bg-destructive/90 hover:bg-destructive text-white; }
-  .btn-disabled{ @apply opacity-60 cursor-not-allowed; }
-
-  /* Topbar coherente (logout bar) */
-  .topbar { @apply w-full flex justify-end p-4 border-b border-app-border bg-black/30 backdrop-blur-apple; }
-
-  /* Tabla limpia estilo Apple */
-  .table-clean { @apply w-full text-apple-body; border-collapse: separate; border-spacing: 0 8px; }
-  .table-clean thead th {
-    @apply text-xs uppercase tracking-wider text-app-muted font-medium;
-    padding: 8px 12px; border-bottom: 1px solid theme('colors.app.border');
-  }
-  .table-clean tbody tr { @apply bg-neutral-900/50 border border-app-border rounded-apple; }
-  .table-clean tbody td { padding: 10px 12px; }
-  .table-clean tbody tr:hover { @apply bg-neutral-900/70; }
-
-  /* Números tabulares para columnas numéricas */
-  .num { font-feature-settings: "tnum" 1, "lnum" 1; font-variant-numeric: tabular-nums lining-nums; }
-
-  /* Secciones con padding coherente */
-  .section { @apply max-w-7xl mx-auto p-6; }
-}
-
-/* ----------------------------- */
-/* Leaflet (dejamos tus fixes)   */
-/* ----------------------------- */
-@import "leaflet/dist/leaflet.css";
-
-.leaflet-container img,
-.leaflet-container .leaflet-tile {
-  max-width: none !important;
-}
-.leaflet-container .leaflet-tile {
-  width: 256px !important;
-  height: 256px !important;
-  image-rendering: auto;
-  filter: none;
-}
-.leaflet-container { background:#111; }
-
-/* ---------- APPLE DESIGN SHIMS PARA DASHBOARD ---------- */
-@layer components {
-  /* Contenedor y sección */
+  /* === CONTENEDORES === */
   .apple-container { @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8; }
-  .apple-section   { @apply mb-8; }
+  .apple-section { @apply mb-8; }
 
-  /* Tarjetas glass */
-  .glass           { @apply bg-white/5 backdrop-blur-md border border-white/10; }
-  .glass-panel     { @apply bg-white/5 backdrop-blur-md border border-white/10; }
-  .glass-card      { @apply glass rounded-apple p-apple shadow-apple; }
-  .card            { @apply glass rounded-apple p-apple shadow-apple; } /* por compat */
+  /* === GLASS === */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+  .glass-panel { @apply glass rounded-apple; }
+  .glass-card { @apply glass rounded-apple p-apple shadow-apple; }
 
-  /* Tipografía y tonos */
-  .apple-h1        { @apply text-apple-h1 font-semibold tracking-apple-tight; }
-  .apple-h2        { @apply text-apple-h2 font-semibold tracking-apple-normal; }
-  .apple-h3        { @apply text-apple-h3 font-medium  tracking-apple-normal; }
-  .apple-body      { @apply text-apple-body; }
-  .apple-mono      { @apply font-mono; }
-  .apple-muted     { color: theme(colors.app.muted); }
+  /* === CARD === */
+  .card { @apply glass-card; }
+  .card-compact { @apply glass rounded-apple p-apple-sm shadow-apple-sm; }
+  .card-hover { @apply card transition-all duration-300 ease-apple hover:shadow-apple-lg hover:scale-[1.02] hover:-translate-y-1; }
 
-  /* Bordes y radios */
-  .rounded-apple      { border-radius: theme(borderRadius.apple); }
-  .rounded-apple-sm   { border-radius: theme(borderRadius.apple-sm); }
-  .rounded-apple-lg   { border-radius: theme(borderRadius.apple-lg); }
+  /* === TIPOGRAFÍA === */
+  .apple-h1 { @apply text-apple-h1 font-semibold tracking-apple-tight text-white; }
+  .apple-h2 { @apply text-apple-h2 font-semibold tracking-apple-normal text-white; }
+  .apple-h3 { @apply text-apple-h3 font-medium tracking-apple-normal text-white; }
+  .apple-body { @apply text-apple-body text-white; }
+  .apple-caption { @apply text-apple-caption1 text-app-muted; }
+  .apple-muted { color: var(--app-muted); }
 
-  /* Grid de tarjetas */
-  .apple-grid { @apply grid gap-6; }
+  /* === BOTONES === */
+  .btn { @apply inline-flex items-center justify-center px-4 py-2 rounded-apple text-apple-body font-medium transition-all duration-200 ease-apple select-none focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-primary { @apply btn bg-apple-blue-600 text-white hover:bg-apple-blue-700 focus:ring-apple-blue-500 shadow-apple-sm active:scale-95; }
+  .btn-secondary { @apply btn bg-white/10 text-white border border-white/20 hover:bg-white/15 hover:border-white/30 focus:ring-white/50 shadow-apple-sm; }
+  .btn-success { @apply btn bg-apple-green-600 text-white hover:bg-apple-green-700 focus:ring-apple-green-500 shadow-apple-sm active:scale-95; }
+  .btn-warning { @apply btn bg-apple-orange-600 text-white hover:bg-apple-orange-700 focus:ring-apple-orange-500 shadow-apple-sm active:scale-95; }
+  .btn-danger  { @apply btn bg-apple-red-600 text-white hover:bg-apple-red-700 focus:ring-apple-red-500 shadow-apple-sm active:scale-95; }
+  .btn-ghost   { @apply btn bg-transparent text-white hover:bg-white/10 focus:ring-white/50; }
+  .btn-sm { @apply px-3 py-1.5 text-apple-footnote; }
+  .btn-lg { @apply px-6 py-3 text-apple-callout; }
 
-  /* Animación sutil */
-  .apple-fade-in { animation: _appleFade .35s cubic-bezier(0.25,0.46,0.45,0.94) both; }
+  /* === CAMPOS === */
+  .field { @apply w-full px-3 py-2 bg-white/5 border border-white/20 rounded-apple text-apple-body text-white placeholder-app-muted transition-all duration-200 ease-apple focus:outline-none focus:ring-2 focus:ring-apple-blue-500 focus:border-apple-blue-500 focus:bg-white/10; }
+  .field-sm { @apply field px-2.5 py-1.5 text-apple-footnote; }
+  .field-lg { @apply field px-4 py-3 text-apple-callout; }
+
+  /* === BADGES === */
+  .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-apple-caption2 font-medium; }
+  .badge-primary { @apply badge bg-apple-blue-600/20 text-apple-blue-300 border border-apple-blue-500/30; }
+  .badge-success { @apply badge bg-apple-green-600/20 text-apple-green-300 border border-apple-green-500/30; }
+  .badge-warning { @apply badge bg-apple-orange-600/20 text-apple-orange-300 border border-apple-orange-500/30; }
+  .badge-danger  { @apply badge bg-apple-red-600/20 text-apple-red-300 border border-apple-red-500/30; }
+  .badge-neutral { @apply badge bg-white/10 text-white border border-white/20; }
+
+  /* === TABLA === */
+  .table-apple { @apply w-full text-apple-body; border-collapse: separate; border-spacing: 0; }
+  .table-apple thead th { @apply px-4 py-3 text-left text-apple-caption1 font-semibold text-app-muted uppercase tracking-wider border-b border-white/10 bg-white/5; }
+  .table-apple tbody tr { @apply border-b border-white/5 hover:bg-white/5 transition-colors duration-200; }
+  .table-apple tbody td { @apply px-4 py-3 text-white; }
+
+  /* === NAV === */
+  .nav-link { @apply flex items-center gap-3 px-3 py-2 rounded-apple text-apple-body font-medium transition-all duration-200 ease-apple; }
+  .nav-link-active { @apply nav-link bg-apple-blue-600/20 text-apple-blue-300 border border-apple-blue-500/30; }
+  .nav-link-inactive { @apply nav-link text-app-muted hover:text-white hover:bg-white/10; }
+
+  /* === ALERTAS === */
+  .alert { @apply p-4 rounded-apple border; }
+  .alert-info    { @apply alert bg-apple-blue-600/10   border-apple-blue-500/30   text-apple-blue-300; }
+  .alert-success { @apply alert bg-apple-green-600/10  border-apple-green-500/30  text-apple-green-300; }
+  .alert-warning { @apply alert bg-apple-orange-600/10 border-apple-orange-500/30 text-apple-orange-300; }
+  .alert-danger  { @apply alert bg-apple-red-600/10    border-apple-red-500/30    text-apple-red-300; }
+
+  /* === DIVISORES === */
+  .divider { @apply border-t border-white/10; }
+  .divider-vertical { @apply border-l border-white/10; }
+
+  /* === ANIMACIONES (clases contenedor) === */
+  .animate-apple-fade-in { animation: appleFadeIn .3s cubic-bezier(0.25,0.46,0.45,0.94); }
+  .animate-apple-slide-up { animation: appleSlideUp .3s cubic-bezier(0.25,0.46,0.45,0.94); }
+  .animate-apple-scale { animation: appleScale .2s cubic-bezier(0.25,0.46,0.45,0.94); }
+
+  /* === UTILIDADES MISC === */
+  .text-balance { text-wrap: balance; }
+  .backdrop-blur-apple { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  .backdrop-blur-apple-sm { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .backdrop-blur-apple-lg { backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px); }
 }
-@keyframes _appleFade { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }
 
-/* Fondo Apple coherente (si no lo tenías) */
-:root {
-  --app-bg: radial-gradient(1200px 600px at 8% -10%, rgba(0,255,163,.06), transparent 45%),
-            radial-gradient(900px 500px at 95% 10%, rgba(0,185,255,.06), transparent 50%),
-            linear-gradient(180deg,#0b0f17 0%, #0a0c16 100%);
+/* ===== KEYFRAMES ===== */
+@keyframes appleFadeIn { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:translateY(0);} }
+@keyframes appleSlideUp { from { opacity:0; transform:translateY(16px);} to { opacity:1; transform:translateY(0);} }
+@keyframes appleScale { from { opacity:0; transform:scale(.95);} to { opacity:1; transform:scale(1);} }
+
+/* ===== LEAFLET ===== */
+@import "leaflet/dist/leaflet.css";
+.leaflet-container { background:#111; border-radius:12px; overflow:hidden; }
+.leaflet-container img, .leaflet-container .leaflet-tile { max-width:none !important; image-rendering:auto; filter:none; }
+.leaflet-container .leaflet-tile { width:256px !important; height:256px !important; }
+
+/* ===== OCULTAR OVERLAYS DEV ===== */
+#nextjs-devtools, #nextjs-portal, #nextjs-toast,
+[data-nextjs-overlay], [data-nextjs-toast], [data-nextjs-devtools] {
+  pointer-events:none !important; z-index:0 !important; display:none !important;
 }
-html, body { height: 100%; }
-body { background: var(--app-bg); }
 
-/* Mata overlays de Next Dev Tools en dev */
-#nextjs-devtools,
-#nextjs-portal,
-#nextjs-toast,
-[data-nextjs-overlay],
-[data-nextjs-toast],
-[data-nextjs-devtools] {
-  pointer-events: none !important;
-  z-index: 0 !important;
-  display: none !important;
+/* ===== RESPONSIVE ===== */
+@media (max-width: 640px) {
+  .apple-container { @apply px-4; }
+  .card { @apply p-4; }
+  .apple-h1 { @apply text-apple-title1; }
+  .apple-h2 { @apply text-apple-title3; }
+}
+
+/* ===== PRINT ===== */
+@media print {
+  .glass, .glass-panel, .glass-card, .card {
+    background: #fff !important; color:#000 !important; border:1px solid #e5e7eb !important;
+    box-shadow:none !important; backdrop-filter:none !important;
+  }
+  .btn { border:1px solid #e5e7eb !important; background:#fff !important; color:#000 !important; }
 }

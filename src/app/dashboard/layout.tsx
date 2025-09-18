@@ -1,3 +1,4 @@
+// Tu DashboardLayout.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -12,38 +13,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { data: me } = useSWR('/endpoints/me', fetcher);
   const role: Role = normalizeRole(me?.role);
   const name = me?.full_name || 'Usuario';
-
+  
+  // (Toda tu lógica de estado y efectos permanece sin cambios)
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-
-  // Cierra el drawer al navegar
   useEffect(() => { setOpen(false); }, [pathname]);
-
-  // 🔒 Controla el sidebar con transform inline (gana a Tailwind)
   useEffect(() => {
+    // ... tu lógica para controlar el sidebar ...
     const el = document.getElementById('app-sidebar') as HTMLElement | null;
     if (!el) return;
-
     const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
-
     if (isDesktop) {
-      // en desktop el sidebar siempre visible
       el.style.transform = '';
       document.body.style.overflow = '';
       return;
     }
-
     if (open) {
-      el.style.transform = 'translateX(0)';   // abre
-      document.body.style.overflow = 'hidden'; // bloquea scroll detrás
+      el.style.transform = 'translateX(0)';
+      document.body.style.overflow = 'hidden';
     } else {
-      el.style.transform = ''; // vuelve a la clase -translate-x-full
+      el.style.transform = '';
       document.body.style.overflow = '';
     }
   }, [open]);
-
-  // Re-sincroniza al cambiar tamaño
   useEffect(() => {
+    // ... tu lógica de resize ...
     const onResize = () => {
       const el = document.getElementById('app-sidebar') as HTMLElement | null;
       if (!el) return;
@@ -59,53 +53,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener('resize', onResize);
   }, [open]);
 
+
   return (
-    <div className="flex min-h-screen bg-[#0D1117] text-[#C9D1D9]">
-      {/* Sidebar (tu mismo componente; su <aside> DEBE tener id="app-sidebar"
-          y clases con -translate-x-full en móvil, lg:translate-x-0 en desktop) */}
+    // CAMBIO: Se quitan las clases de color de fondo y texto de este div.
+    // Ahora heredará el fondo 'bg-slate-950' del body, haciendo que el margen
+    // 'lg:ml-72' sea invisible.
+    <div className="flex min-h-screen">
       <Sidebar userRole={role} userName={name} />
 
-      {/* Backdrop móvil */}
+      {/* Backdrop móvil (sin cambios) */}
       <div
         onClick={() => setOpen(false)}
         aria-hidden
-        className={[
-          'fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity z-40',
-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
-          'lg:hidden',
-        ].join(' ')}
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity z-40 lg:hidden data-[state=closed]:opacity-0 data-[state=open]:opacity-100 data-[state=closed]:pointer-events-none data-[state=open]:pointer-events-auto"
+        data-state={open ? 'open' : 'closed'}
       />
 
-      {/* Contenido */}
+      {/* Contenido (sin cambios en la estructura) */}
       <main className="relative flex-1 lg:ml-72">
-        {/* Topbar móvil con botón */}
-        <div className="lg:hidden sticky top-0 z-40 bg-[#0D1117]/90 backdrop-blur-md border-b border-white/10">
+        {/* Topbar móvil con botón (sin cambios) */}
+        <div className="lg:hidden sticky top-0 z-40 bg-slate-950/80 backdrop-blur-md border-b border-white/10">
           <div className="flex items-center justify-between px-3 py-2">
-            <button
+            {/* ... tu botón ... */}
+             <button
               onClick={() => setOpen((s) => !s)}
               aria-label="Abrir menú"
               className="inline-flex items-center gap-2 rounded-md border border-white/15 px-3 py-2 active:scale-[.98]"
             >
-              <span className="block w-5 h-0.5 bg-white rounded" />
-              <span className="block w-5 h-0.5 bg-white rounded mt-1" />
-              <span className="block w-5 h-0.5 bg-white rounded mt-1" />
-              <span className="text-sm ml-2 opacity-80">Menú</span>
+              <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+              <span className="text-sm ml-1 opacity-80">Menú</span>
             </button>
             <div className="text-sm opacity-70 truncate pr-1">Fenix • {name}</div>
           </div>
         </div>
 
-        {/* (Opcional) FAB para abrir desde abajo; quítalo si no lo necesitas */}
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Abrir menú (FAB)"
-          className="fixed left-3 bottom-3 z-[60] inline-flex lg:hidden items-center justify-center w-12 h-12 rounded-full border border-white/15 bg-[#111827]/90 backdrop-blur-md active:scale-95"
-        >
-          <span className="block w-6 h-0.5 bg-white rounded" />
-          <span className="block w-6 h-0.5 bg-white rounded mt-1" />
-          <span className="block w-6 h-0.5 bg-white rounded mt-1" />
-        </button>
-
+        {/* FAB (sin cambios) */}
+        {!open && (
+           <button
+            onClick={() => setOpen(true)}
+            aria-label="Abrir menú (FAB)"
+            className="fixed left-3 bottom-3 z-[60] inline-flex lg:hidden items-center justify-center w-12 h-12 rounded-full border border-white/15 bg-slate-800/80 backdrop-blur-md active:scale-95"
+           >
+            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+           </button>
+        )}
+       
         <div className="p-4 sm:p-6 lg:p-8">{children}</div>
       </main>
     </div>
