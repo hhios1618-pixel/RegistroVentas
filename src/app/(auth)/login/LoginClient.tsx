@@ -2,372 +2,532 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion, Variants } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, Lock, Eye, EyeOff, Shield, CheckCircle, AlertCircle } from 'lucide-react';
 
-/* ─────────────────────────── Icons ─────────────────────────── */
-const UserIcon = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...p}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.5 20.1a7.5 7.5 0 0 1 15 0A18 18 0 0 1 12 21.75c-2.7 0-5.2-.6-7.5-1.65Z"/>
-  </svg>
-);
-
-const LockIcon = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" {...p}>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16.5 10.5V6.8a4.5 4.5 0 1 0-9 0v3.7m-.8 11.3h10.6a2.3 2.3 0 0 0 2.2-2.2v-6.8a2.3 2.3 0 0 0-2.2-2.2H6.8a2.3 2.3 0 0 0-2.2 2.2v6.8a2.3 2.3 0 0 0 2.2 2.2Z"/>
-  </svg>
-);
-
-/* ─────────────────────────── Spinner ─────────────────────────── */
+/* ─────────────────────────── SPINNER ─────────────────────────── */
 export const Spinner = () => (
-  <svg className="h-5 w-5 animate-spin text-cyan-300" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-    <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
-  </svg>
+  <div className="w-6 h-6 border-2 border-apple-blue-500 border-t-transparent rounded-full animate-spin" />
 );
 
-/* ─────────────────────── Particles BG ─────────────────────── */
+/* ─────────────────────── PARTICLES BACKGROUND ─────────────────────── */
 const ParticlesBG: React.FC = () => {
   const ref = useRef<HTMLCanvasElement>(null);
+  
   useEffect(() => {
-    const c = ref.current!;
-    const ctx = c.getContext('2d')!;
-    let raf = 0;
-
+    const canvas = ref.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    let animationId = 0;
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
+    
     const resize = () => {
-      c.width = innerWidth * DPR;
-      c.height = innerHeight * DPR;
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // reset
+      canvas.width = window.innerWidth * DPR;
+      canvas.height = window.innerHeight * DPR;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(DPR, DPR);
     };
+    
     resize();
-    addEventListener('resize', resize);
+    window.addEventListener('resize', resize);
 
-    const N = 70;
-    const parts = Array.from({ length: N }).map(() => ({
-      x: Math.random() * innerWidth,
-      y: Math.random() * innerHeight,
-      r: 0.7 + Math.random() * 1.8,
-      vx: (Math.random() - 0.5) * 0.25,
-      vy: (Math.random() - 0.5) * 0.25,
-      a: 0.15 + Math.random() * 0.35,
+    const particles = Array.from({ length: 50 }).map(() => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      radius: 0.5 + Math.random() * 1.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      alpha: 0.1 + Math.random() * 0.3,
     }));
 
-    const loop = () => {
-      ctx.clearRect(0, 0, innerWidth, innerHeight);
+    const animate = () => {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
-      // Vignette
-      const g = ctx.createRadialGradient(
-        innerWidth * 0.5, innerHeight * 0.4, 50,
-        innerWidth * 0.5, innerHeight * 0.5, Math.max(innerWidth, innerHeight)
+      // Gradient overlay
+      const gradient = ctx.createRadialGradient(
+        window.innerWidth * 0.5, window.innerHeight * 0.4, 100,
+        window.innerWidth * 0.5, window.innerHeight * 0.5, Math.max(window.innerWidth, window.innerHeight)
       );
-      g.addColorStop(0, 'rgba(0,0,0,0)');
-      g.addColorStop(1, 'rgba(0,0,0,0.45)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, innerWidth, innerHeight);
+      gradient.addColorStop(0, 'rgba(59, 130, 246, 0.05)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-      // Particles
-      ctx.fillStyle = 'rgba(148, 255, 230, 0.7)';
-      for (const p of parts) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < -10) p.x = innerWidth + 10;
-        if (p.x > innerWidth + 10) p.x = -10;
-        if (p.y < -10) p.y = innerHeight + 10;
-        if (p.y > innerHeight + 10) p.y = -10;
+      // Draw particles
+      particles.forEach(particle => {
+        particle.x += particle.vx;
+        particle.y += particle.vy;
 
-        ctx.globalAlpha = p.a;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-      }
+        // Wrap around edges
+        if (particle.x < -10) particle.x = window.innerWidth + 10;
+        if (particle.x > window.innerWidth + 10) particle.x = -10;
+        if (particle.y < -10) particle.y = window.innerHeight + 10;
+        if (particle.y > window.innerHeight + 10) particle.y = -10;
 
-      // Links
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.12)';
+        // Draw particle
+        ctx.globalAlpha = particle.alpha;
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Draw connections
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.1)';
       ctx.globalAlpha = 1;
-      for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const a = parts[i], b = parts[j];
-          const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy);
-          if (d < 110) {
-            ctx.lineWidth = 1 - d / 110;
-            ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < 120) {
+            ctx.lineWidth = (1 - distance / 120) * 0.5;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
           }
         }
       }
 
-      raf = requestAnimationFrame(loop);
+      animationId = requestAnimationFrame(animate);
     };
-    loop();
+    
+    animate();
 
-    return () => { cancelAnimationFrame(raf); removeEventListener('resize', resize); };
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
+    };
   }, []);
+
   return <canvas ref={ref} className="absolute inset-0 z-0 pointer-events-none" />;
 };
 
-/* ──────────────────────── Component ──────────────────────── */
-const PASS_RULE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+/* ──────────────────────── NOTIFICATION ──────────────────────── */
+const Notification: React.FC<{
+  type: 'success' | 'error' | 'info';
+  message: string;
+  onClose: () => void;
+}> = ({ type, message, onClose }) => {
+  const icons = {
+    success: <CheckCircle size={20} className="text-apple-green-400" />,
+    error: <AlertCircle size={20} className="text-apple-red-400" />,
+    info: <AlertCircle size={20} className="text-apple-blue-400" />,
+  };
+
+  const colors = {
+    success: 'border-apple-green-500/30 bg-apple-green-500/10',
+    error: 'border-apple-red-500/30 bg-apple-red-500/10',
+    info: 'border-apple-blue-500/30 bg-apple-blue-500/10',
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+      className={`fixed top-6 right-6 z-50 flex items-center gap-3 p-4 rounded-apple border backdrop-blur-apple ${colors[type]} shadow-apple-lg max-w-md`}
+    >
+      {icons[type]}
+      <span className="apple-body text-white flex-1">{message}</span>
+      <button
+        onClick={onClose}
+        className="text-white/60 hover:text-white transition-colors"
+      >
+        ×
+      </button>
+    </motion.div>
+  );
+};
+
+/* ──────────────────────── MAIN COMPONENT ──────────────────────── */
+const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
 
 export function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Login
-  const [username, setUsername]   = useState('');
-  const [password, setPassword]   = useState('');
-  const [showPwd, setShowPwd]     = useState(false);
-  const [loading, setLoading]     = useState(false);
+  // Login state
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Change password
-  const [showChange, setShowChange] = useState(false);
-  const [currentPwd, setCurrentPwd] = useState('');
-  const [newPwd, setNewPwd]         = useState('');
-  const [newPwd2, setNewPwd2]       = useState('');
-  const [changing, setChanging]     = useState(false);
+  // Change password state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
-  // Notices
-  const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
-  const ui = {
-    ok:   (m: string) => setNotice({ type: 'success', msg: m }),
-    err:  (m: string) => setNotice({ type: 'error',  msg: m }),
-    info: (m: string) => setNotice({ type: 'info',    msg: m }),
-    clear: () => setNotice(null),
+  // Notification state
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
+
+  const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
+    setNotification({ type, message });
   };
 
-  async function handlePassword(e: React.FormEvent) {
+  const clearNotification = () => setNotification(null);
+
+  // Login handler
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    ui.clear();
-    if (!username || !password) return ui.err('Completa tu usuario y contraseña.');
+    clearNotification();
+    
+    if (!username || !password) {
+      showNotification('error', 'Por favor completa tu usuario y contraseña.');
+      return;
+    }
+
     setLoading(true);
+    
     try {
-      const r = await fetch('/endpoints/auth/basic-login', {
+      const response = await fetch('/endpoints/auth/basic-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ 
+          username: username.trim(), 
+          password 
+        }),
       });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j?.ok) throw new Error(j?.error || 'Usuario o contraseña incorrectos.');
+      
+      const data = await response.json().catch(() => ({}));
+      
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'Usuario o contraseña incorrectos.');
+      }
 
-      const dest = searchParams.get('redirectTo') || '/post-login';
-      ui.ok('Acceso verificado. Redirigiendo…');
-      setTimeout(() => router.replace(dest), 250);
-    } catch {
-      ui.err('Usuario o contraseña incorrectos.');
+      const redirectTo = searchParams.get('redirectTo') || '/post-login';
+      showNotification('success', 'Acceso verificado. Redirigiendo...');
+      
+      setTimeout(() => {
+        router.replace(redirectTo);
+      }, 1000);
+      
+    } catch (error: any) {
+      showNotification('error', error.message);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function handleChangePassword(e: React.FormEvent) {
+  // Change password handler
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    ui.clear();
+    clearNotification();
 
-    const u = username.trim().toLowerCase();
-    if (!u) return ui.err('Ingresa tu usuario (no email).');
-    if (!PASS_RULE.test(newPwd)) return ui.err('La nueva contraseña debe ser alfanumérica (≥8, 1 letra y 1 número).');
-    if (newPwd !== newPwd2) return ui.err('La confirmación no coincide.');
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showNotification('error', 'Por favor completa todos los campos.');
+      return;
+    }
 
-    setChanging(true);
+    if (newPassword !== confirmPassword) {
+      showNotification('error', 'Las contraseñas nuevas no coinciden.');
+      return;
+    }
+
+    if (!PASSWORD_RULE.test(newPassword)) {
+      showNotification('error', 'La contraseña debe tener al menos 8 caracteres, incluyendo letras y números.');
+      return;
+    }
+
+    setChangingPassword(true);
+
     try {
-      const r = await fetch('/endpoints/auth/change-password', {
+      const response = await fetch('/endpoints/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: u, currentPassword: currentPwd, newPassword: newPwd }),
+        body: JSON.stringify({
+          username: username.trim(),
+          currentPassword,
+          newPassword,
+        }),
       });
-      const j = await r.json().catch(() => ({} as any));
-      if (!r.ok || !j?.ok) throw new Error(j?.error || 'No se pudo cambiar la contraseña.');
 
-      ui.ok('¡Contraseña cambiada con éxito! Inicia sesión con tu nueva contraseña.');
-      setShowChange(false);
-      setPassword(''); setCurrentPwd(''); setNewPwd(''); setNewPwd2('');
-    } catch (err: any) {
-      ui.err(err?.message || 'No se pudo cambiar la contraseña.');
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'Error al cambiar la contraseña.');
+      }
+
+      showNotification('success', 'Contraseña cambiada exitosamente.');
+      setShowChangePassword(false);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      
+    } catch (error: any) {
+      showNotification('error', error.message);
     } finally {
-      setChanging(false);
+      setChangingPassword(false);
     }
-  }
-
-  const variants: Variants = {
-    hidden: { opacity: 0, y: 26 },
-    show:   { opacity: 1, y: 0, transition: { duration: 0.55, ease: 'easeOut' } },
   };
 
   return (
-    <div className="min-h-dvh relative flex items-center justify-center overflow-hidden">
-      {/* fondo */}
-      <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover z-0" src="/1.mp4" />
-      <div className="absolute inset-0 bg-black/60 z-10" />
+    <div className="min-h-screen relative overflow-hidden bg-black">
+      {/* Animated Background */}
       <ParticlesBG />
+      
+      {/* Gradient Overlays */}
+      <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-950/20 via-black to-apple-green-950/20" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.1),transparent_50%)]" />
 
-      {/* card */}
-      <motion.div variants={variants} initial="hidden" animate="show" className="relative z-20 w-full max-w-md">
-        <div className="rounded-2xl p-[1.5px] relative border-anim">
-          <div className="rounded-2xl bg-[rgba(12,16,32,0.78)] backdrop-blur-xl ring-1 ring-white/10 px-8 py-7 shadow-2xl">
-            {/* header con logo */}
-            <div className="mb-7 flex items-center gap-4">
-              <div className="relative w-11 h-11 rounded-md overflow-hidden ring-1 ring-white/20 shadow">
-                {/* from /public/1.png */}
-                <img src="/1.png" alt="Fenix" className="absolute inset-0 w-full h-full object-contain bg-black/5" />
-              </div>
-              <div>
-                <h1 className="text-white text-lg sm:text-xl font-semibold tracking-tight">Acceso a la Plataforma</h1>
-                <p className="text-[12px] text-white/60 -mt-0.5">Sistema de Gestión Fenix</p>
-              </div>
-            </div>
-
-            {/* avisos */}
-            {notice && (
-              <div
-                className={[
-                  'mb-4 rounded-lg px-4 py-2.5 text-sm font-medium border',
-                  notice.type === 'error'
-                    ? 'bg-red-500/12 text-red-300 border-red-500/30'
-                    : notice.type === 'success'
-                    ? 'bg-emerald-500/12 text-emerald-300 border-emerald-500/30'
-                    : 'bg-white/8 text-white/80 border-white/15',
-                ].join(' ')}
-              >
-                {notice.msg}
-              </div>
-            )}
-
-            {/* form login */}
-            <form onSubmit={handlePassword} className="space-y-4">
-              <div className="relative">
-                <UserIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
-                <input
-                  type="text"
-                  autoComplete="username"
-                  placeholder="Usuario (no email)"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full h-12 rounded-lg bg-white/6 border border-white/15 px-10 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
-                />
-              </div>
-
-              <div className="relative">
-                <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
-                <input
-                  type={showPwd ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  placeholder="Contraseña"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full h-12 rounded-lg bg-white/6 border border-white/15 px-10 pr-12 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd((v) => !v)}
-                  className="absolute inset-y-0 right-0 px-3 text-white/60 hover:text-white/90"
-                >
-                  {showPwd ? '🙈' : '👁️'}
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full h-12 flex items-center justify-center rounded-lg font-semibold text-slate-900 bg-gradient-to-r from-cyan-400 to-emerald-400 hover:opacity-95 disabled:opacity-60 shadow-lg shadow-emerald-500/15"
-              >
-                {loading ? <Spinner /> : 'Ingresar'}
-              </button>
-            </form>
-
-            {/* toggle cambiar contraseña */}
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => { setShowChange((v) => !v); ui.clear(); }}
-                className="text-xs text-cyan-300 hover:text-white underline underline-offset-4"
-              >
-                {showChange ? 'Cancelar cambio de contraseña' : 'Cambiar mi contraseña'}
-              </button>
-            </div>
-
-            {/* form cambio */}
-            {showChange && (
-              <form onSubmit={handleChangePassword} className="mt-6 space-y-3 border-t border-white/10 pt-6">
-                <div className="rounded-lg bg-white/6 border border-white/10 p-3">
-                  <p className="text-xs text-white/70 font-medium mb-1">Requisitos de la nueva contraseña</p>
-                  <ul className="text-[11px] text-white/60 list-disc list-inside space-y-0.5">
-                    <li>Mínimo 8 caracteres</li>
-                    <li>Alfanumérica: al menos 1 letra y 1 número</li>
-                    <li>Solo letras (A–Z, a–z) y números (0–9)</li>
-                  </ul>
-                </div>
-
-                <div className="relative">
-                  <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
-                  <input
-                    type="password"
-                    placeholder="Contraseña actual"
-                    value={currentPwd}
-                    onChange={(e) => setCurrentPwd(e.target.value)}
-                    className="w-full h-11 rounded-lg bg-white/6 border border-white/15 px-10 text-white placeholder:text-white/40 focus:ring-2 focus:ring-cyan-400/30"
-                  />
-                </div>
-
-                <div className="relative">
-                  <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
-                  <input
-                    type="password"
-                    placeholder="Nueva contraseña"
-                    value={newPwd}
-                    onChange={(e) => setNewPwd(e.target.value)}
-                    className="w-full h-11 rounded-lg bg-white/6 border border-white/15 px-10 text-white placeholder:text-white/40 focus:ring-2 focus:ring-cyan-400/30"
-                  />
-                </div>
-
-                <div className="relative">
-                  <LockIcon className="absolute top-1/2 left-3 -translate-y-1/2 w-5 h-5 text-white/40" />
-                  <input
-                    type="password"
-                    placeholder="Confirmar nueva contraseña"
-                    value={newPwd2}
-                    onChange={(e) => setNewPwd2(e.target.value)}
-                    className="w-full h-11 rounded-lg bg-white/6 border border-white/15 px-10 text-white placeholder:text-white/40 focus:ring-2 focus:ring-cyan-400/30"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={changing}
-                  className="w-full h-11 flex items-center justify-center rounded-lg font-semibold text-slate-900 bg-gradient-to-r from-emerald-400 to-cyan-400 hover:opacity-95 disabled:opacity-60 shadow-lg shadow-cyan-500/15"
-                >
-                  {changing ? <Spinner /> : 'Guardar nueva contraseña'}
-                </button>
-              </form>
-            )}
-
-            <div className="mt-7 text-center text-[11px] text-white/50">
-              © {new Date().getFullYear()} Fenix Corp. Todos los derechos reservados.
-            </div>
+      {/* Content */}
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+          className="w-full max-w-md"
+        >
+          {/* Logo and Title */}
+          <div className="text-center mb-8">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+              className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 rounded-apple-xl border border-white/20 flex items-center justify-center"
+            >
+              <Shield size={32} className="text-apple-blue-400" />
+            </motion.div>
+            
+            <motion.h1
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+              className="apple-h1 text-white mb-2"
+            >
+              Fenix Store
+            </motion.h1>
+            
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+              className="apple-body text-apple-gray-300"
+            >
+              Sistema de gestión integral
+            </motion.p>
           </div>
-        </div>
-      </motion.div>
 
-      {/* keyframes + helpers */}
-      <style jsx global>{`
-        .border-anim { position: relative; }
-        .border-anim::before {
-          content: '';
-          position: absolute;
-          inset: -1.5px;
-          border-radius: 1.1rem;
-          padding: 1.5px;
-          background: conic-gradient(from var(--ang,0deg),
-            #06b6d4 0%, #10b981 20%, #06b6d4 40%, #10b981 60%, #06b6d4 80%, #10b981 100%);
-          -webkit-mask:
-            linear-gradient(#000 0 0) content-box,
-            linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-                  mask-composite: exclude;
-          animation: border-rotate 8s linear infinite;
-          z-index: -1;
-        }
-        @keyframes border-rotate { to { --ang: 360deg; } }
-        .bg-white\\/6 { background-color: rgba(255,255,255,0.06); }
-        .bg-white\\/8 { background-color: rgba(255,255,255,0.08); }
-        .bg-red-500\\/12 { background-color: rgba(239,68,68,.12); }
-        .bg-emerald-500\\/12 { background-color: rgba(16,185,129,.12); }
-      `}</style>
+          {/* Login Form */}
+          <AnimatePresence mode="wait">
+            {!showChangePassword ? (
+              <motion.div
+                key="login"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="glass-card"
+              >
+                <form onSubmit={handleLogin} className="space-y-6">
+                  <div className="space-y-4">
+                    {/* Username Field */}
+                    <div className="space-y-2">
+                      <label className="block apple-caption text-apple-gray-300">
+                        Usuario
+                      </label>
+                      <div className="relative">
+                        <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-500" />
+                        <input
+                          type="text"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          className="field pl-10"
+                          placeholder="Ingresa tu usuario"
+                          disabled={loading}
+                          autoComplete="username"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password Field */}
+                    <div className="space-y-2">
+                      <label className="block apple-caption text-apple-gray-300">
+                        Contraseña
+                      </label>
+                      <div className="relative">
+                        <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-500" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="field pl-10 pr-10"
+                          placeholder="Ingresa tu contraseña"
+                          disabled={loading}
+                          autoComplete="current-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-apple-gray-500 hover:text-white transition-colors"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="space-y-4">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="btn-primary w-full"
+                    >
+                      {loading ? (
+                        <>
+                          <Spinner />
+                          Verificando acceso...
+                        </>
+                      ) : (
+                        'Iniciar Sesión'
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowChangePassword(true)}
+                      className="btn-ghost w-full"
+                      disabled={loading}
+                    >
+                      Cambiar Contraseña
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            ) : (
+              /* Change Password Form */
+              <motion.div
+                key="change-password"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="glass-card"
+              >
+                <div className="mb-6">
+                  <h2 className="apple-h3 text-white mb-2">Cambiar Contraseña</h2>
+                  <p className="apple-caption text-apple-gray-400">
+                    La contraseña debe tener al menos 8 caracteres, incluyendo letras y números.
+                  </p>
+                </div>
+
+                <form onSubmit={handleChangePassword} className="space-y-6">
+                  <div className="space-y-4">
+                    {/* Current Password */}
+                    <div className="space-y-2">
+                      <label className="block apple-caption text-apple-gray-300">
+                        Contraseña Actual
+                      </label>
+                      <input
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="field"
+                        placeholder="Contraseña actual"
+                        disabled={changingPassword}
+                      />
+                    </div>
+
+                    {/* New Password */}
+                    <div className="space-y-2">
+                      <label className="block apple-caption text-apple-gray-300">
+                        Nueva Contraseña
+                      </label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="field"
+                        placeholder="Nueva contraseña"
+                        disabled={changingPassword}
+                      />
+                    </div>
+
+                    {/* Confirm Password */}
+                    <div className="space-y-2">
+                      <label className="block apple-caption text-apple-gray-300">
+                        Confirmar Nueva Contraseña
+                      </label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="field"
+                        placeholder="Confirma la nueva contraseña"
+                        disabled={changingPassword}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowChangePassword(false)}
+                      className="btn-secondary flex-1"
+                      disabled={changingPassword}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={changingPassword}
+                      className="btn-primary flex-1"
+                    >
+                      {changingPassword ? (
+                        <>
+                          <Spinner />
+                          Cambiando...
+                        </>
+                      ) : (
+                        'Cambiar'
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Footer */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6, duration: 0.5 }}
+            className="text-center mt-8"
+          >
+            <p className="apple-caption text-apple-gray-500">
+              © 2024 Fenix Store. Todos los derechos reservados.
+            </p>
+          </motion.div>
+        </motion.div>
+      </div>
+
+      {/* Notifications */}
+      <AnimatePresence>
+        {notification && (
+          <Notification
+            type={notification.type}
+            message={notification.message}
+            onClose={clearNotification}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
