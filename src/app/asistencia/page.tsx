@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 import CameraCapture from '@/components/attendance/CameraCapture';
-import { checkIn, getQR, type CheckInPayload } from '@/lib/attendance/api';
+import { checkIn, getQR, type CheckInPayload, type CheckType } from '@/lib/attendance/api';
 import { isMobileUA } from '@/lib/device';
 import { compressDataUrl } from '@/lib/image';
 
@@ -77,8 +77,6 @@ async function getBestLocation(opts?: {
 }
 
 /* ================== TIPOS ================== */
-type CheckType = 'in' | 'out' | 'lunch_out' | 'lunch_in';
-
 type Me = {
   ok: boolean;
   id: string;
@@ -202,11 +200,14 @@ export default function AsistenciaPage() {
     }
   };
 
-  // Generar QR
+  // Generar QR (usa site_id según tu API)
   const handleGenerateQR = async () => {
-    if (!me?.id) return;
+    if (!siteId) {
+      setToast('Selecciona una sucursal antes de generar QR.');
+      return;
+    }
     try {
-      const qrData = await getQR(me.id);
+      const qrData = await getQR(siteId);
       setQr(qrData);
       setToast('Código QR generado exitosamente');
     } catch (error) {
@@ -214,27 +215,46 @@ export default function AsistenciaPage() {
     }
   };
 
+  const isLunch = checkType === 'lunch_out' || checkType === 'lunch_in';
+
   // Registrar asistencia
   const handleCheckIn = async () => {
-    if (!me || !selfie || !loc) {
-      setToast('Completa todos los pasos requeridos');
+    if (!me) {
+      setToast('No se detectó el usuario.');
+      return;
+    }
+    if (!siteId) {
+      setToast('Selecciona una sucursal.');
+      return;
+    }
+    if (!loc) {
+      setToast('Debes obtener tu ubicación.');
+      return;
+    }
+
+    // Reglas de negocio:
+    // - Para colación: selfie_base64='' y qr_code='' (según tu API)
+    // - Para entrada/salida: selfie y (si corresponde en desktop) QR opcional → se envía string
+    const needsSelfie = !isLunch;
+    if (needsSelfie && !selfie) {
+      setToast('Debes tomar una selfie.');
       return;
     }
 
     setLoading(true);
     try {
-      const compressed = await compressDataUrl(selfie, 0.8, 800);
-      
+      const compressed = needsSelfie ? await compressDataUrl(selfie!, 0.8, 800) : '';
+
       const payload: CheckInPayload = {
-        user_id: me.id,
-        check_type: checkType,
-        selfie_data_url: compressed,
+        person_id: me.id,
+        site_id: siteId,
+        type: checkType,
         lat: loc.lat,
         lng: loc.lng,
-        accuracy: loc.accuracy,
+        accuracy: loc.accuracy,       // requerido (number)
         device_id: deviceId,
-        site_id: siteId,
-        qr_code: qr?.code,
+        selfie_base64: isLunch ? '' : compressed,
+        qr_code: isLunch ? '' : (qr?.code ?? ''), // siempre string
       };
 
       await checkIn(payload);
@@ -280,14 +300,15 @@ export default function AsistenciaPage() {
     );
   }
 
-  const checkTypeLabels = {
+  const checkTypeLabels: Record<CheckType, string> = {
     in: 'Entrada',
     out: 'Salida',
     lunch_out: 'Salida a Almuerzo',
     lunch_in: 'Regreso de Almuerzo',
   };
 
-  const isComplete = selfie && loc && (isDesktop || qr);
+  // Compleción: para colación no exigimos selfie ni QR; para in/out exigimos selfie; QR se envía string (si no hay, '')
+  const isComplete = Boolean(loc && siteId && (isLunch || selfie));
 
   return (
     <div className="min-h-screen bg-black p-6">
@@ -384,11 +405,11 @@ export default function AsistenciaPage() {
               <h3 className="apple-h3 text-white">1. Tomar Selfie</h3>
               {selfie && <CheckCircle size={20} className="text-apple-green-400" />}
             </div>
-            
-            <CameraCapture
-              onCapture={setSelfie}
-              className="w-full aspect-square rounded-apple overflow-hidden"
-            />
+
+            {/* CameraCapture no acepta className: se envuelve */}
+            <div className="w-full aspect-square rounded-apple overflow-hidden">
+              <CameraCapture onCapture={setSelfie} />
+            </div>
           </motion.section>
 
           {/* Location & QR Step */}
@@ -442,45 +463,43 @@ export default function AsistenciaPage() {
               )}
             </div>
 
-            {/* QR Code (solo para desktop) */}
-            {isDesktop && (
-              <div className="glass-card">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className={`p-2 rounded-apple border ${
-                    qr 
-                      ? 'bg-apple-green-500/20 border-apple-green-500/30' 
-                      : 'bg-apple-blue-500/20 border-apple-blue-500/30'
-                  }`}>
-                    <QrCode size={18} className={qr ? 'text-apple-green-400' : 'text-apple-blue-400'} />
-                  </div>
-                  <h3 className="apple-h3 text-white">3. Código QR</h3>
-                  {qr && <CheckCircle size={20} className="text-apple-green-400" />}
+            {/* QR Code (opcional; se envía string) */}
+            <div className="glass-card">
+              <div className="flex items-center gap-3 mb-6">
+                <div className={`p-2 rounded-apple border ${
+                  qr 
+                    ? 'bg-apple-green-500/20 border-apple-green-500/30' 
+                    : 'bg-apple-blue-500/20 border-apple-blue-500/30'
+                }`}>
+                  <QrCode size={18} className={qr ? 'text-apple-green-400' : 'text-apple-blue-400'} />
                 </div>
-                
-                {qr ? (
-                  <div className="text-center">
-                    <div className="bg-white p-4 rounded-apple inline-block mb-3">
-                      <img 
-                        src={`data:image/svg+xml;base64,${btoa(qr.code)}`} 
-                        alt="QR Code" 
-                        className="w-32 h-32"
-                      />
-                    </div>
-                    <p className="apple-caption text-apple-gray-400">
-                      Expira: {new Date(qr.exp_at).toLocaleTimeString()}
-                    </p>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleGenerateQR}
-                    className="btn-primary w-full"
-                  >
-                    <QrCode size={18} />
-                    Generar Código QR
-                  </button>
-                )}
+                <h3 className="apple-h3 text-white">3. Código QR</h3>
+                {qr && <CheckCircle size={20} className="text-apple-green-400" />}
               </div>
-            )}
+              
+              {qr ? (
+                <div className="text-center">
+                  <div className="bg-white p-4 rounded-apple inline-block mb-3">
+                    <img 
+                      src={`data:image/svg+xml;base64,${btoa(qr.code)}`} 
+                      alt="QR Code" 
+                      className="w-32 h-32"
+                    />
+                  </div>
+                  <p className="apple-caption text-apple-gray-400">
+                    Expira: {new Date(qr.exp_at).toLocaleTimeString()}
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={handleGenerateQR}
+                  className="btn-primary w-full"
+                >
+                  <QrCode size={18} />
+                  Generar Código QR
+                </button>
+              )}
+            </div>
           </motion.section>
         </div>
 
@@ -511,7 +530,7 @@ export default function AsistenciaPage() {
           
           {!isComplete && (
             <p className="apple-caption text-apple-gray-400 mt-3">
-              Completa todos los pasos para continuar
+              Completa los pasos requeridos para continuar
             </p>
           )}
         </motion.section>

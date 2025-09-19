@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { motion, type HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 // tamaños base del variant
@@ -14,13 +15,20 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-apple-blue text-white hover:bg-apple-blue-hover shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
-        destructive: 'bg-destructive text-white hover:bg-destructive/90 shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
-        outline: 'border border-app-border bg-app-card text-app-foreground hover:bg-white/10 hover:border-white/15 backdrop-blur-apple',
-        secondary: 'bg-app-card border border-app-border text-app-foreground hover:bg-white/10 hover:border-white/15 backdrop-blur-apple',
-        ghost: 'text-app-foreground hover:bg-white/10 hover:backdrop-blur-apple',
-        link: 'text-apple-blue hover:text-apple-blue-hover underline-offset-4 hover:underline',
-        success: 'bg-success text-white hover:bg-success/90 shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
+        default:
+          'bg-apple-blue text-white hover:bg-apple-blue-hover shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
+        destructive:
+          'bg-destructive text-white hover:bg-destructive/90 shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
+        outline:
+          'border border-app-border bg-app-card text-app-foreground hover:bg-white/10 hover:border-white/15 backdrop-blur-apple',
+        secondary:
+          'bg-app-card border border-app-border text-app-foreground hover:bg-white/10 hover:border-white/15 backdrop-blur-apple',
+        ghost:
+          'text-app-foreground hover:bg-white/10 hover:backdrop-blur-apple',
+        link:
+          'text-apple-blue hover:text-apple-blue-hover underline-offset-4 hover:underline',
+        success:
+          'bg-success text-white hover:bg-success/90 shadow-apple-sm hover:shadow-apple hover:-translate-y-0.5',
       },
       size: {
         default: 'h-11 px-6 py-3',
@@ -36,16 +44,16 @@ const buttonVariants = cva(
   }
 );
 
-// NOTA CLAVE: omitimos 'size' de VariantProps para poder definir ExtendedSize
+// NOTA: aceptamos props de motion.button para evitar choques de tipos (onAnimationStart, transition, etc.)
 export interface ButtonProps
-  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'size'>,
+  extends Omit<HTMLMotionProps<'button'>, 'ref' | 'size'>,
     Omit<VariantProps<typeof buttonVariants>, 'size'> {
   size?: ExtendedSize;
   asChild?: boolean;
   loading?: boolean;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+const Button = React.forwardRef<HTMLButtonElement | HTMLSpanElement, ButtonProps>(
   (
     {
       className,
@@ -54,6 +62,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       asChild = false,
       loading = false,
       children,
+      disabled,
+      transition,
       ...props
     },
     ref
@@ -62,15 +72,23 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const normalizedSize: BaseSize =
       size === 'small' ? 'sm' : size === 'medium' ? 'default' : size;
 
-    // Sin Radix Slot: si asChild, renderizamos un <span> contenedor
-    // (para tu caso <Button asChild><label/></Button> funciona bien).
-    const Comp: any = asChild ? 'span' : 'button';
+    // usamos siempre componentes motion para compatibilidad de tipos
+    const Comp: any = asChild ? motion.span : motion.button;
+
+    // transition tip-safe para framer (evita "type es string")
+    const spring =
+      transition ?? ({ type: 'spring', stiffness: 400, damping: 25 } as const);
 
     return (
       <Comp
-        ref={ref}
+        ref={ref as any}
         className={cn(buttonVariants({ variant, size: normalizedSize, className }))}
-        disabled={loading || props.disabled}
+        // sólo pasamos disabled si es <button>; los <span> no aceptan disabled
+        {...(!asChild ? { disabled: loading || !!disabled } : {})}
+        // animaciones opcionales; si no las usas, no molestan
+        whileHover={!asChild && !(loading || disabled) ? { y: -1 } : undefined}
+        whileTap={!asChild && !(loading || disabled) ? { scale: 0.98 } : undefined}
+        transition={spring}
         {...props}
       >
         {loading && (
@@ -104,4 +122,3 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button';
 
 export { Button, buttonVariants };
-

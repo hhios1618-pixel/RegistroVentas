@@ -1,36 +1,45 @@
 // src/components/ui/Form.tsx
 'use client';
 
-import React from 'react';
-import { motion } from 'framer-motion';
+import * as React from 'react';
+import { motion, type HTMLMotionProps, type Transition } from 'framer-motion';
 import { cn } from '@/lib/utils/cn';
 import { AlertCircle, Check, Eye, EyeOff } from 'lucide-react';
 
 // === FORM CONTAINER ===
-const Form = React.forwardRef<
-  HTMLFormElement,
-  React.FormHTMLAttributes<HTMLFormElement> & {
-    animate?: boolean;
-  }
->(({ className, animate = true, children, ...props }, ref) => {
-  const Component = animate ? motion.form : 'form';
-  const motionProps = animate ? {
-    initial: { opacity: 0, y: 8 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.3, ease: 'easeOut' }
-  } : {};
+type FormProps = Omit<HTMLMotionProps<'form'>, 'ref' | 'children'> & {
+  animate?: boolean;
+  children?: React.ReactNode;
+};
 
-  return (
-    <Component
-      ref={ref}
-      className={cn('space-y-6', className)}
-      {...motionProps}
-      {...props}
-    >
-      {children}
-    </Component>
-  );
-});
+const Form = React.forwardRef<HTMLFormElement, FormProps>(
+  ({ className, animate = true, children, transition, ...props }, ref) => {
+    const Component: any = animate ? motion.form : 'form';
+
+    // Tip-safe: Transition con ease en cubic-bezier
+    const baseTransition: Transition =
+      transition ?? { duration: 0.3, ease: [0.17, 0.55, 0.55, 1] };
+
+    const motionProps: Partial<HTMLMotionProps<'form'>> = animate
+      ? {
+          initial: { opacity: 0, y: 8 },
+          animate: { opacity: 1, y: 0 },
+          transition: baseTransition,
+        }
+      : {};
+
+    return (
+      <Component
+        ref={ref as any}
+        className={cn('space-y-6', className)}
+        {...motionProps}
+        {...props}
+      >
+        {children}
+      </Component>
+    );
+  }
+);
 Form.displayName = 'Form';
 
 // === FORM GROUP ===
@@ -43,11 +52,7 @@ const FormGroup = React.forwardRef<
 >(({ className, error, required, children, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn(
-      'space-y-2',
-      error && 'animate-shake',
-      className
-    )}
+    className={cn('space-y-2', error && 'animate-shake', className)}
     {...props}
   >
     {children}
@@ -77,7 +82,7 @@ const Label = React.forwardRef<
     sm: 'text-apple-caption2',
     md: 'text-apple-caption1',
     lg: 'text-apple-footnote',
-  };
+  } as const;
 
   return (
     <label
@@ -124,7 +129,7 @@ const Input = React.forwardRef<
     default: 'field',
     filled: 'field bg-white/10',
     outlined: 'field border-2',
-  };
+  } as const;
 
   const statusClasses = error 
     ? 'border-apple-red-500 focus:border-apple-red-500 focus:ring-apple-red-500/30'
@@ -341,16 +346,12 @@ const FormActions = React.forwardRef<
     center: 'justify-center',
     end: 'justify-end',
     between: 'justify-between',
-  };
+  } as const;
 
   return (
     <div
       ref={ref}
-      className={cn(
-        'flex items-center gap-3 pt-6',
-        justifyClasses[justify],
-        className
-      )}
+      className={cn('flex items-center gap-3 pt-6', justifyClasses[justify], className)}
       {...props}
     >
       {children}
