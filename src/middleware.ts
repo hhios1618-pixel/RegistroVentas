@@ -1,3 +1,4 @@
+// middleware.ts
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -14,23 +15,15 @@ const PUBLIC_PREFIXES = [
   '/public',
 ];
 
-const STATIC_EXTS = new Set([
-  'png','jpg','jpeg','webp','svg','gif','ico',
-  'css','js','map','txt','woff','woff2','ttf','otf',
-  'mp4','webm',
+// ✅ IDs (people.id) autorizados para el panel financiero
+const FINANCIAL_ALLOW_IDS = new Set([
+  '32c53c5d-cf04-425c-a50d-4c016df61d7f', // Rolando Arispe (ronaldo.arispe_32c5)
+  'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d', // Hugo Hormazabal (hugo.hormazabal_c23b)
+  '07b93705-f631-4b67-b52a-f7c30bc2ba5b', // Julieta Rosas (julieta.rosas_07b9)
+  '28b63f71-babb-4ee0-8c2a-8530007735b7', // Daniela Vasquez (daniela.vasquez_28b6)
 ]);
 
-function isPublic(pathname: string) {
-  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
-}
-function isStaticAsset(pathname: string) {
-  const idx = pathname.lastIndexOf('.');
-  if (idx === -1) return false;
-  const ext = pathname.slice(idx + 1).toLowerCase();
-  return STATIC_EXTS.has(ext);
-}
-
-// ====== ALLOWLISTS (⚠️ sin "/") ======
+// Rutas permitidas por rol (regex)
 const ASESOR_ALLOW: RegExp[] = [
   /^\/dashboard\/asesores\/HOME(?:\/.*)?$/,
   /^\/dashboard\/asesores\/registro(?:\/.*)?$/,
@@ -45,58 +38,87 @@ const PROMOTOR_ALLOW: RegExp[] = [
   /^\/dashboard\/promotores\/registro(?:\/.*)?$/,
 ];
 
+// ---------- utils ----------
+function isPublic(pathname: string) {
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
+}
+
+// Edge-safe base64url decode → JSON
 function b64urlToJSON(b64url: string): any | null {
   try {
     const pad = '='.repeat((4 - (b64url.length % 4)) % 4);
     const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
-    const jsonStr = Buffer.from(b64, 'base64').toString('utf8');
+    // atob existe en runtime Edge; si no, usamos TextDecoder como fallback
+    let jsonStr: string;
+    if (typeof atob === 'function') {
+      // decodeURIComponent/escape maneja unicode correctamente
+      jsonStr = decodeURIComponent(escape(atob(b64)));
+    } else {
+      const bin = Uint8Array.from(
+        Buffer.from(b64, 'base64'),
+        (c) => c
+      );
+      jsonStr = new TextDecoder().decode(bin);
+    }
     return JSON.parse(jsonStr);
   } catch {
     return null;
   }
 }
 
-function readRoleFromCookie(req: NextRequest): string | null {
+function readPayload(req: NextRequest): any | null {
   const raw = req.cookies.get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   const parts = raw.split('.');
   if (parts.length < 2) return null;
-  const payload = b64urlToJSON(parts[1]);
+  return b64urlToJSON(parts[1]);
+}
+
+function readRoleFromCookie(req: NextRequest): string | null {
+  const payload = readPayload(req);
   const r = payload?.role ?? payload?.rol ?? payload?.r;
   return r ? String(r).toUpperCase() : null;
 }
 
+function readUserIdFromCookie(req: NextRequest): string | null {
+  const p = readPayload(req);
+  return p?.sub ? String(p.sub) : null; // sub = people.id
+}
+
+// ---------- middleware ----------
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (req.method === 'OPTIONS' || isPublic(pathname) || isStaticAsset(pathname)) {
+  // públicos / preflight
+  if (req.method === 'OPTIONS' || isPublic(pathname)) {
     return NextResponse.next();
   }
 
   const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
 
-  // Endpoints
+  // endpoints (requieren sesión)
   if (pathname.startsWith('/endpoints/')) {
     if (!hasSession) {
-      return NextResponse.json({ ok:false, error:'no_session' }, { status:401 });
+      return NextResponse.json({ ok: false, error: 'no_session' }, { status: 401 });
     }
     const res = NextResponse.next();
-    res.headers.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.headers.set('Pragma','no-cache'); res.headers.set('Expires','0');
+    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.headers.set('Pragma', 'no-cache');
+    res.headers.set('Expires', '0');
     return res;
   }
 
-  // Sin sesión → a /login
+  // sin sesión -> login
   if (!hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectTo', pathname + (req.nextUrl.search || ''));
     const res = NextResponse.redirect(url);
-    res.headers.set('Cache-Control','no-store');
+    res.headers.set('Cache-Control', 'no-store');
     return res;
   }
 
-  // Con sesión en "/" → redirige según rol (✅ evita ver landing vieja)
+  // con sesión en "/" -> redirige por rol
   if (pathname === '/') {
     const role = readRoleFromCookie(req);
     const url = req.nextUrl.clone();
@@ -105,15 +127,26 @@ export function middleware(req: NextRequest) {
     } else if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'VENDEDORA') {
       url.pathname = '/dashboard/asesores/HOME';
     } else {
-      // admin/líder/coordinador/logística: ajusta si tienes home específica
       url.pathname = '/dashboard';
     }
     const res = NextResponse.redirect(url);
-    res.headers.set('Cache-Control','no-store');
+    res.headers.set('Cache-Control', 'no-store');
     return res;
   }
 
-  // Reglas por rol en otras rutas
+  // 🔐 Gate duro por people.id para /dashboard/financial-control
+  if (pathname.startsWith('/dashboard/financial-control')) {
+    const uid = readUserIdFromCookie(req); // payload.sub
+    if (!uid || !FINANCIAL_ALLOW_IDS.has(uid)) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/dashboard';
+      const res = NextResponse.redirect(url);
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
+    }
+  }
+
+  // Reglas por rol
   const role = readRoleFromCookie(req);
 
   if (role === 'PROMOTOR' || role === 'PROMOTORA') {
@@ -123,7 +156,7 @@ export function middleware(req: NextRequest) {
       url.pathname = '/dashboard/promotores';
       url.searchParams.delete('redirectTo');
       const res = NextResponse.redirect(url);
-      res.headers.set('Cache-Control','no-store');
+      res.headers.set('Cache-Control', 'no-store');
       return res;
     }
   }
@@ -135,15 +168,16 @@ export function middleware(req: NextRequest) {
       url.pathname = '/dashboard/asesores/HOME';
       url.searchParams.delete('redirectTo');
       const res = NextResponse.redirect(url);
-      res.headers.set('Cache-Control','no-store');
+      res.headers.set('Cache-Control', 'no-store');
       return res;
     }
   }
 
-  // Admin / líder / coordinador / logística → pasa
+  // admin / líder / coordinador / logística → pasa
   const res = NextResponse.next();
-  res.headers.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.headers.set('Pragma','no-cache'); res.headers.set('Expires','0');
+  res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.headers.set('Pragma', 'no-cache');
+  res.headers.set('Expires', '0');
   return res;
 }
 

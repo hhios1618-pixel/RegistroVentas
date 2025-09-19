@@ -1,131 +1,119 @@
-import { NextResponse } from 'next/server';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { NextResponse, type NextRequest } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// --- TIPOS ---
-type SB = SupabaseClient<any, "public", any>;
-type OrderItemRow = { order_id: string; product_name: string; quantity: number; subtotal: number; image_url?: string | null; };
-type OrderRow = { id: string; order_no?: number | null; created_at?: string | null; seller?: string | null; seller_role?: string | null; sales_user_id?: string | null; sales_role?: string | null; delivery_date?: string | null; payment_proof_url?: string | null; sale_type?: string | null; is_encomienda?: boolean | null; [k: string]: any; };
-type ProfileRow = { id: string; full_name: string | null; role: string | null; telegram_username: string | null; };
+// --- Tipos ---
+type PersonData = { id: string; full_name: string | null; role: string | null; local: string | null; };
+type OrderData = { id: string; created_at: string | null; branch_id: string | null; seller: string | null; sales_user_id: string | null; is_promoter: boolean | null; seller_role: string | null; [key: string]: any; };
+type OrderItemData = { order_id: string; product_name: string; quantity: number; subtotal: number; [key: string]: any; };
 
-// --- HELPERS (Funciones de Ayuda) ---
-function sbAdmin(): SB {
+// --- Función de Normalización ---
+function normalizeName(name: string): string {
+  if (!name) return '';
+  return name.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+// --- Helper de Supabase ---
+function sbAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function clean(r?: string | null): string | null {
-  const s = (r ?? '').trim();
-  return s || null;
-}
-
-function isOpRole(r?: string | null): boolean {
-  const s = (r ?? '').trim().toLowerCase();
-  return s === 'delivery' || s === 'repartidor';
-}
-
-function detectBranchKey(sample: Record<string, any> | undefined | null): string | null {
-  if (!sample) return null;
-  const c = ['branch', 'sucursal', 'store', 'store_name', 'location', 'local'];
-  return c.find(k => Object.prototype.hasOwnProperty.call(sample, k)) ?? null;
-}
-
-// --- CAMBIO: Función mejorada para obtener todos los perfiles ---
-async function getAllUserProfiles(sb: SB): Promise<Map<string, ProfileRow>> {
-  const profiles = new Map<string, ProfileRow>();
+// --- Función de Mapeo de Personal ---
+async function getPeopleMaps(sb: ReturnType<typeof sbAdmin>) {
+  const { data, error } = await sb.from('people').select('id, full_name, role, local');
+  if (error) {
+    console.error("Error fetching people:", error);
+    return { peopleById: new Map(), peopleByName: new Map() };
+  }
   
-  const [
-    { data: peopleData, error: peopleError },
-    { data: usersProfileData, error: usersProfileError }
-  ] = await Promise.all([
-      sb.from('people').select('id, full_name, role, telegram_username'),
-      sb.from('users_profile').select('id, full_name, role, telegram_username')
-  ]);
+  const peopleById = new Map<string, PersonData>();
+  const peopleByName = new Map<string, PersonData>();
 
-  if (peopleError) console.error("Error fetching from people:", peopleError);
-  if (usersProfileError) console.error("Error fetching from users_profile:", usersProfileError);
-
-  (peopleData as ProfileRow[] | null)?.forEach(p => p.id && profiles.set(p.id, p));
-  (usersProfileData as ProfileRow[] | null)?.forEach(p => p.id && profiles.set(p.id, p)); // users_profile tiene prioridad si hay IDs duplicados
-
-  return profiles;
+  (data as PersonData[]).forEach(person => {
+    peopleById.set(person.id, person);
+    if (person.full_name) {
+      peopleByName.set(normalizeName(person.full_name), person);
+    }
+  });
+  return { peopleById, peopleByName };
 }
 
-
-// --- API ENDPOINT ---
-export async function GET() {
+// --- API ENDPOINT MAESTRO ---
+export async function GET(request: NextRequest) {
   const sb = sbAdmin();
+  const { searchParams } = request.nextUrl;
+  const channelFilter = searchParams.get('channel');
 
   try {
-    const allProfiles = await getAllUserProfiles(sb);
-    const profilesByTelegram = new Map<string, ProfileRow>();
-    const profilesByName = new Map<string, ProfileRow>();
+    const { peopleById, peopleByName } = await getPeopleMaps(sb);
 
-    for (const profile of allProfiles.values()) {
-        if (profile.telegram_username) profilesByTelegram.set(profile.telegram_username.trim(), profile);
-        if (profile.full_name) profilesByName.set(profile.full_name.trim(), profile);
-    }
+    const { data: items, error: itemsError } = await sb.from('order_items').select('*');
+    if (itemsError) throw itemsError;
 
-    const itRes = await sb.from('order_items').select('order_id, product_name, quantity, subtotal, image_url');
-    if (itRes.error) throw new Error(itRes.error.message);
-    const items = (itRes.data as OrderItemRow[]) ?? [];
-    if (!items.length) return NextResponse.json([], { status: 200 });
+    const orderIds = [...new Set(items.map(item => item.order_id))];
+    const { data: orders, error: ordersError } = await sb.from('orders').select('*').in('id', orderIds);
+    if (ordersError) throw ordersError;
 
-    const ids = Array.from(new Set(items.map(i => i.order_id)));
-    const oRes = await sb.from('orders').select('*').in('id', ids);
-    if (oRes.error) throw new Error(oRes.error.message);
-    const orders = (oRes.data as OrderRow[]) ?? [];
-    const byId = new Map<string, OrderRow>();
-    orders.forEach(o => byId.set(o.id, o));
+    const ordersMap = new Map<string, OrderData>();
+    (orders as OrderData[]).forEach(order => ordersMap.set(order.id, order));
 
-    const branchKey = detectBranchKey(orders[0]);
+    let rows = (items as OrderItemData[]).map(item => {
+      const order = ordersMap.get(item.order_id);
+      if (!order) return null;
 
-    const rows = items.map(it => {
-      const o = byId.get(it.order_id) || ({} as OrderRow);
+      let sellerProfile: PersonData | null = null;
       
-      let sellerProfile: ProfileRow | undefined | null = null;
-      const sellerText = clean(o.seller);
-
-      if (o.sales_user_id && allProfiles.has(o.sales_user_id)) {
-          sellerProfile = allProfiles.get(o.sales_user__id);
-      } else if (sellerText && profilesByTelegram.has(sellerText)) {
-          sellerProfile = profilesByTelegram.get(sellerText);
-      } else if (sellerText && profilesByName.has(sellerText)) {
-          sellerProfile = profilesByName.get(sellerText);
+      // Lógica de búsqueda priorizada
+      if (order.sales_user_id && peopleById.has(order.sales_user_id)) {
+        sellerProfile = peopleById.get(order.sales_user_id) || null;
+      } 
+      else if (order.seller) {
+        const sellerNameToSearch = normalizeName(order.seller);
+        if (peopleByName.has(sellerNameToSearch)) {
+          sellerProfile = peopleByName.get(sellerNameToSearch) || null;
+        }
       }
-      
-      if (sellerProfile && isOpRole(sellerProfile.role)) {
-          return null;
+
+      let channel = 'Tienda/Caja';
+      const effectiveRole = sellerProfile?.role || order.seller_role;
+      if (order.is_promoter === true) {
+        channel = 'Promotor';
+      } else if (effectiveRole?.toUpperCase().includes('ASESOR')) {
+        channel = 'Asesor';
       }
-      
-      const finalSellerName = sellerProfile?.full_name || sellerText;
-      const finalSellerRole = sellerProfile?.role || 'Desconocido';
-      
+
+      const finalSellerName = sellerProfile?.full_name || order.seller;
+      const finalSellerRole = effectiveRole || 'Desconocido';
+      const branch = sellerProfile?.local || order.branch_id || 'Sin Sucursal';
+
       return {
-        order_id: it.order_id,
-        order_no: o.order_no ?? null,
-        order_date: o.created_at ?? null,
-        branch: branchKey && o[branchKey] ? o[branchKey] : null,
+        product_name: item.product_name,
+        quantity: Number(item.quantity ?? 0),
+        subtotal: Number(item.subtotal ?? 0),
+        product_image_url: item.image_url ?? null,
+        order_id: item.order_id,
+        order_no: order.order_no ?? null,
+        order_date: order.created_at ?? null,
+        branch: branch,
         seller_full_name: finalSellerName,
         seller_role: finalSellerRole,
-        product_name: it.product_name,
-        quantity: Number(it.quantity ?? 0),
-        subtotal: Number(it.subtotal ?? 0),
-        delivery_date: o.delivery_date ?? null,
-        product_image_url: it.image_url ?? null,
-        payment_proof_url: o.payment_proof_url ?? null,
-        sale_type: o.sale_type ?? null,
-        order_type: o.is_encomienda === true ? 'Encomienda' : 'Pedido',
+        channel: channel,
       };
-    }).filter(Boolean);
+    }).filter((row): row is NonNullable<typeof row> => row !== null);
 
+    if (channelFilter) {
+      rows = rows.filter(row => row.channel === channelFilter);
+    }
+    
     (rows as any[]).sort((a, b) => new Date(b.order_date).getTime() - new Date(a.order_date).getTime());
-
     return NextResponse.json(rows, { status: 200 });
+
   } catch (e: any) {
+    console.error(`Error en API de sales-report: ${e.message}`);
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }
 }
