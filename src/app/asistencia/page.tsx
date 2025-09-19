@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Camera, Clock, CheckCircle, AlertCircle, 
-  Smartphone, Monitor, QrCode, User, Building,
-  Navigation, Loader2, Target, Zap, Shield,
+  Smartphone, QrCode, User, Building,
+  Navigation, Loader2, Target, Shield,
   ChevronRight, Wifi, Battery, Signal
 } from 'lucide-react';
 
@@ -76,7 +76,7 @@ type Me = {
 
 type Site = { id: string; name?: string | null };
 
-/* ================== COMPONENTES UI ================== */
+/* ================== UI BÁSICA ================== */
 const Toast: React.FC<{ message: string; onClose: () => void; type?: 'success' | 'error' | 'info' }> = ({ 
   message, onClose, type = 'info' 
 }) => {
@@ -117,8 +117,7 @@ const Toast: React.FC<{ message: string; onClose: () => void; type?: 'success' |
 };
 
 const ProgressBar: React.FC<{ progress: number; total: number }> = ({ progress, total }) => {
-  const percentage = (progress / total) * 100;
-  
+  const percentage = Math.max(0, Math.min(100, (progress / total) * 100));
   return (
     <div className="flex items-center gap-3">
       <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
@@ -196,43 +195,49 @@ const StepCard: React.FC<{
   </motion.div>
 );
 
-const CheckTypeSelector: React.FC<{
-  checkType: CheckType;
-  onCheckTypeChange: (type: CheckType) => void;
-}> = ({ checkType, onCheckTypeChange }) => {
-  const checkTypes = [
-    { key: 'in' as CheckType, label: 'Entrada', icon: '🌅', color: 'from-apple-green-500 to-apple-green-600' },
-    { key: 'out' as CheckType, label: 'Salida', icon: '🌆', color: 'from-apple-red-500 to-apple-red-600' },
-    { key: 'lunch_out' as CheckType, label: 'Salida Almuerzo', icon: '🍽️', color: 'from-apple-orange-500 to-apple-orange-600' },
-    { key: 'lunch_in' as CheckType, label: 'Regreso Almuerzo', icon: '💼', color: 'from-apple-blue-500 to-apple-blue-600' },
-  ];
+/* =========== BOTÓN/ FALLBACK DE SELFIE =========== */
+const FallbackSelfie: React.FC<{
+  onCapture: (dataUrl: string) => void;
+  disabled?: boolean;
+}> = ({ onCapture, disabled }) => {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFile = async (file?: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const raw = String(reader.result || '');
+      try {
+        // @ts-ignore
+        const small = typeof compressDataUrl === 'function' ? await compressDataUrl(raw, 720, 0.72) : raw;
+        onCapture(small);
+      } catch {
+        onCapture(raw);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {checkTypes.map((type) => (
-        <motion.button
-          key={type.key}
-          onClick={() => onCheckTypeChange(type.key)}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className={`relative p-4 rounded-apple-lg border transition-all duration-200 ${
-            checkType === type.key
-              ? 'border-white/30 bg-white/10'
-              : 'border-white/10 bg-white/5 hover:bg-white/10'
-          }`}
-        >
-          <div className="text-2xl mb-2">{type.icon}</div>
-          <div className="apple-caption1 text-white font-medium">{type.label}</div>
-          
-          {checkType === type.key && (
-            <motion.div
-              layoutId="checkTypeIndicator"
-              className="absolute inset-0 rounded-apple-lg border-2 border-apple-blue-500/50 bg-apple-blue-500/10"
-            />
-          )}
-        </motion.button>
-      ))}
-    </div>
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="hidden"
+        onChange={(e) => handleFile(e.target.files?.[0])}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => fileRef.current?.click()}
+        className={`w-full btn-primary ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+      >
+        <Camera size={18} />
+        Tomar Selfie
+      </button>
+    </>
   );
 };
 
@@ -264,12 +269,7 @@ export default function AsistenciaPage() {
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { setIsDesktop(!isMobileUA()); }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 5000);
-    return () => clearTimeout(t);
-  }, [toast]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t); }, [toast]);
 
   useEffect(() => {
     (async () => {
@@ -278,7 +278,7 @@ export default function AsistenciaPage() {
         const d: Me = await r.json();
         if (!r.ok || !d?.ok) throw new Error((d as any)?.error || 'me_failed');
         setMe(d);
-      } catch (e) {
+      } catch {
         setToast({ message: 'No se pudo cargar tu sesión', type: 'error' });
       }
     })();
@@ -313,7 +313,7 @@ export default function AsistenciaPage() {
           setSiteName(me?.local ? `${me.local} (no mapeada)` : 'No asignada');
           setToast({ message: 'Tu sucursal no está mapeada en /sites. Contacta a admin.', type: 'error' });
         }
-      } catch (e) {
+      } catch {
         setToast({ message: 'Fallo resolviendo sucursal', type: 'error' });
       } finally {
         setResolvingSite(false);
@@ -364,10 +364,29 @@ export default function AsistenciaPage() {
       </div>
     );
   }
-  
-  const canSubmit = Boolean(me?.id && siteId && selfie && loc && qr);
-  const progress = [Boolean(me?.id), Boolean(siteId), Boolean(selfie), Boolean(loc)].filter(Boolean).length;
 
+  /* ====== LÓGICA: requisitos por tipo de marcaje ====== */
+  const isLunch = checkType === 'lunch_in' || checkType === 'lunch_out';
+
+  // pasos dinámicos para progreso (visibles/obligatorios)
+  const stepsOrder = isLunch
+    ? (['me','site','qr'] as const)
+    : (['me','site','selfie','loc','qr'] as const);
+
+  const stepCompleted = {
+    me: Boolean(me?.id),
+    site: Boolean(siteId),
+    selfie: isLunch ? true : Boolean(selfie),
+    loc: isLunch ? true : Boolean(loc),
+    qr: Boolean(qr),
+  };
+
+  const progress = stepsOrder.reduce((acc, k) => acc + (stepCompleted[k] ? 1 : 0), 0);
+  const total = stepsOrder.length;
+
+  const canSubmit = stepCompleted.me && stepCompleted.site && stepCompleted.qr && (!isLunch ? (Boolean(selfie) && Boolean(loc)) : true);
+
+  /* ====== acciones ====== */
   const handleGetQR = async () => {
     if (!siteId) { 
       setToast({ message: 'No hay sucursal asignada', type: 'error' }); 
@@ -375,7 +394,8 @@ export default function AsistenciaPage() {
     }
     try {
       setLoading(true);
-      const r = await getQR(siteId);
+      // => Generar QR ligado al tipo
+      const r = await getQR(siteId, checkType, 60);
       setQr(r);
       setToast({ message: 'Código QR generado (expira en 60s)', type: 'success' });
     } catch (e: any) {
@@ -420,25 +440,30 @@ export default function AsistenciaPage() {
 
   const submit = async () => {
     if (!canSubmit) { 
-      setToast({ message: 'Completa todos los pasos y genera el QR', type: 'error' }); 
+      setToast({ message: 'Completa los pasos requeridos y genera el QR', type: 'error' }); 
       return; 
     }
     setLoading(true);
     try {
-      const payload: CheckInPayload = {
+      // Payload dinámico
+      const base: Partial<CheckInPayload> & Record<string, any> = {
         person_id: me!.id,
         site_id: siteId!,
         type: checkType,
-        lat: loc!.lat,
-        lng: loc!.lng,
-        accuracy: loc!.accuracy,
         device_id: deviceId,
-        selfie_base64: selfie!,
         qr_code: qr!.code,
       };
-      await checkIn(payload);
+
+      if (!isLunch) {
+        base.lat = loc!.lat;
+        base.lng = loc!.lng;
+        base.accuracy = loc!.accuracy;
+        base.selfie_base64 = selfie!;
+      }
+
+      await checkIn(base as CheckInPayload);
       
-      const successMessages = {
+      const successMessages: Record<CheckType, string> = {
         in: 'Marca de Entrada Exitosa',
         out: 'Marca de Salida Exitosa',
         lunch_out: '¡Buen provecho! Salida a almuerzo registrada.',
@@ -467,6 +492,7 @@ export default function AsistenciaPage() {
     }
   };
 
+  /* ================== RENDER ================== */
   return (
     <div className="min-h-screen bg-black">
       {/* Header con progreso */}
@@ -483,7 +509,9 @@ export default function AsistenciaPage() {
               </div>
               <div>
                 <h1 className="apple-h1 text-white">Control de Asistencia</h1>
-                <p className="apple-caption text-apple-gray-400">Verificación biométrica + GPS + QR</p>
+                <p className="apple-caption text-apple-gray-400">
+                  {isLunch ? 'QR + Sucursal (sin selfie ni GPS)' : 'Verificación biométrica + GPS + QR'}
+                </p>
               </div>
             </div>
             
@@ -494,7 +522,7 @@ export default function AsistenciaPage() {
             </div>
           </div>
           
-          <ProgressBar progress={progress} total={4} />
+          <ProgressBar progress={progress} total={total} />
         </div>
       </motion.header>
 
@@ -543,93 +571,146 @@ export default function AsistenciaPage() {
         >
           <div className="text-center mb-6">
             <h2 className="apple-h2 text-white mb-2">Tipo de Marcaje</h2>
-            <p className="apple-body text-apple-gray-400">Selecciona el tipo de registro que deseas realizar</p>
+            <p className="apple-body text-apple-gray-400">
+              {isLunch ? 'Almuerzo: flujo simplificado (solo QR)' : 'Selecciona el tipo de registro que deseas realizar'}
+            </p>
           </div>
           
-          <CheckTypeSelector checkType={checkType} onCheckTypeChange={setCheckType} />
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { key: 'in' as CheckType, label: 'Entrada', icon: '🌅' },
+              { key: 'out' as CheckType, label: 'Salida', icon: '🌆' },
+              { key: 'lunch_out' as CheckType, label: 'Salida Almuerzo', icon: '🍽️' },
+              { key: 'lunch_in' as CheckType, label: 'Regreso Almuerzo', icon: '💼' },
+            ].map((type) => (
+              <motion.button
+                key={type.key}
+                onClick={() => {
+                  setCheckType(type.key);
+                  if (type.key === 'lunch_in' || type.key === 'lunch_out') {
+                    setSelfie(null);
+                    setLoc(null);
+                  }
+                  setQr(null); // crítico: invalidar QR al cambiar tipo
+                }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`relative p-4 rounded-apple-lg border transition-all duration-200 ${
+                  checkType === type.key
+                    ? 'border-white/30 bg-white/10'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10'
+                }`}
+              >
+                <div className="text-2xl mb-2">{type.icon}</div>
+                <div className="apple-caption1 text-white font-medium">{type.label}</div>
+                
+                {checkType === type.key && (
+                  <motion.div
+                    layoutId="checkTypeIndicator"
+                    className="absolute inset-0 rounded-apple-lg border-2 border-apple-blue-500/50 bg-apple-blue-500/10"
+                  />
+                )}
+              </motion.button>
+            ))}
+          </div>
         </motion.section>
 
         {/* Pasos de verificación */}
         <div className="space-y-6">
-          {/* Paso 1: Selfie */}
-          <StepCard
-            stepNumber={1}
-            title="Verificación Biométrica"
-            description="Toma una selfie para verificar tu identidad"
-            icon={<Camera size={20} />}
-            completed={Boolean(selfie)}
-          >
-            <div className="w-full aspect-square rounded-apple-lg overflow-hidden">
-              <CameraCapture 
-                onCapture={async (raw) => {
-                  const small = await compressDataUrl(raw, 720, 0.72);
-                  setSelfie(small);
-                }} 
+          {/* Paso 1: Selfie (oculto para almuerzo) */}
+          {!isLunch && (
+            <StepCard
+              stepNumber={1}
+              title="Verificación Biométrica"
+              description="Toma una selfie para verificar tu identidad"
+              icon={<Camera size={20} />}
+              completed={Boolean(selfie)}
+            >
+              <div className="w-full aspect-square rounded-apple-lg overflow-hidden mb-3">
+                <CameraCapture 
+                  onCapture={async (raw: string) => {
+                    const small = await compressDataUrl(raw, 720, 0.72);
+                    setSelfie(small);
+                  }} 
+                />
+              </div>
+
+              <FallbackSelfie
+                disabled={false}
+                onCapture={(dataUrl) => setSelfie(dataUrl)}
               />
-            </div>
-          </StepCard>
 
-          {/* Paso 2: Ubicación */}
-          <StepCard
-            stepNumber={2}
-            title="Verificación de Ubicación"
-            description="Obtén tu ubicación GPS con alta precisión"
-            icon={<MapPin size={20} />}
-            completed={Boolean(loc)}
-          >
-            <div className="space-y-4">
-              {loc ? (
-                <div className="p-4 bg-apple-green-500/10 border border-apple-green-500/30 rounded-apple">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Target size={18} className="text-apple-green-400" />
-                    <span className="apple-body text-apple-green-300 font-medium">Ubicación obtenida</span>
-                  </div>
-                  <div className="space-y-2 text-apple-caption">
-                    <p className="text-white">
-                      <strong>Coordenadas:</strong> {loc.lat.toFixed(6)}, {loc.lng.toFixed(6)}
-                    </p>
-                    <p className="text-apple-gray-300">
-                      <strong>Precisión:</strong> ±{Math.round(loc.accuracy)} metros
-                    </p>
-                  </div>
+              {selfie && (
+                <div className="apple-caption text-apple-green-300">
+                  Selfie lista. Puedes continuar.
                 </div>
-              ) : (
-                <button
-                  onClick={handleGetLocation}
-                  disabled={locLoading}
-                  className="btn-primary w-full"
-                >
-                  {locLoading ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      Obteniendo ubicación GPS...
-                    </>
-                  ) : (
-                    <>
-                      <Navigation size={18} />
-                      Obtener Ubicación de Alta Precisión
-                    </>
-                  )}
-                </button>
               )}
-              
-              {loc && siteId && (
-                <button
-                  onClick={handleMeasureDistance}
-                  className="btn-secondary w-full"
-                >
-                  <Target size={18} />
-                  Medir Distancia a Sucursal
-                </button>
-              )}
-            </div>
-          </StepCard>
+            </StepCard>
+          )}
 
-          {/* Paso 3: QR Code */}
+          {/* Paso 2: Ubicación (oculto para almuerzo) */}
+          {!isLunch && (
+            <StepCard
+              stepNumber={2}
+              title="Verificación de Ubicación"
+              description="Obtén tu ubicación GPS con alta precisión"
+              icon={<MapPin size={20} />}
+              completed={Boolean(loc)}
+            >
+              <div className="space-y-4">
+                {loc ? (
+                  <div className="p-4 bg-apple-green-500/10 border border-apple-green-500/30 rounded-apple">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Target size={18} className="text-apple-green-400" />
+                      <span className="apple-body text-apple-green-300 font-medium">Ubicación obtenida</span>
+                    </div>
+                    <div className="space-y-2 text-apple-caption">
+                      <p className="text-white">
+                        <strong>Coordenadas:</strong> {loc.lat.toFixed(6)}, {loc.lng.toFixed(6)}
+                      </p>
+                      <p className="text-apple-gray-300">
+                        <strong>Precisión:</strong> ±{Math.round(loc.accuracy)} metros
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleGetLocation}
+                    disabled={locLoading}
+                    className="btn-primary w-full"
+                  >
+                    {locLoading ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        Obteniendo ubicación GPS...
+                      </>
+                    ) : (
+                      <>
+                        <Navigation size={18} />
+                        Obtener Ubicación de Alta Precisión
+                      </>
+                    )}
+                  </button>
+                )}
+                
+                {loc && siteId && (
+                  <button
+                    onClick={handleMeasureDistance}
+                    className="btn-secondary w-full"
+                  >
+                    <Target size={18} />
+                    Medir Distancia a Sucursal
+                  </button>
+                )}
+              </div>
+            </StepCard>
+          )}
+
+          {/* Paso 3: QR Code (siempre visible) */}
           <StepCard
-            stepNumber={3}
+            stepNumber={isLunch ? 1 : 3}
             title="Código de Verificación"
-            description="Genera un código QR temporal para validar el registro"
+            description={isLunch ? 'Para almuerzo, solo necesitas generar el QR' : 'Genera un código QR temporal para validar el registro'}
             icon={<QrCode size={20} />}
             completed={Boolean(qr)}
           >
@@ -671,17 +752,13 @@ export default function AsistenciaPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
+          transition={{ delay: 0.1 }}
           className="text-center pt-6"
         >
           <button
             onClick={submit}
             disabled={!canSubmit || loading}
-            className={`btn-lg w-full ${
-              canSubmit 
-                ? 'btn-success' 
-                : 'btn-disabled'
-            }`}
+            className={`btn-lg w-full ${canSubmit ? 'btn-success' : 'btn-disabled'}`}
           >
             {loading ? (
               <>
@@ -706,7 +783,9 @@ export default function AsistenciaPage() {
               animate={{ opacity: 1 }}
               className="apple-caption text-apple-gray-500 mt-3"
             >
-              Completa todos los pasos de verificación para continuar
+              {isLunch
+                ? 'Requiere: Sucursal asignada + QR válido.'
+                : 'Completa selfie, ubicación y QR para continuar.'}
             </motion.p>
           )}
         </motion.div>
