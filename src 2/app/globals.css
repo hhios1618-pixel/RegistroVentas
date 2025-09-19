@@ -1,0 +1,416 @@
+* Apple-inspired Design System for Fenix Store */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== VARIABLES GLOBALES ===== */
+:root {
+  /* Fondo principal */
+  --app-bg: #000000;
+  
+  /* Colores del sistema */
+  --app-foreground: #ffffff;
+  --app-muted: #6b7280;
+  --app-border: rgba(255, 255, 255, 0.1);
+  --app-card: rgba(0, 0, 0, 0.6);
+  --app-card-hover: rgba(0, 0, 0, 0.8);
+  
+  /* Efectos de cristal */
+  --glass-bg: rgba(0, 0, 0, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+  
+  /* Gradientes Apple */
+  --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  --gradient-success: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  --gradient-warning: linear-gradient(135deg, #f97316 0%, #c2410c 100%);
+  --gradient-danger: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  
+  /* Sombras contextuales */
+  --shadow-primary: 0 4px 14px rgba(59, 130, 246, 0.25);
+  --shadow-success: 0 4px 14px rgba(34, 197, 94, 0.25);
+  --shadow-warning: 0 4px 14px rgba(249, 115, 22, 0.25);
+  --shadow-danger: 0 4px 14px rgba(239, 68, 68, 0.25);
+}
+
+/* ===== BASE STYLES ===== */
+html {
+  height: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  height: 100%;
+  background: var(--app-bg);
+  color: var(--app-foreground);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+}
+
+/* ===== SCROLLBAR PERSONALIZADO ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ===== COMPONENTES BASE ===== */
+@layer components {
+  /* === CONTENEDORES === */
+  .apple-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .apple-section {
+    @apply mb-8;
+  }
+  
+  /* === EFECTOS DE CRISTAL === */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+  
+  .glass-panel {
+    @apply glass rounded-apple;
+  }
+  
+  .glass-card {
+    @apply glass rounded-apple p-apple shadow-apple;
+  }
+  
+  /* === TARJETAS === */
+  .card {
+    @apply glass-card;
+  }
+  
+  .card-compact {
+    @apply glass rounded-apple p-apple-sm shadow-apple-sm;
+  }
+  
+  .card-hover {
+    @apply card transition-all duration-300 ease-apple hover:shadow-apple-lg hover:scale-[1.02] hover:-translate-y-1;
+  }
+  
+  /* === TIPOGRAFÃA === */
+  .apple-h1 {
+    @apply text-apple-h1 font-semibold tracking-apple-tight text-white;
+  }
+  
+  .apple-h2 {
+    @apply text-apple-h2 font-semibold tracking-apple-normal text-white;
+  }
+  
+  .apple-h3 {
+    @apply text-apple-h3 font-medium tracking-apple-normal text-white;
+  }
+  
+  .apple-body {
+    @apply text-apple-body text-white;
+  }
+  
+  .apple-caption {
+    @apply text-apple-caption1 text-app-muted;
+  }
+  
+  .apple-muted {
+    color: var(--app-muted);
+  }
+  
+  /* === BOTONES === */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-apple text-apple-body font-medium transition-all duration-200 ease-apple select-none focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply btn bg-apple-blue-600 text-white hover:bg-apple-blue-700 focus:ring-apple-blue-500 shadow-apple-sm hover:shadow-primary active:scale-95;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-white/10 text-white border border-white/20 hover:bg-white/15 hover:border-white/30 focus:ring-white/50 shadow-apple-sm;
+  }
+  
+  .btn-success {
+    @apply btn bg-apple-green-600 text-white hover:bg-apple-green-700 focus:ring-apple-green-500 shadow-apple-sm hover:shadow-success active:scale-95;
+  }
+  
+  .btn-warning {
+    @apply btn bg-apple-orange-600 text-white hover:bg-apple-orange-700 focus:ring-apple-orange-500 shadow-apple-sm hover:shadow-warning active:scale-95;
+  }
+  
+  .btn-danger {
+    @apply btn bg-apple-red-600 text-white hover:bg-apple-red-700 focus:ring-apple-red-500 shadow-apple-sm hover:shadow-danger active:scale-95;
+  }
+  
+  .btn-ghost {
+    @apply btn bg-transparent text-white hover:bg-white/10 focus:ring-white/50;
+  }
+  
+  .btn-sm {
+    @apply px-3 py-1.5 text-apple-footnote;
+  }
+  
+  .btn-lg {
+    @apply px-6 py-3 text-apple-callout;
+  }
+  
+  /* === CAMPOS DE ENTRADA === */
+  .field {
+    @apply w-full px-3 py-2 bg-white/5 border border-white/20 rounded-apple text-apple-body text-white placeholder-app-muted transition-all duration-200 ease-apple focus:outline-none focus:ring-2 focus:ring-apple-blue-500 focus:border-apple-blue-500 focus:bg-white/10;
+  }
+  
+  .field-sm {
+    @apply field px-2.5 py-1.5 text-apple-footnote;
+  }
+  
+  .field-lg {
+    @apply field px-4 py-3 text-apple-callout;
+  }
+  
+  /* === BADGES === */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-apple-caption2 font-medium;
+  }
+  
+  .badge-primary {
+    @apply badge bg-apple-blue-600/20 text-apple-blue-300 border border-apple-blue-500/30;
+  }
+  
+  .badge-success {
+    @apply badge bg-apple-green-600/20 text-apple-green-300 border border-apple-green-500/30;
+  }
+  
+  .badge-warning {
+    @apply badge bg-apple-orange-600/20 text-apple-orange-300 border border-apple-orange-500/30;
+  }
+  
+  .badge-danger {
+    @apply badge bg-apple-red-600/20 text-apple-red-300 border border-apple-red-500/30;
+  }
+  
+  .badge-neutral {
+    @apply badge bg-white/10 text-white border border-white/20;
+  }
+  
+  /* === TABLAS === */
+  .table-apple {
+    @apply w-full text-apple-body;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  
+  .table-apple thead th {
+    @apply px-4 py-3 text-left text-apple-caption1 font-semibold text-app-muted uppercase tracking-wider border-b border-white/10 bg-white/5;
+  }
+  
+  .table-apple tbody tr {
+    @apply border-b border-white/5 hover:bg-white/5 transition-colors duration-200;
+  }
+  
+  .table-apple tbody td {
+    @apply px-4 py-3 text-white;
+  }
+  
+  /* === NAVEGACIÃ“N === */
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-apple text-apple-body font-medium transition-all duration-200 ease-apple;
+  }
+  
+  .nav-link-active {
+    @apply nav-link bg-apple-blue-600/20 text-apple-blue-300 border border-apple-blue-500/30;
+  }
+  
+  .nav-link-inactive {
+    @apply nav-link text-app-muted hover:text-white hover:bg-white/10;
+  }
+  
+  /* === ALERTAS === */
+  .alert {
+    @apply p-4 rounded-apple border;
+  }
+  
+  .alert-info {
+    @apply alert bg-apple-blue-600/10 border-apple-blue-500/30 text-apple-blue-300;
+  }
+  
+  .alert-success {
+    @apply alert bg-apple-green-600/10 border-apple-green-500/30 text-apple-green-300;
+  }
+  
+  .alert-warning {
+    @apply alert bg-apple-orange-600/10 border-apple-orange-500/30 text-apple-orange-300;
+  }
+  
+  .alert-danger {
+    @apply alert bg-apple-red-600/10 border-apple-red-500/30 text-apple-red-300;
+  }
+  
+  /* === DIVISORES === */
+  .divider {
+    @apply border-t border-white/10;
+  }
+  
+  .divider-vertical {
+    @apply border-l border-white/10;
+  }
+  
+  /* === ANIMACIONES === */
+  .animate-apple-fade-in {
+    animation: appleFadeIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  
+  .animate-apple-slide-up {
+    animation: appleSlideUp 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  
+  .animate-apple-scale {
+    animation: appleScale 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  
+  /* === UTILIDADES === */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .backdrop-blur-apple {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  
+  .backdrop-blur-apple-sm {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  
+  .backdrop-blur-apple-lg {
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+  }
+}
+
+/* ===== KEYFRAMES ===== */
+@keyframes appleFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes appleSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes appleScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ===== LEAFLET OVERRIDES ===== */
+@import "leaflet/dist/leaflet.css";
+
+.leaflet-container {
+  background: #111;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.leaflet-container img,
+.leaflet-container .leaflet-tile {
+  max-width: none !important;
+  image-rendering: auto;
+  filter: none;
+}
+
+.leaflet-container .leaflet-tile {
+  width: 256px !important;
+  height: 256px !important;
+}
+
+/* ===== DESARROLLO - OCULTAR OVERLAYS ===== */
+#nextjs-devtools,
+#nextjs-portal,
+#nextjs-toast,
+[data-nextjs-overlay],
+[data-nextjs-toast],
+[data-nextjs-devtools] {
+  pointer-events: none !important;
+  z-index: 0 !important;
+  display: none !important;
+}
+
+/* ===== RESPONSIVE UTILITIES ===== */
+@media (max-width: 640px) {
+  .apple-container {
+    @apply px-4;
+  }
+  
+  .card {
+    @apply p-4;
+  }
+  
+  .apple-h1 {
+    @apply text-apple-title1;
+  }
+  
+  .apple-h2 {
+    @apply text-apple-title3;
+  }
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  .glass,
+  .glass-panel,
+  .glass-card,
+  .card {
+    background: white !important;
+    color: black !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+  
+  .btn {
+    border: 1px solid #e5e7eb !important;
+    background: white !important;
+    color: black !important;
+  }
+}
