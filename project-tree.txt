@@ -1,4 +1,5 @@
 .
+├── README.md
 ├── bulk-password-generator.js
 ├── eslint.config.mjs
 ├── next-env.d.ts
@@ -11,37 +12,169 @@
 ├── provisioned-users.csv
 ├── public
 │   ├── 1.mp4
+│   ├── 1.png
 │   ├── file.svg
 │   ├── globe.svg
 │   ├── next.svg
 │   ├── vercel.svg
 │   └── window.svg
-├── README.md
 ├── scripts
 │   ├── force-sync-all.js
 │   ├── provision-all.js
 │   └── sql
 │       └── 2025-09-10_sites_seed.sql
 ├── src
+│   ├── APPLE_REDESIGN.md
 │   ├── app
 │   │   ├── (auth)
+│   │   │   └── login
+│   │   │       ├── LoginClient.tsx
+│   │   │       └── page.tsx
 │   │   ├── asistencia
+│   │   │   └── page.tsx
 │   │   ├── auth
+│   │   │   └── callback
+│   │   │       └── route.ts
 │   │   ├── dashboard
+│   │   │   ├── admin
+│   │   │   │   └── resumen
+│   │   │   │       └── page.tsx
+│   │   │   ├── asesores
+│   │   │   │   ├── HOME
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── devoluciones
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── playbook-whatsapp
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── registro
+│   │   │   │       └── page.tsx
+│   │   │   ├── coordinadores
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── promotores
+│   │   │   │   ├── admin
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── registro
+│   │   │   │       └── page.tsx
+│   │   │   ├── sales-report
+│   │   │   │   └── page.tsx
+│   │   │   └── vendedores
+│   │   │       └── page.tsx
 │   │   ├── delivery
+│   │   │   └── page.tsx
 │   │   ├── endpoints
+│   │   │   ├── admin
+│   │   │   │   ├── provision
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── route.ts
+│   │   │   │   └── set-initial-passwords
+│   │   │   ├── attendance
+│   │   │   │   ├── route.ts
+│   │   │   │   └── summary
+│   │   │   │       └── route.ts
+│   │   │   ├── auth
+│   │   │   │   ├── auth
+│   │   │   │   │   ├── change-password
+│   │   │   │   │   │   └── route.ts
+│   │   │   │   │   └── refresh-role
+│   │   │   │   │       └── route.ts
+│   │   │   │   ├── basic-login
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── change-password
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── force-sync
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── link-user
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── logout
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── resolve-email
+│   │   │   │       └── route.ts
+│   │   │   ├── catalog
+│   │   │   │   └── route.ts
+│   │   │   ├── debug
+│   │   │   │   └── distance
+│   │   │   │       └── route.ts
+│   │   │   ├── debug-env
+│   │   │   │   └── route.ts
+│   │   │   ├── geocode
+│   │   │   │   └── route.ts
+│   │   │   ├── login
+│   │   │   │   └── route.ts
+│   │   │   ├── me
+│   │   │   │   └── route.ts
+│   │   │   ├── my
+│   │   │   │   ├── attendance
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── promoter-sales
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── sales
+│   │   │   │       └── route.ts
+│   │   │   ├── ops
+│   │   │   │   ├── traffic
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── weather
+│   │   │   │       └── route.ts
+│   │   │   ├── orders
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── assign
+│   │   │   │   │       └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── people
+│   │   │   │   └── route.ts
+│   │   │   ├── products
+│   │   │   │   ├── interpret
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── route.ts
+│   │   │   │   └── search
+│   │   │   │       └── route.ts
+│   │   │   ├── promoters
+│   │   │   │   ├── list
+│   │   │   │   │   └── route.ts
+│   │   │   │   ├── sales
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── summary
+│   │   │   │       └── route.ts
+│   │   │   ├── returns-report
+│   │   │   │   └── route.ts
+│   │   │   ├── sales-report
+│   │   │   │   └── route.ts
+│   │   │   ├── selfie-url
+│   │   │   │   └── route.ts
+│   │   │   ├── sites
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── stats
+│   │   │   │   └── today-returns
+│   │   │   │       └── route.ts
+│   │   │   ├── usd-rate
+│   │   │   │   └── route.ts
+│   │   │   ├── users
+│   │   │   │   ├── [id]
+│   │   │   │   │   └── route.ts
+│   │   │   │   └── route.ts
+│   │   │   └── vendedores
+│   │   │       └── reporte
+│   │   │           └── route.ts
 │   │   ├── favicon.ico
 │   │   ├── globals.css
 │   │   ├── layout.tsx
 │   │   ├── logistica
+│   │   │   └── page.tsx
 │   │   ├── mi
+│   │   │   └── resumen
+│   │   │       └── page.tsx
 │   │   ├── page.tsx
 │   │   ├── post-login
+│   │   │   └── page.tsx
 │   │   └── returns-dashboard
+│   │       └── page.tsx
 │   ├── components
 │   │   ├── AddressSearch.tsx
-│   │   ├── attendance
-│   │   ├── badge.tsx
 │   │   ├── Button.tsx
 │   │   ├── Card.tsx
 │   │   ├── Checkbox.tsx
@@ -50,33 +183,52 @@
 │   │   ├── DeliveryDetailsModal.tsx
 │   │   ├── DevOverlayKiller.tsx
 │   │   ├── EfficiencyChart.tsx
-│   │   ├── forms
 │   │   ├── Input.tsx
-│   │   ├── label.tsx
 │   │   ├── LoadingSpinner.tsx
 │   │   ├── LogoutButton.tsx
 │   │   ├── MapOverviewModal.tsx
 │   │   ├── MapOverviewModalClient.tsx
 │   │   ├── MapPicker.tsx
-│   │   ├── nav
 │   │   ├── NavCard.tsx
 │   │   ├── OrderCard.tsx
 │   │   ├── OrderDetailsModal.tsx
-│   │   ├── OrdersChart.tsx
 │   │   ├── OrderTable.tsx
-│   │   ├── select.tsx
-│   │   ├── separator.tsx
+│   │   ├── OrdersChart.tsx
 │   │   ├── SettlementTable.tsx
 │   │   ├── StatusBadge.tsx
 │   │   ├── StockManager.tsx
-│   │   ├── switch.tsx
 │   │   ├── Textarea.tsx
+│   │   ├── attendance
+│   │   │   ├── CameraCapture.tsx
+│   │   │   ├── LocationButton.tsx
+│   │   │   ├── PersonCombo.tsx
+│   │   │   ├── PersonSelect.tsx
+│   │   │   ├── SelfieClip.tsx
+│   │   │   └── SiteSelect.tsx
+│   │   ├── badge.tsx
+│   │   ├── forms
+│   │   │   └── SalesRegistryForm.tsx
+│   │   ├── label.tsx
+│   │   ├── nav
+│   │   │   ├── Sidebar.tsx
+│   │   │   └── roles.ts
+│   │   ├── select.tsx
+│   │   ├── separator.tsx
+│   │   ├── switch.tsx
+│   │   ├── ui
+│   │   │   ├── Button.tsx
+│   │   │   ├── Form.tsx
+│   │   │   └── Modal.tsx
 │   │   └── widgets
+│   │       ├── TrafficPanel.tsx
+│   │       └── WeatherStrip.tsx
 │   ├── hooks
 │   │   └── useLogisticsData.ts
 │   ├── lib
 │   │   ├── attendance
+│   │   │   └── api.ts
 │   │   ├── auth
+│   │   │   └── roles.ts
 │   │   ├── catalog.ts
 │   │   ├── device.ts
 │   │   ├── geo.ts
@@ -91,16 +243,22 @@
 │   │   ├── supabaseServer.ts
 │   │   ├── types.ts
 │   │   ├── utils
+│   │   │   └── cn.ts
 │   │   └── utils.ts
-│   └── middleware.ts
+│   ├── middleware.ts
+│   └── tailwind.config.js
+├── src.zip
 ├── supabase
 │   └── functions
 │       ├── checkin
+│       │   └── index.ts
 │       ├── deno.json
 │       ├── process-campaign-name
+│       │   └── index.ts
 │       └── qr
+│           └── index.ts
 ├── tailwind.config.ts
 ├── tsconfig.json
 └── tsconfig.tsbuildinfo
 
-31 directories, 73 files
+100 directories, 162 files

@@ -1,17 +1,28 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ComposedChart
+  BarChart, Bar,
+  CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
-  Activity, Download, Filter, Search, DollarSign, ShoppingCart,
-  Target, Award, Building, Users, ChevronUp, ChevronDown, ChevronsUpDown
+  Download, Filter, Search, DollarSign, ShoppingCart,
+  Building, Users, ChevronUp, ChevronDown, ChevronsUpDown,
+  Crown, Award, Star, Zap, Target
 } from 'lucide-react';
+import * as XLSX from 'xlsx'; // <--- LÍNEA AÑADIDA
 
-// ---------------- TIPOS ----------------
+// === TIPOS ===
+// Tipo de dato que RECIBIMOS del API (lista de ventas individuales)
+interface SaleRecord {
+  seller_full_name: string | null;
+  branch: string | null;
+  subtotal: number;
+  order_id: string;
+}
+
+// Tipo de dato que CALCULAMOS y USAMOS para renderizar la UI
 interface SellerSummary {
   seller_name: string;
   branch: string;
@@ -20,584 +31,572 @@ interface SellerSummary {
   ad_spend: number;
   roas: number | null;
 }
+
 type SortKey = keyof Omit<SellerSummary, 'seller_name' | 'branch'>;
 
-// ---------------- PALETA ----------------
-const COLORS = {
-  primary: '#3B82F6',
-  secondary: '#10B981',
-  accent: '#F59E0B',
-  warning: '#EF4444',
-  gradients: {
-    blue: 'from-blue-500/20 to-cyan-500/20',
-    green: 'from-green-500/20 to-emerald-500/20',
-    orange: 'from-orange-500/20 to-yellow-500/20',
-    purple: 'from-purple-500/20 to-pink-500/20'
-  }
+// === COLORES APPLE ===
+const APPLE_COLORS = {
+  blue: '#3b82f6',
+  green: '#22c55e',
+  orange: '#f97316',
+  purple: '#8b5cf6',
+  red: '#ef4444',
+  teal: '#14b8a6',
 };
 
-// ---------------- UI: StatCard ----------------
+// === COMPONENTES UI (INTACTOS) ===
 const StatCard: React.FC<{
-  title: string; value: string | number; icon: React.ReactNode;
-  gradient: string; border: string; subtitle?: string; trend?: number;
-}> = ({ title, value, icon, gradient, border, subtitle, trend }) => (
-  <motion.div
-    className="relative overflow-hidden"
-    whileHover={{ scale: 1.02, y: -4 }}
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5, ease: 'easeOut' }}
-  >
-    <div className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-lg`}></div>
-    <div className={`relative backdrop-blur-xl bg-white/5 border ${border} rounded-lg p-6 shadow-2xl`}>
+  title: string; 
+  value: string | number; 
+  icon: React.ReactNode;
+  color: 'blue' | 'green' | 'orange' | 'purple';
+  subtitle?: string; 
+  trend?: number;
+}> = ({ title, value, icon, color, subtitle, trend }) => {
+  const colorClasses = {
+    blue: 'from-apple-blue-500/20 to-apple-blue-600/10 border-apple-blue-500/30',
+    green: 'from-apple-green-500/20 to-apple-green-600/10 border-apple-green-500/30',
+    orange: 'from-apple-orange-500/20 to-apple-orange-600/10 border-apple-orange-500/30',
+    purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/30',
+  };
+
+  const iconColors = {
+    blue: 'text-apple-blue-400',
+    green: 'text-apple-green-400',
+    orange: 'text-apple-orange-400',
+    purple: 'text-purple-400',
+  };
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02, y: -4 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      className="glass-card hover:shadow-apple-lg transition-all duration-300"
+    >
       <div className="flex items-start justify-between mb-4">
-        <div className="p-3 bg-white/10 backdrop-blur-sm rounded-xl border border-white/20">
-          <div className="text-white text-2xl">{icon}</div>
+        <div className={`p-3 bg-gradient-to-br ${colorClasses[color]} rounded-apple border`}>
+          <div className={`${iconColors[color]} text-xl`}>{icon}</div>
         </div>
         {typeof trend === 'number' && (
-          <div className={`px-2 py-1 rounded-full text-xs font-semibold backdrop-blur-sm border
-            ${trend >= 0 ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-red-500/20 text-red-300 border-red-500/30'}`}>
-            {trend >= 0 ? '+' : ''}{trend.toFixed(1)}%
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-apple-caption2 font-semibold ${
+            trend >= 0 
+              ? 'bg-apple-green-500/20 text-apple-green-300 border border-apple-green-500/30' 
+              : 'bg-apple-red-500/20 text-apple-red-300 border border-apple-red-500/30'
+          }`}>
+            {trend >= 0 ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            <span>{Math.abs(trend).toFixed(1)}%</span>
           </div>
         )}
       </div>
-      <p className="text-white/70 text-sm font-medium">{title}</p>
-      <p className="text-white text-3xl font-bold tracking-tight">{value}</p>
-      {subtitle && <p className="text-white/60 text-xs mt-1">{subtitle}</p>}
-    </div>
-  </motion.div>
-);
+      
+      <div className="space-y-2">
+        <p className="apple-caption text-apple-gray-400">{title}</p>
+        <p className="apple-h2 text-white">{value}</p>
+        {subtitle && <p className="apple-caption text-apple-gray-500">{subtitle}</p>}
+      </div>
+    </motion.div>
+  );
+};
 
-// ---------------- UI: ChartContainer ----------------
-const ChartContainer: React.FC<{ title: string; children: React.ReactNode; className?: string; fixedHeight?: boolean; }> =
-({ title, children, className = '', fixedHeight = true }) => (
+const ChartContainer: React.FC<{ 
+  title: string; 
+  children: React.ReactNode; 
+  className?: string; 
+  icon?: React.ReactNode;
+}> = ({ title, children, className = '', icon }) => (
   <motion.div
-    className={`relative ${className}`}
+    className={`glass-card ${className}`}
     initial={{ opacity: 0, y: 30 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.6, ease: 'easeOut' }}
   >
-    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
-    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-white/10">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-          <Activity size={20} className="text-blue-400" />
-          {title}
-        </h3>
-      </div>
-      <div className="p-6">
-        <div className={`w-full ${fixedHeight ? 'h-[400px]' : ''}`}>
-          {children}
+    <div className="flex items-center gap-3 mb-6">
+      {icon && (
+        <div className="p-2 bg-apple-blue-500/20 border border-apple-blue-500/30 rounded-apple">
+          {icon}
         </div>
-      </div>
+      )}
+      <h3 className="apple-h3 text-white">{title}</h3>
+    </div>
+    
+    <div className="w-full h-[400px]">
+      {children}
     </div>
   </motion.div>
 );
 
-// ---------------- UI: Filtros ----------------
 const FiltersBar: React.FC<{
   branches: string[];
   selectedBranch: string;
-  onBranchChange: (b: string) => void;
+  onBranchChange: (branch: string) => void;
   searchTerm: string;
-  onSearch: (s: string) => void;
-  onClear: () => void;
-}> = ({ branches, selectedBranch, onBranchChange, searchTerm, onSearch, onClear }) => (
+  onSearchChange: (term: string) => void;
+  onExport: () => void;
+}> = ({ branches, selectedBranch, onBranchChange, searchTerm, onSearchChange, onExport }) => (
   <motion.div
-    className="relative mb-8"
+    className="glass-card mb-8"
     initial={{ opacity: 0, y: -20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5 }}
   >
-    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
-    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg p-6 shadow-2xl">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Filter className="text-blue-400" size={24} />
-          <h2 className="text-xl font-bold text-white">Filtros</h2>
+    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-apple-blue-500/20 border border-apple-blue-500/30 rounded-apple">
+          <Filter size={18} className="text-apple-blue-400" />
         </div>
-        <button
-          onClick={onClear}
-          className="px-4 py-2 text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors backdrop-blur-sm border border-white/20"
-        >
-          Limpiar
-        </button>
+        <h2 className="apple-h3 text-white">Filtros y Búsqueda</h2>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold text-white/70">Sucursal</label>
-          <select
-            value={selectedBranch}
-            onChange={(e) => onBranchChange(e.target.value)}
-            className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all"
-          >
-            <option value="" className="bg-black">Todas</option>
-            {branches.map(b => <option className="bg-black" key={b} value={b}>{b}</option>)}
-          </select>
+      
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative">
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-500" />
+          <input
+            type="text"
+            placeholder="Buscar vendedor..."
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="field pl-10 min-w-64"
+          />
         </div>
-        <div className="space-y-2 md:col-span-2">
-          <label className="block text-sm font-semibold text-white/70">Buscar Asesor/Promotor</label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
-            <input
-              type="text"
-              placeholder="Escribe un nombre…"
-              value={searchTerm}
-              onChange={(e) => onSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all"
-            />
-          </div>
-        </div>
+        
+        <select
+          value={selectedBranch}
+          onChange={(e) => onBranchChange(e.target.value)}
+          className="field min-w-48"
+        >
+          <option value="">Todas las sucursales</option>
+          {branches.map(branch => (
+            <option key={branch} value={branch}>{branch}</option>
+          ))}
+        </select>
+        
+        <button onClick={onExport} className="btn-primary">
+          <Download size={18} />
+          Exportar
+        </button>
       </div>
     </div>
   </motion.div>
 );
 
-// ---------------- Tabla Ordenable (dark) ----------------
-const SellerSortableTable: React.FC<{ sellers: SellerSummary[] }> = ({ sellers }) => {
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>({
-    key: 'total_sales', direction: 'desc'
-  });
-
-  const sortedSellers = useMemo(() => {
-    const data = [...sellers];
-    if (sortConfig) {
-      data.sort((a, b) => {
-        const aValue = (a[sortConfig.key] ?? -1) as number;
-        const bValue = (b[sortConfig.key] ?? -1) as number;
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return data;
-  }, [sellers, sortConfig]);
-
-  const requestSort = (key: SortKey) => {
-    let direction: 'asc' | 'desc' = 'desc';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'desc') direction = 'asc';
-    setSortConfig({ key, direction });
+const SellersTable: React.FC<{
+  sellers: SellerSummary[];
+  sortKey: SortKey | null;
+  sortDirection: 'asc' | 'desc';
+  onSort: (key: SortKey) => void;
+}> = ({ sellers, sortKey, sortDirection, onSort }) => {
+  const getSortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <ChevronsUpDown size={14} className="text-apple-gray-500" />;
+    return sortDirection === 'asc' 
+      ? <ChevronUp size={14} className="text-apple-blue-400" />
+      : <ChevronDown size={14} className="text-apple-blue-400" />;
   };
 
-  const SortIcon = ({ k }: { k: SortKey }) => {
-    if (!sortConfig || sortConfig.key !== k) return <ChevronsUpDown className="w-4 h-4 text-white/40 ml-2" />;
-    return sortConfig.direction === 'desc'
-      ? <ChevronDown className="w-4 h-4 text-blue-300 ml-2" />
-      : <ChevronUp className="w-4 h-4 text-blue-300 ml-2" />;
+  const getRankIcon = (index: number) => {
+    if (index === 0) return <Crown size={16} className="text-yellow-400" />;
+    if (index === 1) return <Star size={16} className="text-gray-300" />;
+    if (index === 2) return <Award size={16} className="text-orange-400" />;
+    return <span className="w-6 text-center text-apple-gray-500 font-medium">{index + 1}</span>;
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full">
-        <thead className="bg-white/5">
-          <tr className="border-b border-white/10">
-            <th className="px-6 py-3 text-left text-xs font-bold text-white/70 uppercase">Asesor/Promotor</th>
-            <th className="px-6 py-3 text-left text-xs font-bold text-white/70 uppercase">
-              <button onClick={() => requestSort('orders_count')} className="flex items-center">Pedidos <SortIcon k="orders_count" /></button>
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-bold text-white/70 uppercase">
-              <button onClick={() => requestSort('total_sales')} className="flex items-center">Ventas Totales <SortIcon k="total_sales" /></button>
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-bold text-white/70 uppercase">
-              <button onClick={() => requestSort('ad_spend')} className="flex items-center">Gasto Ads <SortIcon k="ad_spend" /></button>
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-bold text-white/70 uppercase">
-              <button onClick={() => requestSort('roas')} className="flex items-center">ROAS <SortIcon k="roas" /></button>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-white/5">
-          {sortedSellers.map((seller) => (
-            <tr key={`${seller.seller_name}-${seller.branch}`} className="hover:bg-white/5 transition-colors">
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-semibold text-white">{seller.seller_name}</div>
-                <div className="text-xs text-white/60">{seller.branch || 'Sin Sucursal'}</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-white/80">{seller.orders_count}</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-bold text-blue-300">Bs {seller.total_sales.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-medium text-rose-300">Bs {seller.ad_spend.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full backdrop-blur-sm border
-                  ${seller.roas === null ? 'bg-white/10 text-white/80 border-white/20'
-                    : seller.roas >= 3 ? 'bg-green-500/20 text-green-300 border-green-500/30'
-                    : seller.roas >= 1 ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
-                    : 'bg-red-500/20 text-red-300 border-red-500/30'}`}>
-                  {seller.roas !== null ? `${seller.roas.toFixed(2)}x` : 'N/A'}
-                </span>
-              </td>
+    <motion.div
+      className="glass-card"
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, delay: 0.2 }}
+    >
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2 bg-apple-green-500/20 border border-apple-green-500/30 rounded-apple">
+          <Users size={18} className="text-apple-green-400" />
+        </div>
+        <h3 className="apple-h3 text-white">Ranking de Vendedores</h3>
+        <div className="badge badge-primary">{sellers.length}</div>
+      </div>
+      
+      <div className="overflow-x-auto">
+        <table className="table-apple">
+          <thead>
+            <tr>
+              <th className="w-16">Rank</th>
+              <th>Vendedor</th>
+              <th>Sucursal</th>
+              <th 
+                className="cursor-pointer hover:bg-white/5 transition-colors"
+                onClick={() => onSort('total_sales')}
+              >
+                <div className="flex items-center gap-2">Ventas Totales{getSortIcon('total_sales')}</div>
+              </th>
+              <th 
+                className="cursor-pointer hover:bg-white/5 transition-colors"
+                onClick={() => onSort('orders_count')}
+              >
+                <div className="flex items-center gap-2">Órdenes{getSortIcon('orders_count')}</div>
+              </th>
+              <th 
+                className="cursor-pointer hover:bg-white/5 transition-colors"
+                onClick={() => onSort('ad_spend')}
+              >
+                <div className="flex items-center gap-2">Inversión Pub.{getSortIcon('ad_spend')}</div>
+              </th>
+              <th 
+                className="cursor-pointer hover:bg-white/5 transition-colors"
+                onClick={() => onSort('roas')}
+              >
+                <div className="flex items-center gap-2">ROAS{getSortIcon('roas')}</div>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {sellers.map((seller, index) => (
+              <motion.tr
+                key={seller.seller_name}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+                className="hover:bg-white/5 transition-colors"
+              >
+                <td><div className="flex items-center justify-center">{getRankIcon(index)}</div></td>
+                <td><div className="font-medium text-white">{seller.seller_name}</div></td>
+                <td>
+                  <div className="flex items-center gap-2">
+                    <Building size={14} className="text-apple-gray-500" />
+                    <span className="text-apple-gray-300">{seller.branch}</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="font-semibold text-apple-green-400">
+                    Bs {seller.total_sales.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  </div>
+                </td>
+                <td>
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart size={14} className="text-apple-blue-400" />
+                    <span className="font-medium text-white">{seller.orders_count}</span>
+                  </div>
+                </td>
+                <td>
+                  <div className="text-apple-orange-400 font-medium">
+                    Bs {seller.ad_spend.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
+                  </div>
+                </td>
+                <td>
+                  <div className={`font-bold ${
+                    seller.roas === null ? 'text-apple-gray-500' :
+                    seller.roas >= 3 ? 'text-apple-green-400' :
+                    seller.roas >= 2 ? 'text-apple-orange-400' : 'text-apple-red-400'
+                  }`}>
+                    {seller.roas === null ? 'N/A' : `${seller.roas.toFixed(2)}x`}
+                  </div>
+                </td>
+              </motion.tr>
+            ))}
+          </tbody>
+        </table>
+        
+        {sellers.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-apple-gray-500 mb-3"><Users size={48} className="mx-auto opacity-50" /></div>
+            <div className="apple-body font-medium text-apple-gray-300 mb-1">No se encontraron vendedores</div>
+            <div className="apple-caption text-apple-gray-500">Ajusta los filtros para ver más resultados</div>
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 };
 
-// ---------------- PAGE ----------------
-export default function VendedoresReportPageRedesigned() {
-  const [summaryData, setSummaryData] = useState<SellerSummary[]>([]);
+// === COMPONENTE PRINCIPAL ===
+export default function VendedoresPage() {
+  const [rawSales, setRawSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [branchFilter, setBranchFilter] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey | null>('total_sales');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
-  // Fetch
   useEffect(() => {
-    const fetchSellerData = async () => {
-      setLoading(true); setError(null);
+    const fetchSalesData = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const response = await fetch('/endpoints/vendedores/reporte');
+        const response = await fetch('/endpoints/sales-report?channel=Asesor');
         if (!response.ok) {
-          let msg = 'No se pudieron cargar los datos';
-          try { const e = await response.json(); msg = e.error || msg; } catch {}
-          throw new Error(msg);
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Error al cargar los datos');
         }
-        const data: SellerSummary[] = await response.json();
-        setSummaryData(data);
+        const data = await response.json();
+        setRawSales(data);
       } catch (err: any) {
-        setError(err.message || 'Error inesperado');
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
-    fetchSellerData();
+    fetchSalesData();
   }, []);
 
-  // Filtros
-  const filteredData = useMemo(() => {
-    let data = [...summaryData];
-    if (branchFilter) data = data.filter(d => (d.branch || '') === branchFilter);
-    if (searchTerm) {
-      const t = searchTerm.toLowerCase();
-      data = data.filter(d => d.seller_name.toLowerCase().includes(t));
-    }
-    return data;
-  }, [summaryData, branchFilter, searchTerm]);
+  const { filteredSellers, branches, stats, chartData } = useMemo(() => {
+    const sellerSummaryMap = new Map<string, {
+      seller_name: string;
+      branch: string;
+      total_sales: number;
+      orderIds: Set<string>;
+      ad_spend: number; 
+    }>();
 
-  // KPIs y datasets para charts
-  const {
-    branches, totalsByBranch, totalRevenue, totalOrders, totalAdSpend, avgROAS, avgOrderValue, topSellers, trendMock
-  } = useMemo(() => {
-    const branchesSet = new Set<string>();
-    const byBranch: { [b: string]: { revenue: number; orders: number; ad: number } } = {};
-    let revenue = 0, orders = 0, ad = 0;
-    const sellersAgg: { [name: string]: { revenue: number; orders: number } } = {};
+    rawSales.forEach(sale => {
+      const sellerName = sale.seller_full_name || 'Vendedor Desconocido';
+      
+      if (!sellerSummaryMap.has(sellerName)) {
+        sellerSummaryMap.set(sellerName, {
+          seller_name: sellerName,
+          branch: sale.branch || 'Sin Sucursal',
+          total_sales: 0,
+          orderIds: new Set<string>(),
+          ad_spend: 0,
+        });
+      }
 
-    filteredData.forEach(r => {
-      const b = r.branch || 'Sin Sucursal';
-      branchesSet.add(b);
-      byBranch[b] = byBranch[b] || { revenue: 0, orders: 0, ad: 0 };
-      byBranch[b].revenue += r.total_sales;
-      byBranch[b].orders += r.orders_count;
-      byBranch[b].ad += r.ad_spend;
-
-      revenue += r.total_sales;
-      orders += r.orders_count;
-      ad += r.ad_spend;
-
-      sellersAgg[r.seller_name] = sellersAgg[r.seller_name] || { revenue: 0, orders: 0 };
-      sellersAgg[r.seller_name].revenue += r.total_sales;
-      sellersAgg[r.seller_name].orders += r.orders_count;
+      const summary = sellerSummaryMap.get(sellerName)!;
+      summary.total_sales += sale.subtotal;
+      summary.orderIds.add(sale.order_id);
     });
 
-    const top = Object.entries(sellersAgg)
-      .map(([name, v]) => ({ name, revenue: v.revenue, orders: v.orders, aov: v.revenue / (v.orders || 1) }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
-
-    const byBranchArray = Object.entries(byBranch)
-      .map(([name, v]) => ({ name, revenue: v.revenue, ad_spend: v.ad, orders: v.orders, roas: v.ad > 0 ? v.revenue / v.ad : null }))
-      .sort((a, b) => b.revenue - a.revenue);
-
-    const avgROASVal = ad > 0 ? revenue / ad : null;
-    const aov = orders > 0 ? revenue / orders : 0;
-
-    // mock de tendencia (usa revenue por branch como base – si necesitas real: agrega fechas al endpoint)
-    const trend = byBranchArray.map((x, i) => ({
-      label: x.name,
-      revenue: x.revenue
+    let summarizedSellers: SellerSummary[] = Array.from(sellerSummaryMap.values()).map(summary => ({
+      ...summary,
+      orders_count: summary.orderIds.size,
+      roas: null
     }));
+    
+    if (selectedBranch) {
+      summarizedSellers = summarizedSellers.filter(s => s.branch === selectedBranch);
+    }
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      summarizedSellers = summarizedSellers.filter(s => s.seller_name.toLowerCase().includes(term));
+    }
+
+    if (sortKey) {
+      summarizedSellers.sort((a, b) => {
+        const aVal = a[sortKey];
+        const bVal = b[sortKey];
+        
+        if (aVal === null && bVal === null) return 0;
+        if (aVal === null) return 1;
+        if (bVal === null) return -1;
+        
+        const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+
+    const totalSales = summarizedSellers.reduce((sum, s) => sum + s.total_sales, 0);
+    const totalOrders = summarizedSellers.reduce((sum, s) => sum + s.orders_count, 0);
+    const totalAdSpend = summarizedSellers.reduce((sum, s) => sum + s.ad_spend, 0);
+    const avgROAS = totalAdSpend > 0 ? totalSales / totalAdSpend : 0;
 
     return {
-      branches: Array.from(branchesSet).sort(),
-      totalsByBranch: byBranchArray,
-      totalRevenue: revenue,
-      totalOrders: orders,
-      totalAdSpend: ad,
-      avgROAS: avgROASVal,
-      avgOrderValue: aov,
-      topSellers: top,
-      trendMock: trend
+      filteredSellers: summarizedSellers,
+      branches: Array.from(new Set(rawSales.map(s => s.branch).filter(Boolean) as string[])).sort(),
+      stats: {
+        totalSales,
+        totalOrders,
+        totalAdSpend,
+        avgROAS,
+        sellersCount: summarizedSellers.length,
+        avgSalesPerSeller: summarizedSellers.length > 0 ? totalSales / summarizedSellers.length : 0,
+      },
+      chartData: {
+        branchData: Array.from(
+          summarizedSellers.reduce((acc, seller) => {
+            const existing = acc.get(seller.branch) || { branch: seller.branch, sales: 0 };
+            existing.sales += seller.total_sales;
+            acc.set(seller.branch, existing);
+            return acc;
+          }, new Map<string, any>())
+        ).map(([_, data]) => data),
+        topSellers: summarizedSellers.slice(0, 10),
+      },
     };
-  }, [filteredData]);
+  }, [rawSales, selectedBranch, searchTerm, sortKey, sortDirection]);
 
-  // Orden fijo de grupos
-  const groupedByBranch = useMemo(() => {
-    const groups: Record<string, SellerSummary[]> = {};
-    filteredData.forEach(s => {
-      const b = s.branch || 'Sin Asignar';
-      if (!groups[b]) groups[b] = [];
-      groups[b].push(s);
-    });
-    const order = ['Santa Cruz', 'Cochabamba', 'La Paz', 'El Alto', 'Sucre', 'Promotores', 'Sin Asignar'];
-    return Object.entries(groups).sort(([a], [b]) => {
-      const ia = order.indexOf(a), ib = order.indexOf(b);
-      if (ia === -1 && ib === -1) return a.localeCompare(b);
-      if (ia === -1) return 1;
-      if (ib === -1) return -1;
-      return ia - ib;
-    });
-  }, [filteredData]);
+  const handleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('desc');
+    }
+  }, [sortKey]);
 
-  const clearFilters = useCallback(() => { setBranchFilter(''); setSearchTerm(''); }, []);
+  const handleExport = useCallback(() => {
+    const csvData = filteredSellers.map(s => ({
+      'Vendedor': s.seller_name,
+      'Sucursal': s.branch,
+      'Ventas Totales (Bs)': s.total_sales,
+      '# Órdenes': s.orders_count,
+      'Inversión Pub. (Bs)': s.ad_spend,
+      'ROAS': s.roas !== null ? s.roas.toFixed(2) : 'N/A'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(csvData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte Vendedores");
+    XLSX.writeFile(wb, `reporte_vendedores_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }, [filteredSellers]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <motion.div className="text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 backdrop-blur-xl border border-blue-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Activity className="text-blue-400 animate-pulse" size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Cargando Reporte de Vendedores</h2>
-          <p className="text-white/60">Preparando análisis…</p>
-        </motion.div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="glass-card text-center">
+          <div className="animate-spin w-12 h-12 border-2 border-apple-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="apple-body text-white">Cargando reporte de vendedores...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <motion.div className="text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <div className="w-16 h-16 bg-gradient-to-r from-red-500/20 to-orange-500/20 backdrop-blur-xl border border-red-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Activity className="text-red-400" size={32} />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="glass-card text-center max-w-md">
+          <div className="text-apple-red-400 mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Error</h2>
-          <p className="text-white/60">{error}</p>
-        </motion.div>
+          <h2 className="apple-h3 mb-2">Error al cargar datos</h2>
+          <p className="apple-caption text-apple-gray-400 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="btn-primary"
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header */}
+    <div className="min-h-screen space-y-8">
       <motion.header
-        className="relative"
-        initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="glass-card"
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10"></div>
-        <div className="relative backdrop-blur-xl bg-white/5 border-b border-white/10 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-6 py-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-gradient-to-r from-blue-500/30 to-purple-500/30 backdrop-blur-sm border border-blue-500/30 rounded-xl">
-                  <Activity className="text-white" size={28} />
-                </div>
-                <div>
-                  <h1 className="text-3xl font-bold text-white">Reporte Inteligente de Vendedores</h1>
-                  <p className="text-white/60 mt-1">Ventas, pedidos, ads y ROAS por asesor/promotor</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => {
-                    // Export simple CSV (sin dependencia externa)
-                    const headers = ['seller_name','branch','total_sales','orders_count','ad_spend','roas'];
-                    const rows = filteredData.map(d => [
-                      `"${d.seller_name.replace(/"/g,'""')}"`,
-                      `"${(d.branch || '').replace(/"/g,'""')}"`,
-                      d.total_sales, d.orders_count, d.ad_spend, d.roas ?? ''
-                    ].join(','));
-                    const csv = [headers.join(','), ...rows].join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `vendedores_${new Date().toISOString().slice(0,10)}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  disabled={filteredData.length === 0}
-                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500/30 to-blue-600/30 backdrop-blur-sm border border-blue-500/30 text-white font-semibold rounded-xl shadow-lg hover:from-blue-500/40 hover:to-blue-600/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  <Download size={20} />
-                  Exportar CSV
-                </button>
-              </div>
-            </div>
+        <div className="flex items-center gap-4">
+          <div className="p-4 bg-gradient-to-br from-apple-green-500/20 to-apple-blue-500/20 border border-apple-green-500/30 rounded-apple-lg">
+            <Users size={28} className="text-apple-green-400" />
+          </div>
+          <div>
+            <h1 className="apple-h1 mb-2">Reporte de Vendedores</h1>
+            <p className="apple-body text-apple-gray-300">
+              Análisis de rendimiento y estadísticas de ventas por vendedor
+            </p>
           </div>
         </div>
       </motion.header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Filtros */}
-        <FiltersBar
-          branches={Array.from(new Set(summaryData.map(d => d.branch || 'Sin Sucursal'))).sort()}
-          selectedBranch={branchFilter}
-          onBranchChange={setBranchFilter}
-          searchTerm={searchTerm}
-          onSearch={setSearchTerm}
-          onClear={clearFilters}
-        />
+      <FiltersBar
+        branches={branches}
+        selectedBranch={selectedBranch}
+        onBranchChange={setSelectedBranch}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        onExport={handleExport}
+      />
 
-        {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.1 }}
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
-            title="Ingresos Totales"
-            value={`Bs ${totalRevenue.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`}
-            icon={<DollarSign size={24} />}
-            gradient={COLORS.gradients.blue}
-            border="border-blue-500/30"
-            subtitle="Suma de ventas por asesor"
+            title="Ventas Totales"
+            value={`Bs ${stats.totalSales.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`}
+            icon={<DollarSign size={20} />}
+            color="blue"
+            subtitle={`${stats.sellersCount} vendedores`}
+            trend={12.5}
           />
           <StatCard
-            title="Órdenes"
-            value={totalOrders.toLocaleString('es-ES')}
-            icon={<ShoppingCart size={24} />}
-            gradient={COLORS.gradients.green}
-            border="border-green-500/30"
-            subtitle="Total pedidos asociados"
+            title="Órdenes Procesadas"
+            value={stats.totalOrders.toLocaleString('es-BO')}
+            icon={<ShoppingCart size={20} />}
+            color="green"
+            subtitle="Total de pedidos"
+            trend={8.2}
           />
           <StatCard
-            title="Gasto en Ads"
-            value={`Bs ${totalAdSpend.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`}
-            icon={<Target size={24} />}
-            gradient={COLORS.gradients.orange}
-            border="border-orange-500/30"
-            subtitle="Inversión imputada a vendedores"
+            title="Inversión Publicitaria"
+            value={`Bs ${stats.totalAdSpend.toLocaleString('es-BO', { minimumFractionDigits: 2 })}`}
+            icon={<Zap size={20} />}
+            color="orange"
+            subtitle="Gasto en publicidad"
+            trend={-2.1}
           />
           <StatCard
             title="ROAS Promedio"
-            value={avgROAS !== null ? `${avgROAS.toFixed(2)}x` : 'N/A'}
-            icon={<Award size={24} />}
-            gradient={COLORS.gradients.purple}
-            border="border-purple-500/30"
-            subtitle="Ingresos / Ads"
+            value={`${stats.avgROAS.toFixed(2)}x`}
+            icon={<Target size={20} />}
+            color="purple"
+            subtitle="Retorno de inversión"
+            trend={15.3}
           />
         </div>
+      </motion.section>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <ChartContainer title="Tendencia (proxy por sucursal)">
-            <ResponsiveContainer>
-              <AreaChart data={trendMock}>
-                <defs>
-                  <linearGradient id="lgRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="label" fontSize={12} stroke="#9CA3AF" />
-                <YAxis fontSize={12} stroke="#9CA3AF" tickFormatter={(v) => `Bs ${(v/1000).toFixed(0)}k`} />
-                <Tooltip
-                  formatter={(v: number) => [`Bs ${v.toLocaleString('es-ES')}`, 'Ingresos']}
-                  contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: '#fff' }}
-                />
-                <Area type="monotone" dataKey="revenue" stroke={COLORS.primary} fill="url(#lgRev)" strokeWidth={3} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-
-          <ChartContainer title="Ingresos vs Ads por Sucursal" className="lg:col-span-2">
-            <ResponsiveContainer>
-              <ComposedChart data={totalsByBranch}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" fontSize={12} stroke="#9CA3AF" />
-                <YAxis yAxisId="left" fontSize={12} stroke="#9CA3AF" tickFormatter={(v) => `Bs ${(v/1000).toFixed(0)}k`} />
-                <YAxis yAxisId="right" orientation="right" fontSize={12} stroke="#9CA3AF" tickFormatter={(v) => `${v.toFixed(1)}x`} />
-                <Tooltip
-                  formatter={(value: number, name: string) => {
-                    if (name === 'roas') return [`${value.toFixed(2)}x`, 'ROAS'];
-                    if (name === 'ad_spend') return [`Bs ${value.toLocaleString('es-ES')}`, 'Ads'];
-                    return [`Bs ${value.toLocaleString('es-ES')}`, 'Ingresos'];
-                  }}
-                  contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: '#fff' }}
-                />
-                <Legend />
-                <Bar yAxisId="left" dataKey="revenue" name="Ingresos" fill={COLORS.primary} radius={[4,4,0,0]} />
-                <Bar yAxisId="left" dataKey="ad_spend" name="Ads" fill={COLORS.accent} radius={[4,4,0,0]} />
-                <Line yAxisId="right" type="monotone" dataKey="roas" name="ROAS" stroke="#10B981" strokeWidth={3} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </div>
-
-        {/* Top vendedores */}
-        <ChartContainer title="Top 5 Vendedores (por ingresos)" fixedHeight={false}>
-          <div className="space-y-2">
-            {topSellers.map((v, i) => (
-              <motion.div
-                key={`${v.name}-${i}`}
-                className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-3 hover:bg-white/10 transition-colors"
-                initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: i * 0.05 }}
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`w-6 h-6 flex items-center justify-center rounded-full text-white text-xs font-bold
-                      ${i===0?'bg-yellow-500/30 border border-yellow-500/40':
-                        i===1?'bg-gray-400/30 border border-gray-400/40':
-                        i===2?'bg-orange-500/30 border border-orange-500/40':'bg-white/10 border border-white/20'}`}>
-                      {i+1}
-                    </span>
-                    <p className="text-sm font-semibold text-white truncate" title={v.name}>{v.name}</p>
-                  </div>
-                  <div className="flex items-center gap-6 text-right">
-                    <div className="hidden md:block">
-                      <p className="text-xs text-white/60">Órdenes</p>
-                      <p className="text-sm font-medium text-white">{v.orders}</p>
-                    </div>
-                    <div className="hidden sm:block">
-                      <p className="text-xs text-white/60">Promedio</p>
-                      <p className="text-sm font-medium text-white">Bs {v.aov.toFixed(0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/60">Ingresos</p>
-                      <p className="text-base font-bold text-blue-300">Bs {v.revenue.toLocaleString('es-ES')}</p>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <ChartContainer
+          title="Ventas por Sucursal"
+          icon={<Building size={18} className="text-apple-blue-400" />}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData.branchData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+              <XAxis dataKey="branch" stroke="rgba(255,255,255,0.6)" fontSize={12} angle={-45} textAnchor="end" height={80} />
+              <YAxis stroke="rgba(255,255,255,0.6)" fontSize={12} tickFormatter={(value) => `Bs ${value.toLocaleString('es-BO')}`} />
+              <Tooltip
+                contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', backdropFilter: 'blur(20px)' }}
+                formatter={(value: any) => [`Bs ${value.toLocaleString('es-BO')}`, 'Ventas']}
+              />
+              <Bar dataKey="sales" fill={APPLE_COLORS.blue} radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </ChartContainer>
 
-        {/* Grupos por sucursal con tabla ordenable */}
-        <div className="space-y-8">
-          {groupedByBranch.map(([branchName, sellersInBranch]) => (
-            <motion.div
-              key={branchName}
-              className="relative"
-              initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: 'easeOut' }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-2xl"></div>
-              <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-white/10">
-                  <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                    {branchName === 'Promotores'
-                      ? <Users size={22} className="text-purple-300" />
-                      : <Building size={22} className="text-blue-300" />}
-                    <span>{branchName}</span>
-                    <span className="text-sm font-medium text-white/70 bg-white/10 px-2 py-1 rounded-full border border-white/20">
-                      {sellersInBranch.length} Personas
-                    </span>
-                  </h3>
-                </div>
-                <div className="p-4">
-                  <SellerSortableTable sellers={sellersInBranch} />
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+        <ChartContainer
+          title="Top 10 Vendedores"
+          icon={<Award size={18} className="text-apple-green-400" />}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData.topSellers} layout="vertical" margin={{ left: 50 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+              <XAxis type="number" stroke="rgba(255,255,255,0.6)" fontSize={12} tickFormatter={(value) => `Bs ${value.toLocaleString('es-BO')}`} />
+              <YAxis type="category" dataKey="seller_name" stroke="rgba(255,255,255,0.6)" fontSize={12} width={120} interval={0} />
+              <Tooltip
+                contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '12px', color: 'white', backdropFilter: 'blur(20px)' }}
+                formatter={(value: any) => [`Bs ${value.toLocaleString('es-BO')}`, 'Ventas']}
+              />
+              <Bar dataKey="total_sales" fill={APPLE_COLORS.green} radius={[0, 6, 6, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartContainer>
       </div>
+
+      <SellersTable
+        sellers={filteredSellers}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+      />
     </div>
   );
 }

@@ -3,203 +3,283 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Home, BarChart3, Users, UserPlus, Package, 
+  RotateCcw, Calendar, FileText, Settings, 
+  LogOut, ChevronRight, Sparkles, Activity
+} from 'lucide-react';
+import type { FC, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
+
 import LogoutButton from '@/components/LogoutButton';
-import type { FC, ReactNode, SVGProps } from 'react';
 import { can, ROUTES, type Role } from './roles';
 
-/* ────────────────────────────── Tipos ────────────────────────────── */
+/* ────────────────────────────── TIPOS ────────────────────────────── */
 type NavLinkItem = {
   href: string;
   icon: ReactNode;
   label: string;
   shortcut?: string;
   req?: Parameters<typeof can>[1];
+  badge?: string | number;
+  requiresPersonId?: string[]; // ⬅️ gate por people.id
 };
 
+type SidebarProps = {
+  userRole: Role;
+  userName: string;
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+type MeResponse = {
+  ok?: boolean;
+  id?: string;          // ⬅️ lo trae tu /endpoints/me
+  full_name?: string;
+  role?: string;
+  privilege_level?: number;
+  email?: string;
+  raw_role?: string;
+  local?: string | null;
+} | null;
+
+/* ────────────────────────────── UTILIDADES ────────────────────────────── */
 const isActive = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(href + '/');
 
-/* ────────────────────────────── Link ────────────────────────────── */
-const NavLink: FC<{ item: NavLinkItem; active?: boolean }> = ({ item, active }) => (
-  <Link
-    href={item.href}
-    aria-current={active ? 'page' : undefined}
-    className={[
-      'group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm',
-      'transition-all duration-200',
-      active
-        ? 'font-semibold text-emerald-300' // NUEVO: El texto activo es de color esmeralda
-        : 'text-slate-400 hover:text-white hover:bg-white/10', // NUEVO: Hover sutil para inactivos
-    ].join(' ')}
+/* ────────────────────────────── ALLOWLIST POR ID ────────────────────────────── */
+const FINANCIAL_CONTROL_IDS = [
+  '32c53c5d-cf04-425c-a50d-4c016df61d7f', // Rolando
+  'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d', // Hugo
+  '07b93705-f631-4b67-b52a-f7c30bc2ba5b', // Julieta
+  '28b63f71-babb-4ee0-8c2a-8530007735b7', // Daniela
+];
+
+/* ────────────────────────────── COMPONENTES ────────────────────────────── */
+const NavLink: FC<{ 
+  item: NavLinkItem; 
+  active?: boolean; 
+  onClick?: () => void;
+}> = ({ item, active, onClick }) => (
+  <motion.div
+    whileHover={{ x: 2 }}
+    whileTap={{ scale: 0.98 }}
+    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
   >
-    {/* NUEVO: Fondo de resplandor para el link activo */}
-    {active && (
-      <span className="absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-900/50 via-emerald-900/20 to-transparent opacity-70" />
-    )}
-    
-    {/* Contenido del Link (relativo para estar sobre el resplandor) */}
-    <span className="relative grid place-items-center rounded-lg p-1.5">
-      {item.icon}
-    </span>
-    <span className="relative flex-1 font-medium truncate">{item.label}</span>
-    {item.shortcut && (
-      <kbd
-        className={[
-          'relative text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors',
+    <Link
+      href={item.href}
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={[
+        'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-apple-body font-medium',
+        'transition-all duration-300 ease-apple',
+        'hover:bg-white/10 hover:backdrop-blur-sm',
+        active
+          ? 'text-white bg-gradient-to-r from-apple-blue-600/20 to-apple-blue-500/10 border border-apple-blue-500/30 shadow-primary'
+          : 'text-apple-gray-300 hover:text-white',
+      ].join(' ')}
+    >
+      {active && (
+        <motion.div
+          layoutId="activeIndicator"
+          className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-apple-blue-400 to-apple-blue-600 rounded-r-full"
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+        />
+      )}
+      <div className={[
+        'relative flex items-center justify-center w-5 h-5 transition-transform duration-300',
+        active ? 'text-apple-blue-400' : 'text-current group-hover:scale-110',
+      ].join(' ')}>
+        {item.icon}
+      </div>
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.shortcut && (
+        <kbd className={[
+          'text-apple-caption2 font-mono px-1.5 py-0.5 rounded border transition-all duration-300',
           active
-            ? 'text-emerald-300/90 border-emerald-400/30 bg-emerald-400/10'
-            : 'text-slate-500 border-slate-700/60 group-hover:text-slate-300 group-hover:border-slate-600',
+            ? 'text-apple-blue-300 border-apple-blue-400/40 bg-apple-blue-400/10'
+            : 'text-apple-gray-500 border-apple-gray-700 group-hover:text-apple-gray-300 group-hover:border-apple-gray-600',
+        ].join(' ')}>
+          {item.shortcut}
+        </kbd>
+      )}
+      <ChevronRight 
+        size={14} 
+        className={[
+          'transition-all duration-300 opacity-0 group-hover:opacity-60',
+          active ? 'text-apple-blue-400' : 'text-current',
         ].join(' ')}
-      >
-        {item.shortcut}
-      </kbd>
-    )}
-  </Link>
+      />
+    </Link>
+  </motion.div>
 );
 
-/* ────────────────────────────── Sidebar ────────────────────────────── */
-export const Sidebar: FC<{ userRole: Role; userName: string }> = ({ userRole, userName }) => {
-  const pathname = usePathname();
+const SectionHeader: FC<{ title: string; icon?: ReactNode }> = ({ title, icon }) => (
+  <div className="flex items-center gap-2 px-3 py-2 mb-2">
+    {icon && (<div className="text-apple-gray-500">{icon}</div>)}
+    <h3 className="text-apple-caption1 font-semibold text-apple-gray-500 tracking-wider uppercase">{title}</h3>
+  </div>
+);
 
-  // (Las secciones no cambian, se omite por brevedad)
-  const SECTIONS: { title: string; items: NavLinkItem[] }[] = [
+/* ────────────────────────────── SIDEBAR PRINCIPAL ────────────────────────────── */
+export const Sidebar: FC<SidebarProps> = ({ 
+  userRole, 
+  userName, 
+  isOpen = false, 
+  onClose 
+}) => {
+  const pathname = usePathname();
+  const [currentUser, setCurrentUser] = useState<MeResponse>(null);
+  const [meLoaded, setMeLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/endpoints/me', { cache: 'no-store' });
+        setCurrentUser(res.ok ? await res.json() : null);
+      } catch {
+        setCurrentUser(null);
+      } finally {
+        setMeLoaded(true);
+      }
+    })();
+  }, []);
+
+  const SECTIONS: { title: string; icon?: ReactNode; items: NavLinkItem[] }[] = [
+    {
+      title: 'Principal',
+      icon: <Home size={12} />,
+      items: [
+        { href: ROUTES.DASH, icon: <Home size={18} />, label: 'Inicio', shortcut: 'H' },
+        { 
+          href: '/dashboard/financial-control',
+          icon: <Activity size={18} />, 
+          label: 'Control Financiero',
+          shortcut: 'F',
+          requiresPersonId: FINANCIAL_CONTROL_IDS,
+        },
+      ],
+    },
     {
       title: 'Reportes',
+      icon: <BarChart3 size={12} />,
       items: [
-        { href: ROUTES.SALES_REPORT,       icon: <IconSalesReport className="w-4 h-4" />, label: 'Ventas',               shortcut: '2', req: 'view:sales-report' },
-        { href: ROUTES.REPORTE_VENDEDORES, icon: <IconResumen className="w-4 h-4" />,     label: 'Vendedores',           shortcut: '7', req: 'view:resumen-asesores' },
-        { href: ROUTES.REPORTE_PROMOTORES, icon: <IconResumen className="w-4 h-4" />,     label: 'Promotores',                         req: 'view:resumen-promotores' },
-        { href: ROUTES.ASISTENCIA_PANEL,   icon: <IconAsistencia className="w-4 h-4" />,  label: 'Asistencia (panel)',   shortcut: 'R', req: 'view:reporte-asistencia' },
+        { href: ROUTES.SALES_REPORT, icon: <BarChart3 size={18} />, label: 'Ventas', shortcut: '2', req: 'view:sales-report' },
+        { href: ROUTES.REPORTE_VENDEDORES, icon: <Users size={18} />, label: 'Vendedores', shortcut: '7', req: 'view:resumen-asesores' },
+        { href: ROUTES.REPORTE_PROMOTORES, icon: <Users size={18} />, label: 'Promotores', req: 'view:resumen-promotores' },
+        { href: ROUTES.ASISTENCIA_PANEL, icon: <Calendar size={18} />, label: 'Asistencia', shortcut: 'R', req: 'view:reporte-asistencia' },
       ],
     },
     {
       title: 'Operaciones',
+      icon: <Package size={12} />,
       items: [
-        { href: ROUTES.LOGISTICA,           icon: <IconTruck className="w-4 h-4" />,    label: 'Logística',           shortcut: '1', req: 'view:logistica' },
-        { href: ROUTES.REGISTRO_ASESORES,   icon: <IconRegistro className="w-4 h-4" />, label: 'Registro asesores',   shortcut: '6', req: 'view:registro-asesores' },
-        { href: ROUTES.REGISTRO_PROMOTORES, icon: <IconRegistro className="w-4 h-4" />, label: 'Registro promotores',              req: 'view:registro-promotores' },
-        { href: ROUTES.DEVOLUCIONES,        icon: <IconReturn className="w-4 h-4" />,   label: 'Devoluciones',        shortcut: '4', req: 'view:devoluciones' },
-        { href: ROUTES.ASISTENCIA,          icon: <IconAsistencia className="w-4 h-4" />,label: 'Marcar asistencia',   shortcut: 'A', req: 'view:asistencia' },
-        { href: ROUTES.MI_RESUMEN,          icon: <IconResumen className="w-4 h-4" />,  label: 'Mi resumen',                       req: 'view:mi-resumen' },
+        { href: ROUTES.LOGISTICA, icon: <Package size={18} />, label: 'Logística', shortcut: '1', req: 'view:logistica' },
+        { href: ROUTES.REGISTRO_ASESORES, icon: <UserPlus size={18} />, label: 'Registro asesores', shortcut: '6', req: 'view:registro-asesores' },
+        { href: ROUTES.REGISTRO_PROMOTORES, icon: <UserPlus size={18} />, label: 'Registro promotores', req: 'view:registro-promotores' },
+        { href: ROUTES.DEVOLUCIONES, icon: <RotateCcw size={18} />, label: 'Devoluciones', shortcut: '4', req: 'view:devoluciones' },
+        { href: ROUTES.ASISTENCIA, icon: <Calendar size={18} />, label: 'Marcar asistencia', shortcut: 'A', req: 'view:asistencia' },
+        { href: ROUTES.MI_RESUMEN, icon: <FileText size={18} />, label: 'Mi resumen', req: 'view:mi-resumen' },
       ],
     },
     {
       title: 'Administración',
+      icon: <Settings size={12} />,
       items: [
-        { href: ROUTES.PLAYBOOK,    icon: <IconPlaybook className="w-4 h-4" />,    label: 'Playbook',       shortcut: '5', req: 'view:playbook' },
-        { href: ROUTES.USERS_ADMIN, icon: <IconUsersAdmin className="w-4 h-4" />, label: 'Usuarios',        shortcut: '8', req: 'view:users-admin' },
+        { href: ROUTES.PLAYBOOK, icon: <FileText size={18} />, label: 'Playbook', shortcut: '5', req: 'view:playbook' },
+        { href: ROUTES.USERS_ADMIN, icon: <Settings size={18} />, label: 'Usuarios', shortcut: '8', req: 'view:users-admin' },
       ],
     },
   ];
 
   return (
-    <aside
-      id="app-sidebar"
-      className={[
-        'w-72 fixed left-0 top-0 h-dvh z-50 flex flex-col',
-        // NUEVO: Efecto de cristal esmerilado (Glassmorphism)
-        'bg-black/70 backdrop-blur-xl',
-        'border-r border-white/10', // Borde sutil que complementa el efecto cristal
-        'transition-transform duration-200 ease-out -translate-x-full',
-        'data-[open=true]:translate-x-0',
-        'lg:translate-x-0 lg:static lg:h-screen lg:z-30',
-      ].join(' ')}
-    >
-      {/* Brand */}
-      <div className="p-5 border-b border-white/10">
-        <Link href={ROUTES.DASH} className="flex items-center gap-3 group">
-          <div className="w-9 h-9 relative">
-            <Image src="/1.png" alt="Fenix" fill className="object-contain" priority />
-          </div>
-          <div className="min-w-0">
-            <div className="font-semibold text-white text-base tracking-tight group-hover:text-emerald-300 transition-colors">
-              Fenix OS
-            </div>
-            <div className="text-[11px] text-slate-500 -mt-0.5">Panel de gestión</div>
-          </div>
-        </Link>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 px-3.5 py-5 space-y-7 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700/60 scrollbar-track-transparent">
-        {/* Home */}
-        <NavLink
-          item={{ href: ROUTES.DASH, icon: <IconDashboard className="w-4 h-4" />, label: 'Inicio', shortcut: 'H' }}
-          active={pathname === ROUTES.DASH}
-        />
-
-        {SECTIONS.map((section) => {
-          const items = section.items.filter((i) => !i.req || can(userRole, i.req as any));
-          if (!items.length) return null;
-          return (
-            <div key={section.title} className="space-y-2">
-              <h3 className="px-3.5 text-[10px] font-semibold text-slate-500 tracking-[0.14em] uppercase">
-                {section.title}
-              </h3>
-              <div className="space-y-1.5">
-                {items.map((item) => (
-                  <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />
-                ))}
+    <AnimatePresence>
+      <motion.aside
+        initial={{ x: -288 }}
+        animate={{ x: isOpen || typeof window === 'undefined' || window.innerWidth >= 1024 ? 0 : -288 }}
+        exit={{ x: -288 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+        className="fixed left-0 top-0 h-screen w-72 z-50 flex flex-col glass backdrop-blur-apple-lg border-r border-white/10 lg:translate-x-0 lg:static lg:z-30"
+      >
+        <div className="p-6 border-b border-white/10">
+          <Link href={ROUTES.DASH} className="group flex items-center gap-3" onClick={onClose}>
+            <div className="relative w-10 h-10">
+              <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 rounded-xl border border-white/20" />
+              <div className="relative w-full h-full flex items-center justify-center">
+                <Image src="/1.png" alt="Fenix" width={24} height={24} className="object-contain" priority />
               </div>
             </div>
-          );
-        })}
-      </nav>
-
-      {/* User */}
-      <div className="p-4 border-t border-white/10">
-        <div className="flex items-center gap-3 mb-3 p-2 rounded-xl hover:bg-white/10 transition-colors">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500/25 to-cyan-500/25 grid place-items-center text-emerald-300 font-semibold text-sm ring-1 ring-emerald-500/20">
-            {userName?.charAt(0)?.toUpperCase() || 'U'}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-slate-100 truncate">{userName || 'Usuario'}</div>
-            <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              En línea
+            <div className="min-w-0 flex-1">
+              <div className="apple-h3 text-white group-hover:text-apple-blue-300 transition-colors duration-300">Fenix OS</div>
+              <div className="text-apple-caption text-apple-gray-500 -mt-0.5">Sistema de gestión</div>
             </div>
-          </div>
+            <Sparkles size={16} className="text-apple-blue-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          </Link>
         </div>
-        <LogoutButton className="w-full px-3 py-2 text-sm font-medium text-slate-200 bg-white/5 hover:bg-white/10 ring-1 ring-white/10 hover:ring-white/20 rounded-lg transition-all" />
-      </div>
-    </aside>
+
+        <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto scrollbar-thin">
+          {SECTIONS.map((section) => {
+            const items = section.items.filter((item) => {
+              if (item.requiresPersonId) {
+                if (!meLoaded) return false; // evita parpadeo
+                return !!currentUser?.id && item.requiresPersonId.includes(currentUser.id);
+              }
+              return !item.req || can(userRole, item.req as any);
+            });
+            
+            if (!items.length) return null;
+            
+            return (
+              <motion.div
+                key={section.title}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+                className="space-y-1"
+              >
+                <SectionHeader title={section.title} icon={section.icon} />
+                <div className="space-y-1">
+                  {items.map((item) => (
+                    <NavLink
+                      key={item.href}
+                      item={item}
+                      active={isActive(pathname, item.href)}
+                      onClick={onClose}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-white/10">
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all duration-300 mb-3"
+          >
+            <div className="relative">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-apple-blue-500/30 to-apple-green-500/30 flex items-center justify-center text-apple-body font-semibold text-white border border-white/20">
+                {userName?.charAt(0)?.toUpperCase() || 'U'}
+              </div>
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-apple-green-500 rounded-full border-2 border-black" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-apple-body font-medium text-white truncate">{userName || 'Usuario'}</div>
+              <div className="text-apple-caption text-apple-gray-500 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-apple-green-400 animate-pulse" />
+                En línea
+              </div>
+            </div>
+          </motion.div>
+          
+          <LogoutButton className="w-full btn-ghost justify-start gap-3 text-apple-gray-300 hover:text-white hover:bg-apple-red-600/10 hover:border-apple-red-500/30">
+            <LogOut size={18} />
+            <span>Cerrar sesión</span>
+          </LogoutButton>
+        </div>
+      </motion.aside>
+    </AnimatePresence>
   );
 };
-
-/* ── Iconos (Sin cambios) ── */
-const icon = (p: SVGProps<SVGSVGElement>) => ({
-  ...p,
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.5,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-} as SVGProps<SVGSVGElement>);
-
-const IconDashboard = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
-);
-const IconSalesReport = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" /></svg>
-);
-const IconResumen = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="m14 2 6 6" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-);
-const IconAsistencia = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><path d="m9 16 2 2 4-4" /></svg>
-);
-const IconTruck = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" /><path d="M15 18H9" /><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" /><circle cx="17" cy="18" r="2" /><circle cx="7" cy="18" r="2" /></svg>
-);
-const IconRegistro = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" ry="1" /><path d="m9 14 2 2 4-4" /></svg>
-);
-const IconReturn = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" /></svg>
-);
-const IconPlaybook = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>
-);
-const IconUsersAdmin = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...icon(p)} viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-);
