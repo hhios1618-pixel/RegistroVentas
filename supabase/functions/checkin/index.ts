@@ -1,25 +1,26 @@
-// Tipos del runtime Edge (expone 'Deno', Request/Response)
-import "edge-dts";
+// supabase/functions/checkin/index.ts
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-import { serve } from "std/http/server.ts";
-import { createClient } from "@supabase/supabase-js";
+type CheckType = "in" | "out" | "lunch_in" | "lunch_out";
 
 type Payload = {
   person_id: string;
   site_id: string;
-  type: "in" | "out" | "lunch_in" | "lunch_out";
-  lat: number;
-  lng: number;
-  accuracy: number;
-  device_id: string;
-  selfie_base64: string; // puede ser '' en colación
-  qr_code: string;       // puede ser '' en colación si no lo exiges
+  type: CheckType;
+  device_id?: string;
+  qr_code?: string;             // solo para validar (no se inserta)
+  // solo in/out:
+  lat?: number;
+  lng?: number;
+  accuracy?: number;
+  selfie_base64?: string;
 };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS"
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 } as const;
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {
@@ -35,7 +36,9 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   const R = 6371000;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -56,79 +59,103 @@ serve(async (req: Request) => {
     try { body = await req.json(); }
     catch { return new Response(JSON.stringify({ error: "bad_json" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } }); }
 
-    // Requisitos mínimos (selfie/qr los puedes relajar para colación)
-    for (const k of ["person_id","site_id","type","lat","lng","accuracy","device_id"] as const) {
+    const isShift = body.type === "in" || body.type === "out";
+
+    // ===== Requisitos mínimos =====
+    for (const k of ["person_id","site_id","type"] as const) {
       // deno-lint-ignore no-explicit-any
       if ((body as any)[k] === undefined || (body as any)[k] === null) {
         return new Response(JSON.stringify({ error:"missing_field", field:k }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
       }
     }
-
     if (!["in","out","lunch_in","lunch_out"].includes(body.type)) {
       return new Response(JSON.stringify({ error:"type_invalid" }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
     }
 
-    if ((body.type === "in" || body.type === "out") && typeof body.accuracy === "number" && body.accuracy > 60) {
-      return new Response(JSON.stringify({ error:"accuracy_too_high", accuracy: body.accuracy }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
-    }
-
+    // Persona
     const { data: person, error: pErr } = await supabase
-      .from("people").select("id, active, role").eq("id", body.person_id).single();
+      .from("people").select("id, active").eq("id", body.person_id).single();
     if (pErr || !person) return new Response(JSON.stringify({ error:"person_not_found" }), { status:404, headers:{ ...corsHeaders, "content-type":"application/json" }});
     if (person.active === false) return new Response(JSON.stringify({ error:"person_inactive" }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
 
+    // Sitio
     const { data: site, error: sErr } = await supabase
       .from("sites").select("id, lat, lng, radius_m, is_active, name").eq("id", body.site_id).single();
     if (sErr || !site) return new Response(JSON.stringify({ error:"site_not_found" }), { status:404, headers:{ ...corsHeaders, "content-type":"application/json" }});
-    if (site.is_active === false || site.lat == null || site.lng == null) {
-      return new Response(JSON.stringify({ error:"site_inactive_or_unset" }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
+    if (site.is_active === false) {
+      return new Response(JSON.stringify({ error:"site_inactive" }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
     }
 
-    let distance_m: number | null = null;
-    if (body.type === "in" || body.type === "out") {
-      distance_m = haversineMeters(body.lat, body.lng, site.lat, site.lng);
-      const radius = site.radius_m ?? 100;
-      if (distance_m > radius) {
-        return new Response(JSON.stringify({ error:"outside_geofence", distance_m, required_radius: radius, accuracy: body.accuracy }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
-      }
+    // ===== Validación de QR SIEMPRE (así mantienes el control)
+    if (!body.qr_code || String(body.qr_code).trim() === "") {
+      return new Response(JSON.stringify({ error:"missing_field", field:"qr_code" }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
     }
-
-    if (body.type === "in" || body.type === "out") {
+    {
       const nowIso = new Date().toISOString();
       const { data: qr, error: qErr } = await supabase
         .from("qr_tokens").select("site_id, code, exp_at")
-        .eq("site_id", body.site_id).eq("code", body.qr_code).gt("exp_at", nowIso)
+        .eq("site_id", body.site_id)
+        .eq("code", body.qr_code)
+        .gt("exp_at", nowIso)
         .maybeSingle();
-      if (qErr || !qr) return new Response(JSON.stringify({ error:"qr_invalid_or_expired" }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
+      if (qErr || !qr) {
+        return new Response(JSON.stringify({ error:"qr_invalid_or_expired" }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
+      }
     }
 
-    let selfiePath: string | null = null;
+    // ===== in/out: GPS y selfie obligatorios
+    if (isShift) {
+      for (const k of ["lat","lng","accuracy","selfie_base64"] as const) {
+        // deno-lint-ignore no-explicit-any
+        const v = (body as any)[k];
+        if (v === undefined || v === null || (k === "selfie_base64" && String(v).trim() === "")) {
+          return new Response(JSON.stringify({ error:"missing_field", field:k }), { status:400, headers:{ ...corsHeaders, "content-type":"application/json" }});
+        }
+      }
+      if (site.lat != null && site.lng != null) {
+        const distance_m = haversineMeters(body.lat!, body.lng!, site.lat, site.lng);
+        const radius = site.radius_m ?? 100;
+        if (distance_m > radius) {
+          return new Response(JSON.stringify({ error:"outside_geofence", distance_m, required_radius: radius, accuracy: body.accuracy }), { status:403, headers:{ ...corsHeaders, "content-type":"application/json" }});
+        }
+      }
+    }
+
+    // Subir selfie si llegó
+    let selfiePath = "";
     if (body.selfie_base64 && body.selfie_base64.length > 8) {
       const bytes = dataUrlToBytes(body.selfie_base64);
       selfiePath = `${body.site_id}/${body.person_id}/${Date.now()}.jpg`;
-      const { error: upErr } = await supabase.storage.from("attendance-selfies").upload(selfiePath, bytes, { contentType:"image/jpeg", upsert:false });
+      const { error: upErr } = await supabase.storage.from("attendance-selfies")
+        .upload(selfiePath, bytes, { contentType:"image/jpeg", upsert:false });
       if (upErr) return new Response(JSON.stringify({ error:"upload_failed", details: upErr.message }), { status:500, headers:{ ...corsHeaders, "content-type":"application/json" }});
     }
 
-    const insertRow: Record<string, unknown> = {
+    // ===== INSERT: SOLO columnas que EXISTEN en tu tabla
+    const isLunch = !isShift;
+
+    const row = {
       person_id: body.person_id,
       site_id: body.site_id,
       type: body.type,
-      lat: body.lat,
-      lng: body.lng,
-      accuracy_m: body.accuracy,
-      device_id: body.device_id,
-      source: "web",
-      selfie_path: selfiePath,
-      site_name: site.name ?? null,
-      within_geofence: distance_m !== null ? true : null,
-      distance_m
+      // NOT NULL en tu tabla:
+      lat: isLunch ? 0 : body.lat!,          // dummy en almuerzo
+      lng: isLunch ? 0 : body.lng!,          // dummy en almuerzo
+      selfie_path: isLunch ? "" : selfiePath, // dummy '' en almuerzo (NOT NULL)
+      // NULLABLE/DEFAULTS:
+      accuracy_m: isLunch ? 0 : body.accuracy!,
+      device_id: body.device_id ?? null,
+      source: "web" as const,
+      created_at: new Date().toISOString(),
     };
 
-    const { error: insErr } = await supabase.from("attendance").insert(insertRow);
-    if (insErr) return new Response(JSON.stringify({ error:"insert_failed", details: insErr.message }), { status:500, headers:{ ...corsHeaders, "content-type":"application/json" }});
+    const { error: insErr } = await supabase.from("attendance").insert(row);
+    if (insErr) {
+      return new Response(JSON.stringify({ error:"insert_failed", details: insErr.message }), { status:500, headers:{ ...corsHeaders, "content-type":"application/json" }});
+    }
 
-    return new Response(JSON.stringify({ ok:true, recorded_at: new Date().toISOString(), distance_m }), { status:200, headers:{ ...corsHeaders, "content-type":"application/json" }});
+    return new Response(JSON.stringify({ ok:true, recorded_at: new Date().toISOString() }), { status:200, headers:{ ...corsHeaders, "content-type":"application/json" }});
+
   } catch (e) {
     console.error("[edge checkin] error:", e);
     return new Response(JSON.stringify({ error:"internal_error", details: String(e) }), { status:500, headers:{ ...corsHeaders, "content-type":"application/json" }});

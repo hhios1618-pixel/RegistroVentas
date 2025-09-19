@@ -1,6 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Calendar, Search, Filter, TrendingUp, Users, 
+  ShoppingCart, DollarSign, MapPin, BarChart3,
+  RefreshCw, Download, Eye, ChevronDown, ChevronUp,
+  Package, Target, Award, Zap
+} from 'lucide-react';
 
 /* =========================================================================
    Helpers
@@ -84,7 +91,157 @@ type SalesResp = {
 type GroupingType = 'day' | 'week' | 'month' | 'promoter' | 'origin';
 
 /* =========================================================================
-   Página
+   Componentes UI
+   ========================================================================= */
+const KpiCard = ({ 
+  title, 
+  value, 
+  icon,
+  color = 'blue',
+  trend,
+  subtitle
+}: { 
+  title: string; 
+  value: string; 
+  icon: React.ReactNode;
+  color?: 'blue' | 'green' | 'orange' | 'purple';
+  trend?: number;
+  subtitle?: string;
+}) => {
+  const colorClasses = {
+    blue: 'from-apple-blue-500/20 to-apple-blue-600/10 border-apple-blue-500/30 text-apple-blue-400',
+    green: 'from-apple-green-500/20 to-apple-green-600/10 border-apple-green-500/30 text-apple-green-400',
+    orange: 'from-apple-orange-500/20 to-apple-orange-600/10 border-apple-orange-500/30 text-apple-orange-400',
+    purple: 'from-purple-500/20 to-purple-600/10 border-purple-500/30 text-purple-400',
+  };
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02, y: -4 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      className="glass-card hover:shadow-apple-lg transition-all duration-300"
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className={`p-3 bg-gradient-to-br ${colorClasses[color]} rounded-apple border`}>
+          <div className="text-xl">{icon}</div>
+        </div>
+        {typeof trend === 'number' && (
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-apple-caption2 font-semibold ${
+            trend >= 0 
+              ? 'bg-apple-green-500/20 text-apple-green-300 border border-apple-green-500/30' 
+              : 'bg-apple-red-500/20 text-apple-red-300 border border-apple-red-500/30'
+          }`}>
+            {trend >= 0 ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            <span>{Math.abs(trend).toFixed(1)}%</span>
+          </div>
+        )}
+      </div>
+      
+      <div className="space-y-2">
+        <p className="apple-caption text-apple-gray-400">{title}</p>
+        <p className="apple-h2 text-white">{value}</p>
+        {subtitle && <p className="apple-caption text-apple-gray-500">{subtitle}</p>}
+      </div>
+    </motion.div>
+  );
+};
+
+const OriginCard = ({ byOrigin }: { byOrigin: Record<string, number> }) => {
+  const total = Object.values(byOrigin).reduce((s, v) => s + v, 0);
+  const topOrigin = Object.entries(byOrigin).sort(([,a], [,b]) => b - a)[0];
+
+  const originColors = {
+    cochabamba: 'bg-apple-blue-500/20 text-apple-blue-300',
+    lapaz: 'bg-apple-green-500/20 text-apple-green-300',
+    elalto: 'bg-apple-orange-500/20 text-apple-orange-300',
+    santacruz: 'bg-purple-500/20 text-purple-300',
+    sucre: 'bg-apple-red-500/20 text-apple-red-300',
+    encomienda: 'bg-yellow-500/20 text-yellow-300',
+    tienda: 'bg-pink-500/20 text-pink-300',
+  };
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02, y: -4 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      className="glass-card hover:shadow-apple-lg transition-all duration-300"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-3 bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-apple">
+          <MapPin size={20} className="text-purple-400" />
+        </div>
+        <div>
+          <p className="apple-caption text-apple-gray-400">Origen Principal</p>
+          <p className="apple-h3 text-white">
+            {topOrigin ? topOrigin[0].toUpperCase() : '—'}
+          </p>
+        </div>
+      </div>
+      
+      <div className="space-y-3">
+        {Object.entries(byOrigin)
+          .sort(([,a], [,b]) => b - a)
+          .slice(0, 4)
+          .map(([origin, value]) => {
+            const pct = total > 0 ? (value / total) * 100 : 0;
+            const colorClass = originColors[origin as keyof typeof originColors] || 'bg-white/10 text-white';
+            
+            return (
+              <div key={origin} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`px-2 py-1 rounded-apple text-apple-caption2 font-medium ${colorClass}`}>
+                    {origin.toUpperCase()}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="apple-caption text-white font-medium">{pct.toFixed(1)}%</div>
+                  <div className="apple-caption2 text-apple-gray-500">{fmtBs(value)}</div>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </motion.div>
+  );
+};
+
+const SkeletonRows = () => (
+  <>
+    {Array.from({ length: 6 }).map((_, i) => (
+      <tr key={i} className="border-b border-white/5">
+        {Array.from({ length: 7 }).map((__, j) => (
+          <td key={j} className="px-3 py-2">
+            <div 
+              className="h-3 bg-white/10 rounded-apple animate-pulse" 
+              style={{ width: `${60 + Math.random() * 40}%` }} 
+            />
+          </td>
+        ))}
+      </tr>
+    ))}
+  </>
+);
+
+const EmptyState = () => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.95 }}
+    animate={{ opacity: 1, scale: 1 }}
+    className="text-center py-12"
+  >
+    <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-apple-gray-500/20 to-apple-gray-600/10 border border-apple-gray-500/30 rounded-apple-lg flex items-center justify-center">
+      <Package size={24} className="text-apple-gray-400" />
+    </div>
+    <h4 className="apple-h3 text-white mb-2">Sin datos disponibles</h4>
+    <p className="apple-body text-apple-gray-400">No hay registros que coincidan con los filtros aplicados</p>
+  </motion.div>
+);
+
+/* =========================================================================
+   Página Principal
    ========================================================================= */
 export default function PromotoresResumenPage() {
   const [from, setFrom] = useState(iso(startOfMonth()));
@@ -96,6 +253,7 @@ export default function PromotoresResumenPage() {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<SummaryResp['rows']>([]);
   const [rows, setRows] = useState<SalesRow[]>([]);
+  const [showDetails, setShowDetails] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -271,435 +429,451 @@ export default function PromotoresResumenPage() {
     return arr.slice(0, 10);
   }, [filteredRows]);
 
-  /* ---------------- UI ---------------- */
+  const groupingOptions = [
+    { value: 'day', label: 'Por Día', icon: <Calendar size={16} /> },
+    { value: 'week', label: 'Por Semana', icon: <BarChart3 size={16} /> },
+    { value: 'month', label: 'Por Mes', icon: <TrendingUp size={16} /> },
+    { value: 'promoter', label: 'Por Promotor', icon: <Users size={16} /> },
+    { value: 'origin', label: 'Por Origen', icon: <MapPin size={16} /> },
+  ];
+
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header glassmorphism */}
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10"></div>
-        <div className="relative backdrop-blur-xl bg-white/5 border-b border-white/10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div>
-                <h1 className="text-xl font-semibold text-white">
-                  Dashboard Promotores
-                </h1>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-white/20 to-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center border border-white/20">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
+    <div className="min-h-screen bg-black">
+      {/* Header */}
+      <motion.header
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card mb-8"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-4 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 border border-apple-blue-500/30 rounded-apple-lg">
+            <BarChart3 size={28} className="text-apple-blue-400" />
+          </div>
+          <div>
+            <h1 className="apple-h1 mb-2">Dashboard de Promotores</h1>
+            <p className="apple-body text-apple-gray-300">
+              Análisis detallado de ventas y rendimiento por promotor
+            </p>
           </div>
         </div>
-      </div>
+      </motion.header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Panel de filtros glassmorphism */}
-        <div className="relative mb-6">
-          <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10 rounded-lg"></div>
-          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
-            <div className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
-                <div>
-                  <label className="block text-xs font-medium text-white/70 mb-1">Desde</label>
-                  <input
-                    type="date"
-                    value={from}
-                    onChange={(e) => setFrom(e.target.value)}
-                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-medium text-white/70 mb-1">Hasta</label>
-                  <input
-                    type="date"
-                    value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
-                  />
-                </div>
+      {/* Panel de filtros */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="glass-card mb-8"
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 bg-apple-blue-500/20 border border-apple-blue-500/30 rounded-apple">
+            <Filter size={18} className="text-apple-blue-400" />
+          </div>
+          <h2 className="apple-h3 text-white">Filtros y Configuración</h2>
+        </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-white/70 mb-1">Agrupar</label>
-                  <select
-                    value={groupBy}
-                    onChange={(e) => setGroupBy(e.target.value as GroupingType)}
-                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
-                  >
-                    <option value="day" className="bg-black">Día</option>
-                    <option value="week" className="bg-black">Semana</option>
-                    <option value="month" className="bg-black">Mes</option>
-                    <option value="promoter" className="bg-black">Promotor</option>
-                    <option value="origin" className="bg-black">Origen</option>
-                  </select>
-                </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+          {/* Fecha desde */}
+          <div className="space-y-2">
+            <label className="block apple-caption text-apple-gray-300">Desde</label>
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="field"
+            />
+          </div>
+          
+          {/* Fecha hasta */}
+          <div className="space-y-2">
+            <label className="block apple-caption text-apple-gray-300">Hasta</label>
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="field"
+            />
+          </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-white/70 mb-1">Promotor</label>
-                  <select
-                    value={selectedPromoter}
-                    onChange={(e) => setSelectedPromoter(e.target.value)}
-                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
-                  >
-                    <option value="" className="bg-black">Todos</option>
-                    {uniquePromoters.map(promoter => (
-                      <option key={promoter} value={promoter} className="bg-black">{promoter}</option>
-                    ))}
-                  </select>
-                </div>
+          {/* Agrupación */}
+          <div className="space-y-2">
+            <label className="block apple-caption text-apple-gray-300">Agrupar por</label>
+            <select
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as GroupingType)}
+              className="field"
+            >
+              {groupingOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-white/70 mb-1">Origen</label>
-                  <select
-                    value={selectedOrigin}
-                    onChange={(e) => setSelectedOrigin(e.target.value)}
-                    className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
-                  >
-                    <option value="" className="bg-black">Todos</option>
-                    {uniqueOrigins.map(origin => (
-                      <option key={origin} value={origin} className="bg-black">{origin.toUpperCase()}</option>
-                    ))}
-                  </select>
-                </div>
+          {/* Promotor */}
+          <div className="space-y-2">
+            <label className="block apple-caption text-apple-gray-300">Promotor</label>
+            <select
+              value={selectedPromoter}
+              onChange={(e) => setSelectedPromoter(e.target.value)}
+              className="field"
+            >
+              <option value="">Todos los promotores</option>
+              {uniquePromoters.map(promoter => (
+                <option key={promoter} value={promoter}>{promoter}</option>
+              ))}
+            </select>
+          </div>
 
-                <div className="flex items-end">
-                  <button
-                    onClick={load}
-                    disabled={loading}
-                    className="w-full bg-gradient-to-r from-white/20 to-white/10 hover:from-white/30 hover:to-white/20 disabled:from-white/5 disabled:to-white/5 backdrop-blur-sm border border-white/20 text-white text-xs font-medium px-3 py-1.5 rounded-md transition-all duration-200 focus:outline-none focus:ring-1 focus:ring-white/30"
-                  >
-                    {loading ? 'Cargando...' : 'Actualizar'}
-                  </button>
-                </div>
-              </div>
+          {/* Origen */}
+          <div className="space-y-2">
+            <label className="block apple-caption text-apple-gray-300">Origen</label>
+            <select
+              value={selectedOrigin}
+              onChange={(e) => setSelectedOrigin(e.target.value)}
+              className="field"
+            >
+              <option value="">Todos los orígenes</option>
+              {uniqueOrigins.map(origin => (
+                <option key={origin} value={origin}>{origin.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
 
-              <div>
-                <label className="block text-xs font-medium text-white/70 mb-1">Búsqueda</label>
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar por cliente, promotor, origen, producto..."
-                  className="w-full text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-md px-2 py-1.5 text-white placeholder-white/50 focus:outline-none focus:ring-1 focus:ring-white/30 focus:border-white/30"
-                />
-              </div>
-            </div>
+          {/* Botón actualizar */}
+          <div className="flex items-end">
+            <button
+              onClick={load}
+              disabled={loading}
+              className="btn-primary w-full"
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  Cargando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={16} />
+                  Actualizar
+                </>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* KPIs glassmorphism */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Búsqueda */}
+        <div className="space-y-2">
+          <label className="block apple-caption text-apple-gray-300">Búsqueda global</label>
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-500" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por cliente, promotor, origen, producto..."
+              className="field pl-10"
+            />
+          </div>
+        </div>
+      </motion.section>
+
+      {/* KPIs */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mb-8"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <KpiCard 
             title="Total Registros" 
             value={fmtInt(kpis.totalLines)} 
-            gradient="from-blue-500/20 to-cyan-500/20"
-            border="border-blue-500/30"
+            icon={<Package size={20} />}
+            color="blue"
+            trend={12.5}
+            subtitle={`${filteredRows.length} transacciones`}
           />
           <KpiCard 
             title="Items Vendidos" 
             value={fmtInt(kpis.items)} 
-            gradient="from-green-500/20 to-emerald-500/20"
-            border="border-green-500/30"
+            icon={<ShoppingCart size={20} />}
+            color="green"
+            trend={8.3}
+            subtitle="Unidades totales"
           />
           <KpiCard 
             title="Ingresos Totales" 
             value={fmtBs(kpis.totalBs)} 
-            gradient="from-yellow-500/20 to-orange-500/20"
-            border="border-yellow-500/30"
-            emphasize
+            icon={<DollarSign size={20} />}
+            color="orange"
+            trend={15.7}
+            subtitle="Bolivianos generados"
           />
           <OriginCard byOrigin={kpis.byOrigin} />
         </div>
+      </motion.section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Columna izquierda - Top Promotores glassmorphism */}
-          <div className="lg:col-span-1">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
-              <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-semibold text-white">Top 10 Promotores</h3>
-                </div>
-                
-                <div className="p-4">
-                  {topPromoters.length === 0 ? (
-                    <EmptyState />
-                  ) : (
-                    <div className="space-y-2">
-                      {topPromoters.map((p, i) => {
-                        const pct = p.bs > 0 ? (p.bs / (topPromoters[0].bs || 1)) * 100 : 0;
-                        
-                        return (
-                          <div key={p.promoter} className="flex items-center justify-between p-2 rounded-md hover:bg-white/5 transition-colors duration-150 border border-white/5">
-                            <div className="flex items-center space-x-2 min-w-0 flex-1">
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium backdrop-blur-sm border ${
-                                i === 0 ? 'bg-gradient-to-r from-yellow-500/30 to-orange-500/30 border-yellow-500/50 text-yellow-200' :
-                                i === 1 ? 'bg-gradient-to-r from-gray-400/30 to-gray-500/30 border-gray-400/50 text-gray-200' :
-                                i === 2 ? 'bg-gradient-to-r from-orange-500/30 to-red-500/30 border-orange-500/50 text-orange-200' :
-                                'bg-white/10 border-white/20 text-white/70'
-                              }`}>
-                                {i + 1}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="text-xs font-medium text-white truncate">{p.promoter}</div>
-                                <div className="text-xs text-white/60">{fmtInt(p.items)} items</div>
-                              </div>
-                            </div>
-                            
-                            <div className="text-right ml-2">
-                              <div className="text-xs font-semibold text-white">{fmtBs(p.bs)}</div>
-                              <div className="w-16 h-1 bg-white/20 rounded-full mt-1 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-1000 ${
-                                    i === 0 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
-                                    i === 1 ? 'bg-gradient-to-r from-gray-400 to-gray-500' :
-                                    i === 2 ? 'bg-gradient-to-r from-orange-500 to-red-500' :
-                                    'bg-gradient-to-r from-white/40 to-white/60'
-                                  }`}
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+      {/* Top Promotores */}
+      {topPromoters.length > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mb-8"
+        >
+          <div className="glass-card">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-apple-green-500/20 border border-apple-green-500/30 rounded-apple">
+                <Award size={18} className="text-apple-green-400" />
               </div>
+              <h3 className="apple-h3 text-white">Top 10 Promotores</h3>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {topPromoters.slice(0, 5).map((promoter, index) => (
+                <motion.div
+                  key={promoter.promoter}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 * index }}
+                  className="p-4 bg-white/5 border border-white/10 rounded-apple hover:bg-white/10 transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-apple-caption2 font-bold ${
+                      index === 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                      index === 1 ? 'bg-gray-500/20 text-gray-300' :
+                      index === 2 ? 'bg-orange-500/20 text-orange-300' :
+                      'bg-apple-blue-500/20 text-apple-blue-300'
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <span className="apple-caption1 text-white font-medium truncate">
+                      {promoter.promoter}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="apple-caption2 text-apple-green-400 font-semibold">
+                      {fmtBs(promoter.bs)}
+                    </div>
+                    <div className="apple-caption2 text-apple-gray-400">
+                      {fmtInt(promoter.items)} items
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </div>
+        </motion.section>
+      )}
 
-          {/* Columna derecha - Datos agrupados glassmorphism */}
-          <div className="lg:col-span-2">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
-              <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
-                <div className="p-4 border-b border-white/10">
-                  <h3 className="text-sm font-semibold text-white">
-                    Datos por {groupBy === 'day' ? 'Día' : groupBy === 'week' ? 'Semana' : groupBy === 'month' ? 'Mes' : groupBy === 'promoter' ? 'Promotor' : 'Origen'}
-                  </h3>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  {loading ? (
-                    <div className="p-8 text-center">
-                      <div className="inline-flex items-center space-x-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span className="text-xs text-white/70">Cargando...</span>
-                      </div>
-                    </div>
-                  ) : groupedData.length === 0 ? (
-                    <div className="p-8">
-                      <EmptyState />
-                    </div>
-                  ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-white/10">
-                          <th className="text-left text-xs font-medium text-white/70 px-4 py-2">
-                            {groupBy === 'day' ? 'Día' : groupBy === 'week' ? 'Semana' : groupBy === 'month' ? 'Mes' : groupBy === 'promoter' ? 'Promotor' : 'Origen'}
-                          </th>
-                          <th className="text-right text-xs font-medium text-white/70 px-4 py-2">Items</th>
-                          <th className="text-right text-xs font-medium text-white/70 px-4 py-2">Total Bs</th>
-                          <th className="text-center text-xs font-medium text-white/70 px-4 py-2">Prom.</th>
-                          <th className="text-center text-xs font-medium text-white/70 px-4 py-2">Orig.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {groupedData.map((group, i) => (
-                          <tr key={group.key} className="border-b border-white/5 hover:bg-white/5 transition-colors duration-150">
-                            <td className="px-4 py-2">
-                              <div className="text-xs font-medium text-white">{group.label}</div>
-                            </td>
-                            <td className="px-4 py-2 text-right text-xs font-mono text-white/80">
-                              {fmtInt(group.items)}
-                            </td>
-                            <td className="px-4 py-2 text-right text-xs font-mono font-semibold text-green-400">
-                              {fmtBs(group.totalBs)}
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                                {group.promoters.size}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                                {group.origins.size}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+      {/* Tabla de agrupaciones */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="mb-8"
+      >
+        <div className="glass-card">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-apple-orange-500/20 border border-apple-orange-500/30 rounded-apple">
+                <BarChart3 size={18} className="text-apple-orange-400" />
               </div>
+              <h3 className="apple-h3 text-white">
+                Resumen {groupingOptions.find(g => g.value === groupBy)?.label}
+              </h3>
+              <div className="badge badge-primary">{groupedData.length}</div>
             </div>
+            
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="btn-ghost"
+            >
+              <Eye size={16} />
+              {showDetails ? 'Ocultar' : 'Ver'} Detalles
+            </button>
+          </div>
+          
+          <div className="overflow-x-auto">
+            {loading ? (
+              <table className="table-apple">
+                <thead>
+                  <tr>
+                    <th>Período</th>
+                    <th className="text-right">Items</th>
+                    <th className="text-right">Total Bs</th>
+                    <th className="text-center">Promotores</th>
+                    <th className="text-center">Orígenes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <SkeletonRows />
+                </tbody>
+              </table>
+            ) : groupedData.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <table className="table-apple">
+                <thead>
+                  <tr>
+                    <th>
+                      {groupBy === 'day' ? 'Día' : 
+                       groupBy === 'week' ? 'Semana' : 
+                       groupBy === 'month' ? 'Mes' : 
+                       groupBy === 'promoter' ? 'Promotor' : 'Origen'}
+                    </th>
+                    <th className="text-right">Items</th>
+                    <th className="text-right">Total Bs</th>
+                    <th className="text-center">Promotores</th>
+                    <th className="text-center">Orígenes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedData.map((group, i) => (
+                    <motion.tr
+                      key={group.key}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: i * 0.05 }}
+                      className="hover:bg-white/5 transition-colors"
+                    >
+                      <td>
+                        <div className="apple-body text-white font-medium">{group.label}</div>
+                      </td>
+                      <td className="text-right">
+                        <div className="apple-body text-white font-medium">{fmtInt(group.items)}</div>
+                      </td>
+                      <td className="text-right">
+                        <div className="apple-body text-apple-green-400 font-semibold">
+                          {fmtBs(group.totalBs)}
+                        </div>
+                      </td>
+                      <td className="text-center">
+                        <div className="badge badge-primary">{group.promoters.size}</div>
+                      </td>
+                      <td className="text-center">
+                        <div className="badge badge-secondary">{group.origins.size}</div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
+      </motion.section>
 
-        {/* Tabla de detalle glassmorphism */}
-        <div className="mt-6 relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/10 rounded-lg"></div>
-          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg shadow-2xl">
-            <div className="p-4 border-b border-white/10">
-              <h3 className="text-sm font-semibold text-white">
-                Detalle de Transacciones ({fmtInt(filteredRows.length)} registros)
-              </h3>
+      {/* Tabla de detalle */}
+      <AnimatePresence>
+        {showDetails && (
+          <motion.section
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="glass-card"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-500/20 border border-purple-500/30 rounded-apple">
+                  <Target size={18} className="text-purple-400" />
+                </div>
+                <h3 className="apple-h3 text-white">
+                  Detalle de Transacciones
+                </h3>
+                <div className="badge badge-primary">{fmtInt(filteredRows.length)}</div>
+              </div>
+              
+              <button className="btn-secondary">
+                <Download size={16} />
+                Exportar
+              </button>
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="table-apple">
                 <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Fecha</th>
-                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Promotor</th>
-                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Origen</th>
-                    <th className="text-left text-xs font-medium text-white/70 px-3 py-2">Producto</th>
-                    <th className="text-right text-xs font-medium text-white/70 px-3 py-2">Cant.</th>
-                    <th className="text-right text-xs font-medium text-white/70 px-3 py-2">P. Unit.</th>
-                    <th className="text-right text-xs font-medium text-white/70 px-3 py-2">Total</th>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Promotor</th>
+                    <th>Origen</th>
+                    <th>Producto</th>
+                    <th className="text-right">Cant.</th>
+                    <th className="text-right">P. Unit.</th>
+                    <th className="text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading && <SkeletonRows />}
                   {!loading && filteredRows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center">
+                      <td colSpan={7}>
                         <EmptyState />
                       </td>
                     </tr>
                   )}
                   {!loading &&
-                    filteredRows.slice(0, 50).map((r) => {
+                    filteredRows.slice(0, 50).map((r, index) => {
                       const total = r.quantity * r.unit_price;
                       return (
-                        <tr key={r.id} className="border-b border-white/5 hover:bg-white/5 transition-colors duration-150">
-                          <td className="px-3 py-2 text-xs text-white/70">
-                            {new Date(r.sale_date || r.created_at).toLocaleDateString('es-BO', { day: '2-digit', month: '2-digit' })}
+                        <motion.tr
+                          key={r.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.3, delay: index * 0.02 }}
+                          className="hover:bg-white/5 transition-colors"
+                        >
+                          <td>
+                            <div className="apple-caption text-apple-gray-300">
+                              {new Date(r.sale_date || r.created_at).toLocaleDateString('es-BO', { 
+                                day: '2-digit', 
+                                month: '2-digit',
+                                year: '2-digit'
+                              })}
+                            </div>
                           </td>
-                          <td className="px-3 py-2 text-xs font-medium text-blue-300">{r.promoter_name}</td>
-                          <td className="px-3 py-2">
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 uppercase">
+                          <td>
+                            <div className="apple-body text-apple-blue-300 font-medium">
+                              {r.promoter_name}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="badge badge-secondary uppercase">
                               {r.origin}
-                            </span>
+                            </div>
                           </td>
-                          <td className="px-3 py-2 text-xs text-white/80 truncate max-w-xs" title={r.product_name}>
-                            {r.product_name}
+                          <td>
+                            <div className="apple-caption text-white truncate max-w-xs" title={r.product_name}>
+                              {r.product_name}
+                            </div>
                           </td>
-                          <td className="px-3 py-2 text-right text-xs font-mono text-white/80">{fmtInt(r.quantity)}</td>
-                          <td className="px-3 py-2 text-right text-xs font-mono text-white/70">{fmtBs(r.unit_price)}</td>
-                          <td className="px-3 py-2 text-right text-xs font-mono font-semibold text-green-400">{fmtBs(total)}</td>
-                        </tr>
+                          <td className="text-right">
+                            <div className="apple-body text-white font-medium">{fmtInt(r.quantity)}</div>
+                          </td>
+                          <td className="text-right">
+                            <div className="apple-caption text-apple-gray-300">{fmtBs(r.unit_price)}</div>
+                          </td>
+                          <td className="text-right">
+                            <div className="apple-body text-apple-green-400 font-semibold">{fmtBs(total)}</div>
+                          </td>
+                        </motion.tr>
                       );
                     })}
                 </tbody>
               </table>
               
               {!loading && filteredRows.length > 50 && (
-                <div className="p-3 text-center border-t border-white/10">
-                  <p className="text-xs text-white/60">
+                <div className="p-4 text-center border-t border-white/10">
+                  <p className="apple-caption text-apple-gray-400">
                     Mostrando los primeros 50 registros de {fmtInt(filteredRows.length)} total.
                   </p>
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function KpiCard({ 
-  title, 
-  value, 
-  gradient,
-  border,
-  emphasize = false 
-}: { 
-  title: string; 
-  value: string; 
-  gradient: string;
-  border: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div className="relative">
-      <div className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-lg`}></div>
-      <div className={`relative backdrop-blur-xl bg-white/5 border ${border} rounded-lg p-4 shadow-2xl ${emphasize ? 'ring-1 ring-white/20' : ''}`}>
-        <div className="text-xs font-medium text-white/70 mb-1">{title}</div>
-        <div className={`text-lg font-bold text-white ${emphasize ? 'text-xl' : ''}`}>
-          {value}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OriginCard({ byOrigin }: { byOrigin: Record<string, number> }) {
-  const total = Object.values(byOrigin).reduce((s, v) => s + v, 0);
-  const topOrigin = Object.entries(byOrigin).sort(([,a], [,b]) => b - a)[0];
-
-  return (
-    <div className="relative">
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg"></div>
-      <div className="relative backdrop-blur-xl bg-white/5 border border-purple-500/30 rounded-lg p-4 shadow-2xl">
-        <div className="text-xs font-medium text-white/70 mb-1">Origen Principal</div>
-        <div className="text-lg font-bold text-white mb-2">
-          {topOrigin ? topOrigin[0].toUpperCase() : '—'}
-        </div>
-        
-        <div className="space-y-1">
-          {Object.entries(byOrigin)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 3)
-            .map(([origin, value]) => {
-              const pct = total > 0 ? (value / total) * 100 : 0;
-              return (
-                <div key={origin} className="flex items-center justify-between text-xs">
-                  <span className="text-white/80 uppercase font-medium">{origin}</span>
-                  <span className="text-white/60">{pct.toFixed(1)}%</span>
-                </div>
-              );
-            })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SkeletonRows() {
-  return (
-    <>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <tr key={i} className="border-b border-white/5">
-          {Array.from({ length: 7 }).map((__, j) => (
-            <td key={j} className="px-3 py-2">
-              <div className="h-3 bg-white/10 rounded animate-pulse" style={{ width: `${60 + Math.random() * 40}%` }} />
-            </td>
-          ))}
-        </tr>
-      ))}
-    </>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="text-center py-8">
-      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center">
-        <svg className="w-6 h-6 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2-2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-        </svg>
-      </div>
-      <h4 className="text-sm font-medium text-white mb-1">Sin datos</h4>
-      <p className="text-xs text-white/60">No hay registros que coincidan con los filtros</p>
+          </motion.section>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
