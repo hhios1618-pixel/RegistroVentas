@@ -169,6 +169,7 @@ export const Sidebar: FC<SidebarProps> = ({
       icon: <Package size={12} />,
       items: [
         { href: ROUTES.LOGISTICA, icon: <Package size={18} />, label: 'Logística', shortcut: '1', req: 'view:logistica' },
+        { href: ROUTES.INVENTARIO, icon: <Package size={18} />, label: 'Inventario', shortcut: 'I', req: 'view:inventario' },
         { href: ROUTES.REGISTRO_ASESORES, icon: <UserPlus size={18} />, label: 'Registro asesores', shortcut: '6', req: 'view:registro-asesores' },
         { href: ROUTES.REGISTRO_PROMOTORES, icon: <UserPlus size={18} />, label: 'Registro promotores', req: 'view:registro-promotores' },
         { href: ROUTES.DEVOLUCIONES, icon: <RotateCcw size={18} />, label: 'Devoluciones', shortcut: '4', req: 'view:devoluciones' },
@@ -218,7 +219,7 @@ export const Sidebar: FC<SidebarProps> = ({
                 if (!meLoaded) return false;
                 return !!currentUser?.id && item.requiresPersonId.includes(currentUser.id);
               }
-              return !item.req || can(userRole, item.req as any);
+              return !item.req || can(userRole, item.req);
             });
 
             if (!items.length) return null;
