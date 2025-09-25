@@ -1,17 +1,17 @@
 import { NextResponse } from 'next/server';
-import { getServerSupabase } from '@/lib/supabaseServer';
-import { supabaseService } from '@/lib/supabaseClient'; // tu factory con SERVICE_ROLE
+import { createServerSupabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase'; // tu factory con SERVICE_ROLE
 
 export async function POST() {
   try {
-    const supa = await getServerSupabase();                 // sesión real (anon + cookies)
+    const supa = await createServerSupabase();                 // sesión real (anon + cookies)
     const { data: { user } } = await supa.auth.getUser();
     if (!user || !user.email) {
       return NextResponse.json({ ok: false, reason: 'no-session' }, { status: 401 });
     }
 
     // Actualiza people.user_id por email si aún no está seteado
-    const admin = supabaseService();                        // SERVICE_ROLE (server-only)
+    const admin = supabaseAdmin();                        // SERVICE_ROLE (server-only)
     const { data: updated, error } = await admin
       .from('people')
       .update({ user_id: user.id })

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import supabase from '@/lib/supabaseClient';
+import supabase from '@/lib/supabase';
 import type { OrderRow, DeliveryUser } from '@/lib/types';
 
 // Definimos UserProfile aquí o lo agregamos al archivo types.ts

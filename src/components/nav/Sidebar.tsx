@@ -4,18 +4,18 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Home, BarChart3, Users, UserPlus, Package, 
-  RotateCcw, Calendar, FileText, Settings, 
+import {
+  Home, BarChart3, Users, UserPlus, Package,
+  RotateCcw, Calendar, FileText, Settings,
   LogOut, ChevronRight, Sparkles, Activity
 } from 'lucide-react';
 import type { FC, ReactNode } from 'react';
 import { useState, useEffect } from 'react';
-
 import LogoutButton from '@/components/LogoutButton';
-import { can, ROUTES, type Role } from './roles';
 
-/* ────────────────────────────── TIPOS ────────────────────────────── */
+// Importa roles SOLO desde lib/auth/roles
+import { can, ROUTES, type Role } from '@/lib/auth/roles';
+
 type NavLinkItem = {
   href: string;
   icon: ReactNode;
@@ -23,7 +23,7 @@ type NavLinkItem = {
   shortcut?: string;
   req?: Parameters<typeof can>[1];
   badge?: string | number;
-  requiresPersonId?: string[]; // ⬅️ gate por people.id
+  requiresPersonId?: string[];
 };
 
 type SidebarProps = {
@@ -35,7 +35,7 @@ type SidebarProps = {
 
 type MeResponse = {
   ok?: boolean;
-  id?: string;          // ⬅️ lo trae tu /endpoints/me
+  id?: string;
   full_name?: string;
   role?: string;
   privilege_level?: number;
@@ -44,24 +44,18 @@ type MeResponse = {
   local?: string | null;
 } | null;
 
-/* ────────────────────────────── UTILIDADES ────────────────────────────── */
 const isActive = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(href + '/');
 
-/* ────────────────────────────── ALLOWLIST POR ID ────────────────────────────── */
 const FINANCIAL_CONTROL_IDS = [
-  '32c53c5d-cf04-425c-a50d-4c016df61d7f', // Rolando
-  'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d', // Hugo
-  '07b93705-f631-4b67-b52a-f7c30bc2ba5b', // Julieta
-  '28b63f71-babb-4ee0-8c2a-8530007735b7', // Daniela
+  '32c53c5d-cf04-425c-a50d-4c016df61d7f',
+  'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d',
+  '07b93705-f631-4b67-b52a-f7c30bc2ba5b',
+  '28b63f71-babb-4ee0-8c2a-8530007735b7',
 ];
 
-/* ────────────────────────────── COMPONENTES ────────────────────────────── */
-const NavLink: FC<{ 
-  item: NavLinkItem; 
-  active?: boolean; 
-  onClick?: () => void;
-}> = ({ item, active, onClick }) => (
+const NavLink: FC<{ item: NavLinkItem; active?: boolean; onClick?: () => void }> = 
+({ item, active, onClick }) => (
   <motion.div
     whileHover={{ x: 2 }}
     whileTap={{ scale: 0.98 }}
@@ -104,8 +98,8 @@ const NavLink: FC<{
           {item.shortcut}
         </kbd>
       )}
-      <ChevronRight 
-        size={14} 
+      <ChevronRight
+        size={14}
         className={[
           'transition-all duration-300 opacity-0 group-hover:opacity-60',
           active ? 'text-apple-blue-400' : 'text-current',
@@ -122,12 +116,11 @@ const SectionHeader: FC<{ title: string; icon?: ReactNode }> = ({ title, icon })
   </div>
 );
 
-/* ────────────────────────────── SIDEBAR PRINCIPAL ────────────────────────────── */
-export const Sidebar: FC<SidebarProps> = ({ 
-  userRole, 
-  userName, 
-  isOpen = false, 
-  onClose 
+export const Sidebar: FC<SidebarProps> = ({
+  userRole,
+  userName,
+  isOpen = false,
+  onClose,
 }) => {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState<MeResponse>(null);
@@ -152,9 +145,9 @@ export const Sidebar: FC<SidebarProps> = ({
       icon: <Home size={12} />,
       items: [
         { href: ROUTES.DASH, icon: <Home size={18} />, label: 'Inicio', shortcut: 'H' },
-        { 
+        {
           href: '/dashboard/financial-control',
-          icon: <Activity size={18} />, 
+          icon: <Activity size={18} />,
           label: 'Control Financiero',
           shortcut: 'F',
           requiresPersonId: FINANCIAL_CONTROL_IDS,
@@ -222,14 +215,14 @@ export const Sidebar: FC<SidebarProps> = ({
           {SECTIONS.map((section) => {
             const items = section.items.filter((item) => {
               if (item.requiresPersonId) {
-                if (!meLoaded) return false; // evita parpadeo
+                if (!meLoaded) return false;
                 return !!currentUser?.id && item.requiresPersonId.includes(currentUser.id);
               }
               return !item.req || can(userRole, item.req as any);
             });
-            
+
             if (!items.length) return null;
-            
+
             return (
               <motion.div
                 key={section.title}
@@ -273,7 +266,7 @@ export const Sidebar: FC<SidebarProps> = ({
               </div>
             </div>
           </motion.div>
-          
+
           <LogoutButton className="w-full btn-ghost justify-start gap-3 text-apple-gray-300 hover:text-white hover:bg-apple-red-600/10 hover:border-apple-red-500/30">
             <LogOut size={18} />
             <span>Cerrar sesión</span>

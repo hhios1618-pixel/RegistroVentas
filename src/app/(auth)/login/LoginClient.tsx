@@ -106,7 +106,7 @@ const ParticlesBG: React.FC = () => {
     };
   }, []);
 
-  return <canvas ref={ref} className="absolute inset-0 z-0 pointer-events-none" />;
+  return <canvas ref={ref} className="absolute inset-0 z-10 pointer-events-none" />;
 };
 
 /* ──────────────────────── NOTIFICATION ──────────────────────── */
@@ -183,7 +183,7 @@ export function LoginClient() {
 
   const clearNotification = () => setNotification(null);
 
-  // Login handler
+  // Login handler - CORREGIDO para usar endpoint unificado
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     clearNotification();
@@ -196,9 +196,11 @@ export function LoginClient() {
     setLoading(true);
     
     try {
-      const response = await fetch('/endpoints/auth/basic-login', {
+      // CAMBIO CRÍTICO: Usar endpoint unificado
+      const response = await fetch('/endpoints/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ 
           username: username.trim(), 
           password 
@@ -225,7 +227,7 @@ export function LoginClient() {
     }
   };
 
-  // Change password handler
+  // Change password handler - CORREGIDO para usar endpoint unificado
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     clearNotification();
@@ -248,9 +250,11 @@ export function LoginClient() {
     setChangingPassword(true);
 
     try {
+      // CAMBIO CRÍTICO: Usar endpoint unificado
       const response = await fetch('/endpoints/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           username: username.trim(),
           currentPassword,
@@ -278,16 +282,30 @@ export function LoginClient() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-black">
+    <div className="relative min-h-screen overflow-hidden bg-black">
+      {/* ======== VIDEO BACKGROUND ======== */}
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        <video
+          className="h-full w-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+        >
+          <source src="/1.mp4" type="video/mp4" />
+        </video>
+      </div>
+
       {/* Animated Background */}
       <ParticlesBG />
       
       {/* Gradient Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-950/20 via-black to-apple-green-950/20" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.1),transparent_50%)]" />
+      <div className="absolute inset-0 z-20 bg-gradient-to-br from-apple-blue-950/20 via-black to-apple-green-950/20" />
+      <div className="absolute inset-0 z-30 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.2),transparent_55%)]" />
 
       {/* Content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+      <div className="relative z-40 min-h-screen flex items-center justify-center p-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -461,14 +479,14 @@ export function LoginClient() {
                     {/* Confirm Password */}
                     <div className="space-y-2">
                       <label className="block apple-caption text-apple-gray-300">
-                        Confirmar Nueva Contraseña
+                        Confirmar Contraseña
                       </label>
                       <input
                         type="password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         className="field"
-                        placeholder="Confirma la nueva contraseña"
+                        placeholder="Confirmar nueva contraseña"
                         disabled={changingPassword}
                       />
                     </div>
@@ -479,7 +497,7 @@ export function LoginClient() {
                     <button
                       type="button"
                       onClick={() => setShowChangePassword(false)}
-                      className="btn-secondary flex-1"
+                      className="btn-ghost flex-1"
                       disabled={changingPassword}
                     >
                       Cancelar

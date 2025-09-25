@@ -1,184 +1,205 @@
-// middleware.ts
+// src/middleware.ts — HS256 portable para Node/Edge/Vercel (usa Uint8Array)
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { authEnv } from '@/lib/auth/env';
 
-const SESSION_COOKIE = process.env.SESSION_COOKIE_NAME || 'fenix_session';
+const { sessionCookieName: SESSION_COOKIE, jwtSecret: JWT_SECRET } = authEnv;
 
 const PUBLIC_PREFIXES = [
   '/login',
   '/endpoints/auth',
   '/favicon.ico',
+  '/icon.svg',
+  '/1.mp4',
   '/robots.txt',
   '/sitemap.xml',
   '/manifest.json',
   '/_next',
   '/public',
 ];
+const STATIC_FILE_REGEX = /\.(?:png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|txt|json)$/i;
 
-// ✅ IDs (people.id) autorizados para el panel financiero
-const FINANCIAL_ALLOW_IDS = new Set([
-  '32c53c5d-cf04-425c-a50d-4c016df61d7f', // Rolando Arispe (ronaldo.arispe_32c5)
-  'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d', // Hugo Hormazabal (hugo.hormazabal_c23b)
-  '07b93705-f631-4b67-b52a-f7c30bc2ba5b', // Julieta Rosas (julieta.rosas_07b9)
-  '28b63f71-babb-4ee0-8c2a-8530007735b7', // Daniela Vasquez (daniela.vasquez_28b6)
+const FINANCIAL_ALLOW_IDS = new Set<string>([
+  '32c53c5d-cf04-425c-a50d-4c016df61d7f',
+  'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d',
+  '07b93705-f631-4b67-b52a-f7c30bc2ba5b',
+  '28b63f71-babb-4ee0-8c2a-8530007735b7',
 ]);
 
-// Rutas permitidas por rol (regex)
-const ASESOR_ALLOW: RegExp[] = [
-  /^\/dashboard\/asesores\/HOME(?:\/.*)?$/,
-  /^\/dashboard\/asesores\/registro(?:\/.*)?$/,
-  /^\/dashboard\/asesores\/devoluciones(?:\/.*)?$/,
-  /^\/dashboard\/asesores\/playbook-whatsapp(?:\/.*)?$/,
-  /^\/asistencia(?:\/.*)?$/,
-  /^\/mi\/resumen(?:\/.*)?$/,
-];
+const ROLE_ROUTES: Record<string, string[]> = {
+  ADMIN: ['/dashboard'],
+  COORDINADOR: ['/dashboard', '/logistica', '/asistencia'],
+  LIDER: ['/dashboard', '/asistencia'],
+  ASESOR: ['/dashboard/asesores', '/asistencia', '/mi/resumen'],
+  VENDEDOR: ['/dashboard/asesores', '/asistencia', '/mi/resumen'],
+  VENDEDORA: ['/dashboard/asesores', '/asistencia', '/mi/resumen'],
+  PROMOTOR: ['/dashboard/promotores', '/mi/resumen'],
+  PROMOTORA: ['/dashboard/promotores', '/mi/resumen'],
+};
+const ROLE_HOME: Record<string, string> = {
+  ADMIN: '/dashboard',
+  COORDINADOR: '/logistica',
+  LIDER: '/dashboard/vendedores',
+  ASESOR: '/dashboard/asesores/HOME',
+  VENDEDOR: '/dashboard/asesores/HOME',
+  VENDEDORA: '/dashboard/asesores/HOME',
+  PROMOTOR: '/dashboard/promotores',
+  PROMOTORA: '/dashboard/promotores',
+};
 
-const PROMOTOR_ALLOW: RegExp[] = [
-  /^\/dashboard\/promotores(?:\/.*)?$/,
-  /^\/dashboard\/promotores\/registro(?:\/.*)?$/,
-];
+const enc = new TextEncoder();
 
-// ---------- utils ----------
-function isPublic(pathname: string) {
+function isPublic(pathname: string): boolean {
+  if (STATIC_FILE_REGEX.test(pathname)) return true;
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
 
-// Edge-safe base64url decode → JSON
-function b64urlToJSON(b64url: string): any | null {
+function b64urlToBytes(b64url: string): Uint8Array {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(b64url.length / 4) * 4, '=');
+  const binary = atob(b64);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+  return arr;
+}
+function bytesToString(bytes: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+  return out;
+}
+
+/** Verificación HS256 usando copias `Uint8Array` (evita problemas de BufferSource por realm) */
+async function verifyJWT_HS256(token: string | null | undefined): Promise<any | null> {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [h64, p64, s64] = parts;
+
+  let header: any;
+  let payload: any;
   try {
-    const pad = '='.repeat((4 - (b64url.length % 4)) % 4);
-    const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
-    // atob existe en runtime Edge; si no, usamos TextDecoder como fallback
-    let jsonStr: string;
-    if (typeof atob === 'function') {
-      // decodeURIComponent/escape maneja unicode correctamente
-      jsonStr = decodeURIComponent(escape(atob(b64)));
-    } else {
-      const bin = Uint8Array.from(
-        Buffer.from(b64, 'base64'),
-        (c) => c
-      );
-      jsonStr = new TextDecoder().decode(bin);
-    }
-    return JSON.parse(jsonStr);
+    header = JSON.parse(bytesToString(b64urlToBytes(h64)));
+    payload = JSON.parse(bytesToString(b64urlToBytes(p64)));
   } catch {
+    return null;
+  }
+  if (!header || header.alg !== 'HS256' || header.typ !== 'JWT') return null;
+
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(JWT_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    // 👇 Copias nuevas de tipo Uint8Array (brand seguro)
+    const dataU8 = new Uint8Array(enc.encode(`${h64}.${p64}`));
+    const sigU8  = new Uint8Array(b64urlToBytes(s64));
+
+    const ok = await crypto.subtle.verify(
+      { name: 'HMAC', hash: 'SHA-256' },
+      key,
+      sigU8,   // signature: BufferSource
+      dataU8   // data: BufferSource
+    );
+    if (!ok) return null;
+
+    if (typeof payload.exp === 'number') {
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (nowSec >= payload.exp) return null;
+    }
+
+    return payload;
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[middleware verify error]', error);
+    }
     return null;
   }
 }
 
-function readPayload(req: NextRequest): any | null {
-  const raw = req.cookies.get(SESSION_COOKIE)?.value;
-  if (!raw) return null;
-  const parts = raw.split('.');
-  if (parts.length < 2) return null;
-  return b64urlToJSON(parts[1]);
+function isRouteAllowed(roleRaw: string | null | undefined, pathname: string): boolean {
+  const role = String(roleRaw || '').toUpperCase();
+  if (role === 'ADMIN') return true;
+  const allow = ROLE_ROUTES[role] || [];
+  return allow.some((prefix) => pathname.startsWith(prefix));
 }
-
-function readRoleFromCookie(req: NextRequest): string | null {
-  const payload = readPayload(req);
-  const r = payload?.role ?? payload?.rol ?? payload?.r;
-  return r ? String(r).toUpperCase() : null;
+function getRoleHome(roleRaw: string | null | undefined): string {
+  const role = String(roleRaw || '').toUpperCase();
+  return ROLE_HOME[role] || '/dashboard';
 }
-
-function readUserIdFromCookie(req: NextRequest): string | null {
-  const p = readPayload(req);
-  return p?.sub ? String(p.sub) : null; // sub = people.id
-}
-
-// ---------- middleware ----------
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  // públicos / preflight
-  if (req.method === 'OPTIONS' || isPublic(pathname)) {
-    return NextResponse.next();
-  }
-
-  const hasSession = Boolean(req.cookies.get(SESSION_COOKIE)?.value);
-
-  // endpoints (requieren sesión)
-  if (pathname.startsWith('/endpoints/')) {
-    if (!hasSession) {
-      return NextResponse.json({ ok: false, error: 'no_session' }, { status: 401 });
-    }
-    const res = NextResponse.next();
-    res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.headers.set('Pragma', 'no-cache');
-    res.headers.set('Expires', '0');
-    return res;
-  }
-
-  // sin sesión -> login
-  if (!hasSession) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/login';
-    url.searchParams.set('redirectTo', pathname + (req.nextUrl.search || ''));
-    const res = NextResponse.redirect(url);
-    res.headers.set('Cache-Control', 'no-store');
-    return res;
-  }
-
-  // con sesión en "/" -> redirige por rol
-  if (pathname === '/') {
-    const role = readRoleFromCookie(req);
-    const url = req.nextUrl.clone();
-    if (role === 'PROMOTOR' || role === 'PROMOTORA') {
-      url.pathname = '/dashboard/promotores';
-    } else if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'VENDEDORA') {
-      url.pathname = '/dashboard/asesores/HOME';
-    } else {
-      url.pathname = '/dashboard';
-    }
-    const res = NextResponse.redirect(url);
-    res.headers.set('Cache-Control', 'no-store');
-    return res;
-  }
-
-  // 🔐 Gate duro por people.id para /dashboard/financial-control
-  if (pathname.startsWith('/dashboard/financial-control')) {
-    const uid = readUserIdFromCookie(req); // payload.sub
-    if (!uid || !FINANCIAL_ALLOW_IDS.has(uid)) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/dashboard';
-      const res = NextResponse.redirect(url);
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
-    }
-  }
-
-  // Reglas por rol
-  const role = readRoleFromCookie(req);
-
-  if (role === 'PROMOTOR' || role === 'PROMOTORA') {
-    const allowed = PROMOTOR_ALLOW.some((rx) => rx.test(pathname));
-    if (!allowed) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/dashboard/promotores';
-      url.searchParams.delete('redirectTo');
-      const res = NextResponse.redirect(url);
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
-    }
-  }
-
-  if (role === 'ASESOR' || role === 'VENDEDOR' || role === 'VENDEDORA') {
-    const allowed = ASESOR_ALLOW.some((rx) => rx.test(pathname));
-    if (!allowed) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/dashboard/asesores/HOME';
-      url.searchParams.delete('redirectTo');
-      const res = NextResponse.redirect(url);
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
-    }
-  }
-
-  // admin / líder / coordinador / logística → pasa
-  const res = NextResponse.next();
+function noStore(res: NextResponse) {
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.headers.set('Pragma', 'no-cache');
   res.headers.set('Expires', '0');
   return res;
+}
+
+export async function middleware(req: NextRequest) {
+  const { pathname, search } = req.nextUrl;
+  const isApi = pathname.startsWith('/endpoints/');
+
+  if (req.method === 'OPTIONS' || isPublic(pathname)) {
+    return NextResponse.next();
+  }
+
+  const sessionCookie = req.cookies.get(SESSION_COOKIE)?.value ?? null;
+
+  if (!sessionCookie) {
+    if (isApi) {
+      return NextResponse.json({ ok: false, error: 'no_session' }, { status: 401 });
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('redirectTo', pathname + (search || ''));
+    return noStore(NextResponse.redirect(url));
+  }
+
+  const payload = await verifyJWT_HS256(sessionCookie);
+  if (!payload) {
+    if (isApi) {
+      return NextResponse.json({ ok: false, error: 'invalid_token' }, { status: 401 });
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    const res = NextResponse.redirect(url);
+    res.cookies.set({
+      name: SESSION_COOKIE,
+      value: '',
+      path: '/',
+      maxAge: 0,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    });
+    return noStore(res);
+  }
+
+  if (pathname === '/') {
+    const url = req.nextUrl.clone();
+    url.pathname = getRoleHome(payload.role);
+    return noStore(NextResponse.redirect(url));
+  }
+
+  if (pathname.startsWith('/dashboard/financial-control')) {
+    const uid = payload.sub as string | undefined;
+    if (!uid || !FINANCIAL_ALLOW_IDS.has(uid)) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/dashboard';
+      return noStore(NextResponse.redirect(url));
+    }
+  }
+
+  if (!isRouteAllowed(payload.role, pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = getRoleHome(payload.role);
+    url.searchParams.delete('redirectTo');
+    return noStore(NextResponse.redirect(url));
+  }
+
+  return noStore(NextResponse.next());
 }
 
 export const config = {

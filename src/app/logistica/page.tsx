@@ -24,95 +24,74 @@ import {
   PlusCircle, RefreshCw, Search, Truck, Clock, CheckCircle2,
   AlertTriangle, Users, Map as MapIcon, Calendar, BarChart2, Radio,
   SlidersHorizontal, Package, Route, Warehouse, Target, TrendingUp,
-  Zap, BarChart3, Eye, Filter, ArrowRight, ChevronDown
+  Zap, BarChart3, Eye, Filter, ArrowRight, ChevronDown, ChevronUp,
+  Activity, Navigation, MapPin, Timer, Gauge, Signal
 } from 'lucide-react';
 
 // ===================================================================================
-// TUS COMPONENTES DE UI PERSONALIZADOS - SE MANTIENEN 100% IDÉNTICOS
+// COMPONENTES UI REDISEÑADOS CON ESTILO APPLE
 // ===================================================================================
 
-// --- Componente de Tarjeta KPI Mejorado con Animaciones ---
+// --- Componente de Tarjeta KPI Rediseñado con Estilo Apple ---
 const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 0 }:
   { title: string, value: string | number, icon: React.ElementType, color: string,
-    description: string, trend?: { value: number, isPositive: boolean }, delay?: number }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ duration: 0.5, delay, ease: "easeOut" }}
-    whileHover={{ y: -5, transition: { duration: 0.2 } }}
-    className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-800/80 backdrop-blur-sm p-6 shadow-2xl shadow-black/30 hover:shadow-indigo-500/10 transition-all duration-300 group"
-  >
-    <div className="flex items-start justify-between">
-      <div className="flex flex-col">
-        <motion.p
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: delay + 0.1 }}
-          className="text-sm font-medium text-slate-400 flex items-center gap-1"
-        >
-          <Icon className="w-4 h-4" style={{ color }} />
-          {title}
-        </motion.p>
-        <motion.p
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: delay + 0.2 }}
-          className="text-3xl font-bold text-white mt-2"
-        >
-          {value}
-        </motion.p>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: delay + 0.3 }}
-          className="text-xs text-slate-500 mt-1"
-        >
-          {description}
-        </motion.p>
+    description: string, trend?: { value: number, isPositive: boolean }, delay?: number }) => {
+  
+  const colorClasses = {
+    '#38bdf8': 'from-apple-blue-500/20 to-apple-blue-600/10 border-apple-blue-500/30 text-apple-blue-400',
+    '#facc15': 'from-apple-orange-500/20 to-apple-orange-600/10 border-apple-orange-500/30 text-apple-orange-400',
+    '#a78bfa': 'from-purple-500/20 to-purple-600/10 border-purple-500/30 text-purple-400',
+    '#4ade80': 'from-apple-green-500/20 to-apple-green-600/10 border-apple-green-500/30 text-apple-green-400',
+    '#f472b6': 'from-pink-500/20 to-pink-600/10 border-pink-500/30 text-pink-400',
+  };
 
+  const colorClass = colorClasses[color as keyof typeof colorClasses] || colorClasses['#38bdf8'];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.5, delay, ease: "easeOut" }}
+      whileHover={{ scale: 1.02, y: -4 }}
+      className="glass-card hover:shadow-apple-lg transition-all duration-300"
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className={`p-3 bg-gradient-to-br ${colorClass} rounded-apple border`}>
+          <Icon size={20} />
+        </div>
         {trend && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: delay + 0.4 }}
-            className={`text-xs mt-2 flex items-center ${trend.isPositive ? 'text-green-400' : 'text-red-400'}`}
-          >
-            {trend.isPositive ? '↑' : '↓'} {trend.value}% vs ayer
-          </motion.div>
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-apple-caption2 font-semibold ${
+            trend.isPositive 
+              ? 'bg-apple-green-500/20 text-apple-green-300 border border-apple-green-500/30' 
+              : 'bg-apple-red-500/20 text-apple-red-300 border border-apple-red-500/30'
+          }`}>
+            {trend.isPositive ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            <span>{Math.abs(trend.value).toFixed(1)}%</span>
+          </div>
         )}
       </div>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
-        animate={{ opacity: 1, scale: 1, rotate: 0 }}
-        transition={{ delay: delay + 0.3, type: "spring", stiffness: 200 }}
-        className="p-2 rounded-md group-hover:scale-110 transition-transform duration-300"
-        style={{ backgroundColor: `${color}20` }}
-      >
-        <Icon className="w-5 h-5" style={{ color }} />
-      </motion.div>
-    </div>
-    <motion.div
-      initial={{ width: 0 }}
-      animate={{ width: "100%" }}
-      transition={{ delay: delay + 0.5, duration: 0.8 }}
-      className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-transparent"
-      style={{ background: `linear-gradient(to right, ${color}40, ${color})` }}
-    />
-  </motion.div>
-);
+      
+      <div className="space-y-2">
+        <p className="apple-caption text-apple-gray-400">{title}</p>
+        <p className="apple-h2 text-white font-semibold">{value}</p>
+        <p className="apple-caption2 text-apple-gray-500">{description}</p>
+      </div>
+    </motion.div>
+  );
+};
 
-// --- Filtro de Estado Mejorado con Animaciones ---
+// --- Filtro de Estado Rediseñado con Estilo Apple ---
 const StatusFilter = ({ currentStatus, onStatusChange }: {
   currentStatus: OrderStatus | 'all',
   onStatusChange: (status: OrderStatus | 'all') => void
 }) => {
   const statusOptions: { value: OrderStatus | 'all', label: string, color: string, icon: React.ElementType }[] = [
-    { value: 'all', label: 'Todos', color: 'bg-slate-500', icon: Eye },
-    { value: 'pending', label: 'Pendientes', color: 'bg-yellow-500', icon: Clock },
-    { value: 'confirmed', label: 'Confirmados', color: 'bg-blue-500', icon: CheckCircle2 },
-    { value: 'out_for_delivery', label: 'En Ruta', color: 'bg-purple-500', icon: Truck },
-    { value: 'delivered', label: 'Entregados', color: 'bg-green-500', icon: Package },
-    { value: 'cancelled', label: 'Cancelados', color: 'bg-red-500', icon: AlertTriangle },
+    { value: 'all', label: 'Todos', color: 'apple-gray', icon: Eye },
+    { value: 'pending', label: 'Pendientes', color: 'apple-orange', icon: Clock },
+    { value: 'confirmed', label: 'Confirmados', color: 'apple-blue', icon: CheckCircle2 },
+    { value: 'out_for_delivery', label: 'En Ruta', color: 'purple', icon: Truck },
+    { value: 'delivered', label: 'Entregados', color: 'apple-green', icon: Package },
+    { value: 'cancelled', label: 'Cancelados', color: 'apple-red', icon: AlertTriangle },
   ];
 
   return (
@@ -120,7 +99,7 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="flex flex-wrap gap-2"
+      className="flex flex-wrap gap-3"
     >
       {statusOptions.map((option, index) => (
         <motion.button
@@ -131,13 +110,13 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => onStatusChange(option.value)}
-          className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 shadow-lg ${
+          className={`px-4 py-2.5 rounded-apple text-apple-caption font-medium transition-all flex items-center gap-2 ${
             currentStatus === option.value
-              ? `${option.color} text-white shadow-md ${option.color.replace('bg-', 'shadow-')}/30`
-              : 'bg-slate-800 text-slate-300 hover:bg-slate-700 shadow-slate-900/20'
+              ? `bg-${option.color}-500/20 text-${option.color}-300 border border-${option.color}-500/30 shadow-apple`
+              : 'bg-white/5 text-apple-gray-300 border border-white/10 hover:bg-white/10'
           }`}
         >
-          <option.icon className="w-4 h-4" />
+          <option.icon size={16} />
           {option.label}
         </motion.button>
       ))}
@@ -145,61 +124,39 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
   );
 };
 
-// --- Efecto de partículas para fondo ---
-const ParticlesBackground = () => {
-  return (
-    <div className="fixed inset-0 -z-10 overflow-hidden">
-      {[...Array(20)].map((_, i) => (
-        <motion.div
-          key={i}
-          className="absolute rounded-full bg-gradient-to-r from-blue-500/10 to-purple-500/10"
-          initial={{
-            x: Math.random() * 100 + 'vw',
-            y: Math.random() * 100 + 'vh',
-            scale: Math.random() * 0.5 + 0.5,
-            opacity: Math.random() * 0.3 + 0.1,
-          }}
-          animate={{
-            x: [null, Math.random() * 100 + 'vw'],
-            y: [null, Math.random() * 100 + 'vh'],
-          }}
-          transition={{
-            duration: Math.random() * 30 + 20,
-            repeat: Infinity,
-            repeatType: "reverse",
-            ease: "linear"
-          }}
-          style={{
-            width: Math.random() * 100 + 50 + 'px',
-            height: Math.random() * 100 + 50 + 'px',
-            filter: 'blur(20px)',
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
-// --- Componente para las secciones agrupadas ---
+// --- Componente para las secciones agrupadas rediseñado ---
 const CollapsibleOrderSection = ({ city, orders, onRowClick }: { city: string, orders: OrderRow[], onRowClick: (order: OrderRow) => void }) => {
   const [isOpen, setIsOpen] = useState(true);
+
+  const cityIcons = {
+    'Santa Cruz': <MapPin size={18} className="text-apple-green-400" />,
+    'Cochabamba': <MapPin size={18} className="text-apple-blue-400" />,
+    'La Paz': <MapPin size={18} className="text-apple-orange-400" />,
+    'El Alto': <MapPin size={18} className="text-purple-400" />,
+    'Sucre': <MapPin size={18} className="text-pink-400" />,
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-slate-900/30 rounded-xl overflow-hidden"
+      className="glass-card overflow-hidden"
     >
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-left p-4 bg-slate-800/50 hover:bg-slate-800 transition-colors flex justify-between items-center"
+        className="w-full text-left p-4 hover:bg-white/5 transition-colors flex justify-between items-center border-b border-white/10"
       >
         <div className="flex items-center gap-3">
-          <MapIcon className="w-5 h-5 text-indigo-400" />
-          <h3 className="font-semibold text-white">{city}</h3>
-          <span className="text-sm text-slate-400 bg-slate-700/50 px-2 py-0.5 rounded-full">{orders.length}</span>
+          {cityIcons[city as keyof typeof cityIcons] || <MapPin size={18} className="text-apple-gray-400" />}
+          <h3 className="apple-h4 text-white">{city}</h3>
+          <div className="badge badge-primary">{orders.length}</div>
         </div>
-        <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronDown size={20} className="text-apple-gray-400" />
+        </motion.div>
       </button>
       <AnimatePresence>
         {isOpen && (
@@ -231,7 +188,6 @@ const getBranchForOrder = (order: OrderRow): string => {
   return 'Santa Cruz';
 };
 
-
 export default function LogisticaPage() {
   // ===================================================================================
   // ÚNICO CAMBIO LÓGICO: Usamos el hook en lugar de los useState y funciones locales
@@ -256,12 +212,6 @@ export default function LogisticaPage() {
   const [selectedDelivery, setSelectedDelivery] = useState<any | null>(null);
   const [filters, setFilters] = useState({ status: 'all' as OrderStatus | 'all', search: '' });
   const [isMapOpen, setIsMapOpen] = useState(false);
-  
-  // SE HAN ELIMINADO:
-  // - Los useState para orders, deliveries, deliveryRoutes, loading, error, isLive, refreshing.
-  // - La función loadData, assignDelivery, saveLocation, handleStatusChange, confirmDelivered.
-  // - El useEffect para cargar datos y suscribirse al canal de Supabase.
-  // ¡Todo eso ahora vive en el hook useLogisticsData!
 
   // --- LÓGICA DE UI Y DATOS DERIVADOS - SIN CAMBIOS ---
 
@@ -328,32 +278,56 @@ export default function LogisticaPage() {
     return orderedGroups;
   }, [filteredOrders]);
 
-  // --- RENDERIZADO PRINCIPAL - SIN CAMBIOS VISUALES ---
+  // --- RENDERIZADO PRINCIPAL REDISEÑADO ---
 
   if (loading && orders.length === 0) {
-    // ... (Tu pantalla de carga inicial) ...
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }} className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full mb-4" />
-          <motion.h2 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-xl font-semibold text-white mb-2">Cargando Centro de Operaciones</motion.h2>
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="text-slate-400">Conectando con el sistema de gestión logística</motion.p>
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="glass-card text-center max-w-md"
+        >
+          <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 border border-apple-blue-500/30 rounded-apple-lg flex items-center justify-center">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+            >
+              <Truck size={24} className="text-apple-blue-400" />
+            </motion.div>
+          </div>
+          <h2 className="apple-h2 text-white mb-3">Centro de Operaciones</h2>
+          <p className="apple-body text-apple-gray-300 mb-4">Conectando con el sistema de gestión logística</p>
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" />
+            <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
         </motion.div>
       </div>
     );
   }
   
   if (error && !selectedOrder) {
-    // ... (Tu pantalla de error) ...
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center p-8 bg-gradient-to-br from-red-900/20 to-red-800/20 rounded-2xl border border-red-700/30 backdrop-blur-sm max-w-md w-full">
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200 }}><AlertTriangle className="mx-auto w-16 h-16 text-red-400 mb-4" /></motion.div>
-          <h2 className="text-xl font-bold text-white mb-2">Error de Conexión</h2>
-          <p className="text-red-300 mb-6">{error}</p>
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button onClick={() => { clearError(); loadData(true); }} className="bg-red-600 hover:bg-red-500 text-white w-full">Reintentar Conexión</Button>
-          </motion.div>
+      <div className="min-h-screen bg-black flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }} 
+          animate={{ opacity: 1, scale: 1 }} 
+          className="glass-card border-apple-red-500/30 bg-apple-red-500/10 text-center max-w-md"
+        >
+          <div className="w-16 h-16 mx-auto mb-6 bg-apple-red-500/20 border border-apple-red-500/30 rounded-apple-lg flex items-center justify-center">
+            <AlertTriangle size={24} className="text-apple-red-400" />
+          </div>
+          <h2 className="apple-h2 text-white mb-3">Error de Conexión</h2>
+          <p className="apple-body text-apple-red-300 mb-6">{error}</p>
+          <button
+            onClick={() => { clearError(); loadData(true); }}
+            className="btn-primary w-full"
+          >
+            <RefreshCw size={16} />
+            Reintentar Conexión
+          </button>
         </motion.div>
       </div>
     );
@@ -361,94 +335,321 @@ export default function LogisticaPage() {
 
   return (
     <>
-      <div className="min-h-screen w-full bg-slate-950 text-slate-300">
-        <ParticlesBackground />
-        <div className="absolute inset-0 -z-10 h-full w-full bg-slate-950 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:32px_32px]"></div>
-        <motion.div initial="hidden" animate="show" variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } }} className="p-4 sm:p-6 lg:p-8 max-w-[1800px] mx-auto" >
-          <motion.header variants={{ hidden: { opacity: 0, y: -30 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }} className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
+      <div className="min-h-screen bg-black">
+        {/* Header */}
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card mb-8"
+        >
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <h1 className="text-4xl font-extrabold text-white tracking-tight">Centro de Logística</h1>
-              <span className="text-sm text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full flex items-center gap-1">
-                  <Radio className={`w-3 h-3 ${isLive ? 'text-green-400 animate-pulse' : 'text-yellow-400'}`} />
-                  {isLive ? 'En Vivo' : 'Reconectando...'}
-              </span>
+              <div className="p-4 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 border border-apple-blue-500/30 rounded-apple-lg">
+                <Truck size={28} className="text-apple-blue-400" />
+              </div>
+              <div>
+                <h1 className="apple-h1 mb-2">Centro de Logística</h1>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-apple-green-400 animate-pulse' : 'bg-apple-orange-400'}`} />
+                  <span className="apple-caption text-apple-gray-400">
+                    {isLive ? 'Sistema en línea' : 'Reconectando...'}
+                  </span>
+                </div>
+              </div>
             </div>
+            
             <div className="flex items-center gap-3">
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button size="small" className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white flex items-center gap-2" onClick={() => loadData(true)} disabled={loading}>
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    {loading ? 'Actualizando...' : 'Actualizar Datos'}
-                </Button>
-              </motion.div>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><Button size="small" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white flex items-center gap-2" onClick={() => setIsMapOpen(true)}><MapIcon className="w-4 h-4" />Vista de Mapa</Button></motion.div>
-              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><Button size="small" className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white flex items-center gap-2"><PlusCircle className="w-4 h-4" />Nuevo Pedido</Button></motion.div>
+              <button
+                onClick={() => loadData(true)}
+                disabled={loading}
+                className="btn-primary"
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                {loading ? 'Actualizando...' : 'Actualizar'}
+              </button>
+              <button
+                onClick={() => setIsMapOpen(true)}
+                className="btn-secondary"
+              >
+                <MapIcon size={16} />
+                Vista de Mapa
+              </button>
+              <button className="btn-success">
+                <PlusCircle size={16} />
+                Nuevo Pedido
+              </button>
             </div>
-          </motion.header>
+          </div>
+        </motion.header>
 
-          <motion.div variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-            <KpiCard title="Pedidos Totales" value={kpis.total.value} icon={Package} color="#38bdf8" description="Todos los estados" trend={{ value: kpis.total.trend, isPositive: kpis.total.trend > 0 }} delay={0.1}/>
-            <KpiCard title="Pendientes" value={kpis.pending.value} icon={Clock} color="#facc15" description="Listos para asignar" trend={{ value: kpis.pending.trend, isPositive: kpis.pending.trend > 0 }} delay={0.2}/>
-            <KpiCard title="En Ruta" value={kpis.inDelivery.value} icon={Truck} color="#a78bfa" description="Entregas en curso" trend={{ value: kpis.inDelivery.trend, isPositive: kpis.inDelivery.trend > 0 }} delay={0.3}/>
-            <KpiCard title="Completados" value={kpis.delivered.value} icon={CheckCircle2} color="#4ade80" description="Entregas exitosas" trend={{ value: kpis.delivered.trend, isPositive: kpis.delivered.trend > 0 }} delay={0.4}/>
-            <KpiCard title="Eficiencia" value={`${kpis.efficiency.value}%`} icon={Target} color="#f472b6" description="Tasa de éxito" trend={{ value: kpis.efficiency.trend, isPositive: kpis.efficiency.trend > 0 }} delay={0.5}/>
-          </motion.div>
+        <div className="max-w-[1800px] mx-auto px-6 space-y-8">
+          {/* KPIs */}
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6"
+          >
+            <KpiCard 
+              title="Pedidos Totales" 
+              value={kpis.total.value} 
+              icon={Package} 
+              color="#38bdf8" 
+              description="Todos los estados" 
+              trend={{ value: kpis.total.trend, isPositive: kpis.total.trend > 0 }} 
+              delay={0.1}
+            />
+            <KpiCard 
+              title="Pendientes" 
+              value={kpis.pending.value} 
+              icon={Clock} 
+              color="#facc15" 
+              description="Listos para asignar" 
+              trend={{ value: kpis.pending.trend, isPositive: kpis.pending.trend > 0 }} 
+              delay={0.2}
+            />
+            <KpiCard 
+              title="En Ruta" 
+              value={kpis.inDelivery.value} 
+              icon={Truck} 
+              color="#a78bfa" 
+              description="Entregas en curso" 
+              trend={{ value: kpis.inDelivery.trend, isPositive: kpis.inDelivery.trend > 0 }} 
+              delay={0.3}
+            />
+            <KpiCard 
+              title="Completados" 
+              value={kpis.delivered.value} 
+              icon={CheckCircle2} 
+              color="#4ade80" 
+              description="Entregas exitosas" 
+              trend={{ value: kpis.delivered.trend, isPositive: kpis.delivered.trend > 0 }} 
+              delay={0.4}
+            />
+            <KpiCard 
+              title="Eficiencia" 
+              value={`${kpis.efficiency.value}%`} 
+              icon={Target} 
+              color="#f472b6" 
+              description="Tasa de éxito" 
+              trend={{ value: kpis.efficiency.trend, isPositive: kpis.efficiency.trend > 0 }} 
+              delay={0.5}
+            />
+          </motion.section>
           
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="mb-6 bg-gradient-to-br from-slate-900/40 to-slate-800/30 p-5 rounded-2xl border border-slate-700/30 backdrop-blur-sm shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <motion.h3 initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.7 }} className="font-semibold text-slate-300 flex items-center gap-2"><Filter className="w-5 h-5 text-indigo-400" />Filtrar por Estado</motion.h3>
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-sm text-slate-500 bg-slate-800/50 px-3 py-1 rounded-full">{filteredOrders.length} pedidos coinciden</motion.span>
+          {/* Panel de filtros */}
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="glass-card"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-apple-blue-500/20 border border-apple-blue-500/30 rounded-apple">
+                  <Filter size={18} className="text-apple-blue-400" />
+                </div>
+                <h3 className="apple-h3 text-white">Filtrar por Estado</h3>
+              </div>
+              <div className="badge badge-primary">{filteredOrders.length} pedidos</div>
             </div>
-            <StatusFilter currentStatus={filters.status} onStatusChange={(status) => setFilters({...filters, status})} />
-          </motion.div>
+            <StatusFilter 
+              currentStatus={filters.status} 
+              onStatusChange={(status) => setFilters({...filters, status})} 
+            />
+          </motion.section>
           
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.7 }} className="lg:col-span-8 xl:col-span-9 space-y-6">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
-                <Card className="bg-gradient-to-br from-slate-900/50 to-slate-800/30 border-slate-700/30 backdrop-blur-sm shadow-xl">
-                  <CardHeader className="border-b border-slate-700/30"><CardTitle className="text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-blue-400" />Eficiencia de Entregas por Horario</CardTitle><p className="text-sm text-slate-400 mt-1">{/* El componente SettlementTable ya tiene su propio contenedor y título */}</p></CardHeader>
-                  <CardContent className="pt-6"><SettlementTable /></CardContent>
-                </Card>
-              </motion.div>
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
-                <Card className="bg-gradient-to-br from-slate-900/50 to-slate-800/30 border-slate-700/30 backdrop-blur-sm shadow-xl">
-                  <CardHeader className="border-b border-slate-700/30"><div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"><div><CardTitle className="text-white flex items-center gap-2"><Route className="w-5 h-5 text-indigo-400" />Lista de Pedidos</CardTitle><p className="text-sm text-slate-400 mt-1">{filteredOrders.length} pedidos encontrados</p></div><div className="flex items-center gap-3 w-full sm:w-auto"><motion.div className="relative flex-1 sm:w-64" whileFocus={{ scale: 1.02 }}><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" placeholder="Buscar por cliente, #, dirección..." value={filters.search} onChange={(e) => setFilters(p => ({ ...p, search: e.target.value }))} className="w-full bg-slate-950/70 border border-slate-700 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" /></motion.div><motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}><Button variant="outline" size="small" className="p-2 h-auto border-slate-700 hover:bg-slate-800"><SlidersHorizontal className="w-4 h-4" /></Button></motion.div></div></div></CardHeader>
-                  <CardContent className="p-4 space-y-4">
-                    {groupedOrders.length > 0 ? (groupedOrders.map(([city, cityOrders]) => (<CollapsibleOrderSection key={city} city={city} orders={cityOrders} onRowClick={setSelectedOrder} />))) : (<div className="text-center py-12 text-slate-500"><Package className="mx-auto w-10 h-10 mb-3" />No se encontraron pedidos que coincidan con los filtros.</div>)}
-                  </CardContent>
-                </Card>
-              </motion.div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Contenido principal */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="lg:col-span-8 xl:col-span-9 space-y-8"
+            >
+              {/* Tabla de eficiencia */}
+              <div className="glass-card">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-apple-green-500/20 border border-apple-green-500/30 rounded-apple">
+                    <TrendingUp size={18} className="text-apple-green-400" />
+                  </div>
+                  <h3 className="apple-h3 text-white">Eficiencia de Entregas por Horario</h3>
+                </div>
+                <SettlementTable />
+              </div>
+
+              {/* Lista de pedidos */}
+              <div className="glass-card">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/20 border border-purple-500/30 rounded-apple">
+                      <Route size={18} className="text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="apple-h3 text-white">Lista de Pedidos</h3>
+                      <p className="apple-caption text-apple-gray-400">{filteredOrders.length} pedidos encontrados</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-64">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-apple-gray-500" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por cliente, #, dirección..."
+                        value={filters.search}
+                        onChange={(e) => setFilters(p => ({ ...p, search: e.target.value }))}
+                        className="field pl-10"
+                      />
+                    </div>
+                    <button className="btn-ghost p-2">
+                      <SlidersHorizontal size={16} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  {groupedOrders.length > 0 ? (
+                    groupedOrders.map(([city, cityOrders]) => (
+                      <CollapsibleOrderSection 
+                        key={city} 
+                        city={city} 
+                        orders={cityOrders} 
+                        onRowClick={setSelectedOrder} 
+                      />
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 mx-auto mb-4 bg-apple-gray-500/20 border border-apple-gray-500/30 rounded-apple-lg flex items-center justify-center">
+                        <Package size={24} className="text-apple-gray-400" />
+                      </div>
+                      <h4 className="apple-h3 text-white mb-2">Sin pedidos</h4>
+                      <p className="apple-body text-apple-gray-400">No se encontraron pedidos que coincidan con los filtros.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.0 }} className="lg:col-span-4 xl:col-span-3 space-y-6 sticky top-6">
-              <Card className="bg-gradient-to-br from-slate-900/50 to-slate-800/30 border-slate-700/30 backdrop-blur-sm shadow-xl">
-                <CardHeader className="border-b border-slate-700/30"><CardTitle className="text-white flex items-center gap-2"><Truck className="w-5 h-5 text-indigo-400" />Unidades Activas<span className="text-sm font-normal text-slate-400 ml-1">({deliveries.length})</span></CardTitle></CardHeader>
-                <CardContent className="space-y-4 max-h-[calc(100vh-12rem)] overflow-y-auto pr-2 py-4">
+            {/* Sidebar */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
+              className="lg:col-span-4 xl:col-span-3 space-y-6 sticky top-6"
+            >
+              {/* Unidades activas */}
+              <div className="glass-card">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-apple-orange-500/20 border border-apple-orange-500/30 rounded-apple">
+                      <Truck size={18} className="text-apple-orange-400" />
+                    </div>
+                    <h3 className="apple-h3 text-white">Unidades Activas</h3>
+                  </div>
+                  <div className="badge badge-primary">{deliveries.length}</div>
+                </div>
+                
+                <div className="space-y-4 max-h-[calc(100vh-12rem)] overflow-y-auto">
                   <AnimatePresence>
-                  {deliveries.length > 0 ? (deliveries.map((delivery, index) => {
+                    {deliveries.length > 0 ? (
+                      deliveries.map((delivery, index) => {
                         const today = new Date().toISOString().slice(0, 10);
                         const todayRoutes = deliveryRoutes.filter(r => r.delivery_user_id === delivery.id && r.route_date === today);
                         const completedToday = todayRoutes.filter(r => r.status === 'completed').length;
                         const stats = {
-                            totalToday: todayRoutes.length, completedToday: completedToday, inProgressToday: todayRoutes.filter(r => r.status === 'in_progress').length,
-                            pendingToday: todayRoutes.filter(r => r.status === 'pending').length,
-                            efficiency: todayRoutes.length > 0 ? Math.round((completedToday / todayRoutes.length) * 100) : 0,
+                          totalToday: todayRoutes.length, 
+                          completedToday: completedToday, 
+                          inProgressToday: todayRoutes.filter(r => r.status === 'in_progress').length,
+                          pendingToday: todayRoutes.filter(r => r.status === 'pending').length,
+                          efficiency: todayRoutes.length > 0 ? Math.round((completedToday / todayRoutes.length) * 100) : 0,
                         };
-                        return (<motion.div key={delivery.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} exit={{ opacity: 0, height: 0 }} layout><DeliveryCard delivery={delivery} stats={stats} onViewDetails={setSelectedDelivery} /></motion.div>);
-                      })) : (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12 border-2 border-dashed border-slate-700 rounded-xl"><Users className="mx-auto w-10 h-10 text-slate-600 mb-3" /><p className="text-slate-500">No hay unidades activas en el sistema.</p></motion.div>)}
+                        return (
+                          <motion.div
+                            key={delivery.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            exit={{ opacity: 0, height: 0 }}
+                            layout
+                          >
+                            <DeliveryCard 
+                              delivery={delivery} 
+                              stats={stats} 
+                              onViewDetails={setSelectedDelivery} 
+                            />
+                          </motion.div>
+                        );
+                      })
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-center py-12 border-2 border-dashed border-white/10 rounded-apple"
+                      >
+                        <div className="w-12 h-12 mx-auto mb-3 bg-apple-gray-500/20 border border-apple-gray-500/30 rounded-apple flex items-center justify-center">
+                          <Users size={20} className="text-apple-gray-400" />
+                        </div>
+                        <p className="apple-body text-apple-gray-400">No hay unidades activas</p>
+                      </motion.div>
+                    )}
                   </AnimatePresence>
-                </CardContent>
-              </Card>
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1 }}>
-                <Card className="bg-gradient-to-br from-slate-900/50 to-slate-800/30 border-slate-700/30 backdrop-blur-sm shadow-xl">
-                  <CardHeader className="border-b border-slate-700/30"><CardTitle className="text-white text-sm font-semibold flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-400" />Acciones Rápidas</CardTitle></CardHeader>
-                  <CardContent className="pt-4"><div className="space-y-3"><motion.div whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}><Button variant="outline" className="w-full justify-between text-slate-300 hover:bg-slate-800 border-slate-700 group"><div className="flex items-center gap-2"><PlusCircle className="w-4 h-4" />Crear Ruta de Entrega</div><ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></Button></motion.div><motion.div whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}><Button variant="outline" className="w-full justify-between text-slate-300 hover:bg-slate-800 border-slate-700 group"><div className="flex items-center gap-2"><MapIcon className="w-4 h-4" />Optimizar Rutas</div><ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></Button></motion.div><motion.div whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}><Button variant="outline" className="w-full justify-between text-slate-300 hover:bg-slate-800 border-slate-700 group"><div className="flex items-center gap-2"><BarChart3 className="w-4 h-4" />Reporte de Eficiencia</div><ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></Button></motion.div></div></CardContent>
-                </Card>
-              </motion.div>
+                </div>
+              </div>
+
+              {/* Acciones rápidas */}
+              <div className="glass-card">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-apple-green-500/20 border border-apple-green-500/30 rounded-apple">
+                    <Zap size={18} className="text-apple-green-400" />
+                  </div>
+                  <h3 className="apple-h4 text-white">Acciones Rápidas</h3>
+                </div>
+                
+                <div className="space-y-3">
+                  <motion.button
+                    whileHover={{ x: 5 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="btn-ghost w-full justify-between group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <PlusCircle size={16} />
+                      Crear Ruta de Entrega
+                    </div>
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                  </motion.button>
+                  
+                  <motion.button
+                    whileHover={{ x: 5 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="btn-ghost w-full justify-between group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Navigation size={16} />
+                      Optimizar Rutas
+                    </div>
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                  </motion.button>
+                  
+                  <motion.button
+                    whileHover={{ x: 5 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="btn-ghost w-full justify-between group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <BarChart3 size={16} />
+                      Reporte de Eficiencia
+                    </div>
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                  </motion.button>
+                </div>
+              </div>
             </motion.div>
           </div>
-        </motion.div>
+        </div>
       </div>
       
+      {/* Modales - SIN CAMBIOS */}
       <AnimatePresence>
         {selectedOrder && ( 
           <OrderDetailsModal 
@@ -475,8 +676,6 @@ export default function LogisticaPage() {
           <MapOverviewModal 
             orders={ordersForMap} 
             onClose={() => setIsMapOpen(false)} 
-            defaultCenter={{ lat: -17.7833, lng: -63.1821 }} 
-            defaultZoom={12}
           />
         )}
       </AnimatePresence>

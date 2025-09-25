@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 
 import { Sidebar } from '@/components/nav/Sidebar';
-import { normalizeRole, type Role } from '@/components/nav/roles';
+import { normalizeRole, type Role } from '@/lib/auth/roles';
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 

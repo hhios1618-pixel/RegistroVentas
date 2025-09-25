@@ -1,4 +1,4 @@
-import supabase from './supabaseClient';
+import { supabaseClient as supabase } from '@/lib/supabase';
 
 /** Búsqueda por código o nombre (autocompletar) */
 export async function searchProducts(q: string, limit = 10) {
