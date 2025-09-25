@@ -1,0 +1,21 @@
+{
+  "name": "Fenix Store",
+  "short_name": "Fenix",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "Sistema de gestión integral Fenix Store",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "/1.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

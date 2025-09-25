@@ -5,26 +5,65 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { useMemo, type ComponentProps } from 'react';
 import { motion } from 'framer-motion';
+import { format, formatDistanceToNow, parseISO, isValid } from 'date-fns';
+import { es } from 'date-fns/locale';
 import {
   Activity, ArrowRight, Bell, ClipboardList, RotateCcw,
-  UserPlus, Users2, TrendingUp, DollarSign, Package,
-  AlertTriangle, CheckCircle, Clock, Sparkles
+  UserPlus, Users2, DollarSign, Package,
+  AlertTriangle, CheckCircle, Clock, Sparkles, TrendingUp
 } from 'lucide-react';
+import { normalizeRole, type Role } from '@/lib/auth/roles';
 
 import WeatherStrip from '@/components/widgets/WeatherStrip';
 import TrafficPanel from '@/components/widgets/TrafficPanel';
 
-const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then(r => r.json());
+const fetcher = async (u: string) => {
+  const res = await fetch(u, { cache: 'no-store' });
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error(`Request failed: ${res.status}`);
+  }
+  return res.json();
+};
 
 // Derivar el tipo de item desde las props de WeatherStrip
 type Wx = ComponentProps<typeof WeatherStrip>['data'][number];
 
+type AlertItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  detail: string | null;
+  amount: number;
+  quantity: number;
+  href: string;
+  when: string | null;
+  whenExact: string | null;
+};
+
+type ActivityItem = {
+  id: string;
+  title: string;
+  when: string;
+  whenExact: string;
+  ts: number;
+};
+
 export default function DashboardHome() {
   // === DATA SOURCES ===
-  const { data: me }     = useSWR('/endpoints/me', fetcher);
-  const { data: today }  = useSWR('/endpoints/summary/today', fetcher);
-  const { data: inbox }  = useSWR('/endpoints/inbox', fetcher);
-  const { data: recent } = useSWR('/endpoints/my/recent', fetcher);
+  const { data: me } = useSWR('/endpoints/me', fetcher);
+
+  const role: Role = useMemo(() => normalizeRole(me?.role), [me?.role]);
+  const name = (me?.full_name || '—').split(' ')[0];
+
+  const todayKey = useMemo(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/La_Paz' }).format(new Date()), []);
+  const monthKey = useMemo(() => todayKey.slice(0, 7), [todayKey]);
+
+  const { data: salesSummary } = useSWR('/endpoints/sales-summary', fetcher);
+  const { data: returnsStats } = useSWR('/endpoints/stats/today-returns', fetcher);
+  const { data: returnsReport } = useSWR('/endpoints/returns-report', fetcher);
+  const { data: mySales } = useSWR(() => (me?.ok ? `/endpoints/my/sales?month=${monthKey}` : null), fetcher);
+  const { data: myAttendance } = useSWR(() => (me?.ok && role !== 'promotor' ? `/endpoints/my/attendance?month=${monthKey}` : null), fetcher);
 
   // Clima y Tráfico
   const { data: wx } = useSWR(
@@ -36,15 +75,38 @@ export default function DashboardHome() {
     fetcher
   );
 
-  const name = (me?.full_name || '—').split(' ')[0];
+  const todaysSales = useMemo(() => {
+    if (!Array.isArray(salesSummary)) return [] as any[];
+    return salesSummary.filter((row: any) => {
+      const date = row?.summary_date ?? row?.summaryDate;
+      if (!date) return false;
+      return String(date).slice(0, 10) === todayKey;
+    });
+  }, [salesSummary, todayKey]);
 
-  // === KPIs COMPUTADOS ===
-  const kpis = useMemo(() => ({
-    ingresos:     today?.ingresos_hoy     ?? 0,
-    pedidos:      today?.pedidos_hoy      ?? 0,
-    devoluciones: today?.devoluciones_hoy ?? 0,
-    facturadas:   today?.facturadas_hoy   ?? 0,
-  }), [today]);
+  const monthSummary = useMemo(() => {
+    if (!Array.isArray(salesSummary)) return { revenue: 0, products: 0 };
+    const rows = salesSummary.filter((row: any) => String(row?.summary_date ?? '').startsWith(monthKey));
+    return {
+      revenue: rows.reduce((sum, row) => sum + Number(row?.total_revenue ?? row?.total ?? 0), 0),
+      products: rows.reduce((sum, row) => sum + Number(row?.total_products_sold ?? 0), 0),
+    };
+  }, [salesSummary, monthKey]);
+
+  const kpis = useMemo(() => {
+    const ingresos = todaysSales.reduce((sum, row) => sum + Number(row?.total_revenue ?? row?.total ?? 0), 0);
+    const productos = todaysSales.reduce((sum, row) => sum + Number(row?.total_products_sold ?? 0), 0);
+    const registros = todaysSales.length;
+    const devolucionesCount = Number(returnsStats?.count ?? 0);
+    const devolucionesMonto = Number(returnsStats?.amount ?? 0);
+    return {
+      ingresos,
+      productos,
+      registros,
+      devolucionesCount,
+      devolucionesMonto,
+    };
+  }, [todaysSales, returnsStats]);
 
   // === DATOS DEL CLIMA ===
   const toRiskEs = (r: unknown): Wx['risk'] => {
@@ -67,6 +129,70 @@ export default function DashboardHome() {
       risk: toRiskEs(c.risk),
     }));
   }, [wx]);
+
+  const alerts = useMemo(() => {
+    if (!Array.isArray(returnsReport)) return [] as AlertItem[];
+    return returnsReport.slice(0, 6).map((item: any, idx: number) => {
+      const date = parseDate(item?.return_date);
+      const titleBase = item?.product_name ? String(item.product_name) : `Devolución #${item?.return_id ?? idx + 1}`;
+      const branch = item?.branch ? `(${item.branch})` : '';
+      return {
+        id: `return-${item?.return_id ?? idx}`,
+        title: `${titleBase} ${branch}`.trim(),
+        subtitle: item?.customer_name ? `Cliente: ${item.customer_name}` : 'Devolución registrada',
+        detail: item?.reason || null,
+        amount: Number(item?.return_amount ?? 0),
+        quantity: Number(item?.quantity ?? 0),
+        href: '/dashboard/asesores/devoluciones',
+        when: date ? relativeTime(date) : null,
+        whenExact: date ? shortDate(date) : null,
+      } satisfies AlertItem;
+    });
+  }, [returnsReport]);
+
+  const activity = useMemo(() => {
+    const events: ActivityItem[] = [];
+
+    const salesList = Array.isArray(mySales?.list) ? mySales.list : [];
+    for (const sale of salesList) {
+      const date = parseDate(sale?.order_date ?? sale?.created_at);
+      if (!date) continue;
+      events.push({
+        id: `sale-${sale?.id ?? date.getTime()}`,
+        title: `${sale?.product_name || 'Venta'} · ${money(Number(sale?.total ?? 0))}`,
+        when: relativeTime(date),
+        whenExact: shortDate(date),
+        ts: date.getTime(),
+      });
+    }
+
+    const days = Array.isArray(myAttendance?.days) ? myAttendance.days : [];
+    for (const day of days) {
+      const firstIn = parseDate(day?.first_in);
+      if (firstIn) {
+        events.push({
+          id: `att-in-${day.date}`,
+          title: `Entrada registrada · ${format(firstIn, 'HH:mm', { locale: es })}`,
+          when: relativeTime(firstIn),
+          whenExact: shortDate(firstIn),
+          ts: firstIn.getTime(),
+        });
+      }
+      const lastOut = parseDate(day?.last_out);
+      if (lastOut) {
+        events.push({
+          id: `att-out-${day.date}`,
+          title: `Salida registrada · ${format(lastOut, 'HH:mm', { locale: es })}`,
+          when: relativeTime(lastOut),
+          whenExact: shortDate(lastOut),
+          ts: lastOut.getTime(),
+        });
+      }
+    }
+
+    events.sort((a, b) => b.ts - a.ts);
+    return events.slice(0, 8);
+  }, [myAttendance, mySales]);
 
   return (
     <div className="min-h-screen space-y-8">
@@ -139,32 +265,31 @@ export default function DashboardHome() {
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <KpiCard 
-            title="Ventas de hoy" 
+            title="Ingresos de hoy" 
             value={money(kpis.ingresos)} 
-            hint={`${kpis.pedidos} pedidos`}
+            hint={`${num(kpis.productos)} productos`}
             icon={<DollarSign size={20} />}
-            trend="+12.5%"
             color="blue"
           />
           <KpiCard 
-            title="Pedidos procesados" 
-            value={num(kpis.pedidos)} 
+            title="Productos vendidos" 
+            value={num(kpis.productos)} 
+            hint={`Sucursales activas: ${num(kpis.registros)}`}
             icon={<Package size={20} />}
-            trend="+8.2%"
             color="green"
           />
           <KpiCard 
-            title="Devoluciones" 
-            value={num(kpis.devoluciones)} 
+            title="Devoluciones (hoy)" 
+            value={num(kpis.devolucionesCount)} 
+            hint={money(kpis.devolucionesMonto)}
             icon={<RotateCcw size={20} />}
-            trend="-2.1%"
             color="orange"
           />
           <KpiCard 
-            title="Órdenes facturadas" 
-            value={num(kpis.facturadas)} 
+            title="Ventas del mes" 
+            value={money(monthSummary.revenue)} 
+            hint={`${num(monthSummary.products)} productos`}
             icon={<CheckCircle size={20} />}
-            trend="+15.3%"
             color="green"
           />
         </div>
@@ -276,7 +401,7 @@ export default function DashboardHome() {
             </div>
             
             <div className="space-y-3">
-              {(inbox ?? []).slice(0, 6).map((item: any, idx: number) => (
+              {alerts.map((item, idx) => (
                 <motion.div
                   key={item.id}
                   initial={{ opacity: 0, x: -20 }}
@@ -284,19 +409,36 @@ export default function DashboardHome() {
                   transition={{ duration: 0.3, delay: idx * 0.05 }}
                 >
                   <Link
-                    href={item.ctaHref}
+                    href={item.href}
                     className="group flex items-start gap-4 p-4 bg-white/5 border border-white/10 rounded-apple hover:bg-white/10 hover:border-white/20 transition-all duration-300"
                   >
                     <div className="p-2 bg-apple-orange-500/20 rounded-apple border border-apple-orange-500/30">
                       <AlertTriangle size={16} className="text-apple-orange-400" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="apple-body font-medium text-white truncate mb-1">
-                        {item.titulo}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="apple-body font-medium text-white truncate">
+                          {item.title}
+                        </div>
+                        {item.amount > 0 && (
+                          <span className="apple-caption text-apple-orange-300 bg-apple-orange-500/10 border border-apple-orange-500/30 rounded-apple px-2 py-0.5">
+                            {money(item.amount)}
+                          </span>
+                        )}
                       </div>
                       <div className="apple-caption text-apple-gray-400 truncate">
-                        {item.detalle}
+                        {item.subtitle}
                       </div>
+                      {item.detail && (
+                        <div className="apple-caption text-apple-gray-500 truncate">
+                          {item.detail}
+                        </div>
+                      )}
+                      {item.when && (
+                        <div className="apple-caption text-apple-gray-600">
+                          {item.when} {item.whenExact ? `• ${item.whenExact}` : ''}
+                        </div>
+                      )}
                     </div>
                     <ArrowRight 
                       size={16} 
@@ -305,12 +447,12 @@ export default function DashboardHome() {
                   </Link>
                 </motion.div>
               ))}
-              
-              {!inbox?.length && (
+
+              {!alerts.length && (
                 <EmptyState 
                   icon={<CheckCircle size={24} />}
                   title="Todo en orden" 
-                  subtitle="No hay alertas pendientes en este momento." 
+                  subtitle="No hay devoluciones pendientes en este momento." 
                 />
               )}
             </div>
@@ -327,7 +469,7 @@ export default function DashboardHome() {
           </div>
           
           <div className="space-y-3">
-            {(recent ?? []).slice(0, 8).map((event: any, idx: number) => (
+            {activity.map((event, idx) => (
               <motion.div
                 key={event.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -343,11 +485,16 @@ export default function DashboardHome() {
                   <div className="apple-caption text-apple-gray-400">
                     {event.when}
                   </div>
+                  {event.whenExact && (
+                    <div className="apple-caption text-apple-gray-500">
+                      {event.whenExact}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ))}
-            
-            {!recent?.length && (
+
+            {!activity.length && (
               <EmptyState 
                 icon={<Clock size={24} />}
                 title="Sin actividad reciente" 
@@ -492,4 +639,21 @@ function num(n: number) {
 
 function money(n: number) { 
   return `Bs ${Number(n ?? 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}`; 
+}
+
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return isValid(value) ? value : null;
+  }
+  const date = parseISO(String(value));
+  return isValid(date) ? date : null;
+}
+
+function relativeTime(date: Date): string {
+  return formatDistanceToNow(date, { addSuffix: true, locale: es });
+}
+
+function shortDate(date: Date): string {
+  return format(date, 'dd MMM • HH:mm', { locale: es });
 }

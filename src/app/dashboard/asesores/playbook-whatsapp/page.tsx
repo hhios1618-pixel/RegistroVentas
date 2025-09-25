@@ -1,7 +1,12 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Search, Copy, Check, ChevronRight, Heart, MessageCircle, Eye, Sparkles, CheckCircle, Users, Clock, ArrowRight, Phone } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Search, Copy, Check, ChevronRight, Heart, MessageCircle, Eye, 
+  Sparkles, CheckCircle, Users, Clock, ArrowRight, Phone, ChevronDown,
+  ChevronUp, Star, Lightbulb, Target, Zap, BookOpen, Headphones
+} from 'lucide-react';
 
 // -----------------------------------------------------
 // CONFIGURACIÓN Y TIPOS
@@ -9,10 +14,8 @@ import { Search, Copy, Check, ChevronRight, Heart, MessageCircle, Eye, Sparkles,
 const BRAND = {
   title: 'Guía de Atención Fénix',
   subtitle: 'Tu compañera para atender con calidez y cerrar más ventas',
-  primaryColor: 'from-blue-500 to-cyan-400',
-  accentColor: 'from-pink-400 to-rose-400',
-  glassBg: 'backdrop-blur-xl bg-white/5 border border-white/10',
-  cardBg: 'bg-gradient-to-br from-white/8 to-white/4 backdrop-blur-sm border border-white/10',
+  primaryColor: 'from-apple-blue-500 to-apple-green-500',
+  accentColor: 'from-apple-pink-500 to-apple-red-500',
 };
 
 type SalesStep = {
@@ -20,7 +23,7 @@ type SalesStep = {
   number: number;
   title: string;
   description: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; size?: number }>;
   color: string;
   scripts: Script[];
 };
@@ -52,7 +55,7 @@ const SALES_FLOW: SalesStep[] = [
     title: 'Saludo y Conexión',
     description: 'Crear un ambiente cálido y de confianza',
     icon: Heart,
-    color: 'from-pink-500 to-rose-500',
+    color: 'apple-pink',
     scripts: [
       {
         id: 'saludo-inicial',
@@ -76,7 +79,7 @@ const SALES_FLOW: SalesStep[] = [
     title: 'Descubrimiento de Necesidades',
     description: 'Entender qué busca y por qué lo necesita',
     icon: Eye,
-    color: 'from-blue-500 to-cyan-500',
+    color: 'apple-blue',
     scripts: [
       {
         id: 'pregunta-abierta',
@@ -107,7 +110,7 @@ const SALES_FLOW: SalesStep[] = [
     title: 'Presentación de Opciones',
     description: 'Mostrar productos que resuelvan su necesidad',
     icon: Sparkles,
-    color: 'from-purple-500 to-indigo-500',
+    color: 'purple',
     scripts: [
       {
         id: 'presentacion-consultiva',
@@ -138,7 +141,7 @@ const SALES_FLOW: SalesStep[] = [
     title: 'Manejo de Dudas',
     description: 'Resolver inquietudes con empatía',
     icon: MessageCircle,
-    color: 'from-orange-500 to-red-500',
+    color: 'apple-orange',
     scripts: [
       {
         id: 'precio-alto',
@@ -176,7 +179,7 @@ const SALES_FLOW: SalesStep[] = [
     title: 'Cierre y Confirmación',
     description: 'Facilitar la decisión de compra',
     icon: CheckCircle,
-    color: 'from-green-500 to-emerald-500',
+    color: 'apple-green',
     scripts: [
       {
         id: 'cierre-suave',
@@ -207,7 +210,7 @@ const SALES_FLOW: SalesStep[] = [
     title: 'Seguimiento y Cuidado',
     description: 'Asegurar satisfacción y fidelizar',
     icon: Users,
-    color: 'from-teal-500 to-cyan-500',
+    color: 'apple-teal',
     scripts: [
       {
         id: 'confirmacion-envio',
@@ -241,7 +244,7 @@ const QUICK_RESPONSES: QuickResponse[] = [
     situation: 'Objeción de precio',
     response: 'Entiendo perfectamente, [NOMBRE]. El precio siempre es importante. Este producto es una inversión que le va a durar mucho tiempo. ¿Le gustaría que le muestre una opción más económica?',
     icon: '💰',
-    color: 'from-red-500 to-pink-500'
+    color: 'apple-red'
   },
   {
     id: 'lo-pienso',
@@ -249,7 +252,7 @@ const QUICK_RESPONSES: QuickResponse[] = [
     situation: 'Indecisión',
     response: 'Por supuesto, [NOMBRE]. Es normal querer pensarlo bien. ¿Hay algo específico que le preocupa? Me encantaría resolver cualquier duda que tenga.',
     icon: '🤔',
-    color: 'from-yellow-500 to-orange-500'
+    color: 'apple-orange'
   },
   {
     id: 'no-sirve',
@@ -257,7 +260,7 @@ const QUICK_RESPONSES: QuickResponse[] = [
     situation: 'Duda sobre utilidad',
     response: 'Entiendo su preocupación, [NOMBRE]. Por eso le ofrezco nuestra garantía: si no queda satisfecho, le devolvemos su dinero sin preguntas.',
     icon: '❓',
-    color: 'from-purple-500 to-indigo-500'
+    color: 'purple'
   },
   {
     id: 'sin-dinero',
@@ -265,7 +268,7 @@ const QUICK_RESPONSES: QuickResponse[] = [
     situation: 'Limitación económica',
     response: 'No se preocupe, [NOMBRE]. ¿Le parece si se lo aparto por 24 horas sin compromiso? O tenemos pago contra entrega.',
     icon: '💳',
-    color: 'from-blue-500 to-cyan-500'
+    color: 'apple-blue'
   },
   {
     id: 'garantia',
@@ -273,7 +276,7 @@ const QUICK_RESPONSES: QuickResponse[] = [
     situation: 'Generar confianza',
     response: 'Le ofrecemos una garantía de 48 horas una vez recepcionado el producto, [NOMBRE]. Así puede probarlo con total tranquilidad.',
     icon: '🛡️',
-    color: 'from-green-500 to-emerald-500'
+    color: 'apple-green'
   }
 ];
 
@@ -334,32 +337,46 @@ const useSearch = () => {
 };
 
 // -----------------------------------------------------
-// COMPONENTES UI
+// COMPONENTES UI REDISEÑADOS CON ESTILO APPLE
 // -----------------------------------------------------
 const ProgressIndicator: React.FC<{ currentStep: number; totalSteps: number }> = ({ currentStep, totalSteps }) => (
-  <div className="flex items-center justify-center mb-8">
-    <div className="flex items-center space-x-2">
+  <motion.div 
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="flex items-center justify-center mb-8"
+  >
+    <div className="flex items-center space-x-3">
       {Array.from({ length: totalSteps }, (_, i) => (
         <React.Fragment key={i}>
-          <div className={`
-            w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300
-            ${i + 1 <= currentStep 
-              ? 'bg-gradient-to-r from-blue-500 to-cyan-400 text-white' 
-              : 'bg-white/10 text-white/50'
-            }
-          `}>
+          <motion.div 
+            initial={{ scale: 0.8 }}
+            animate={{ scale: i + 1 <= currentStep ? 1.1 : 1 }}
+            transition={{ type: 'spring', stiffness: 300 }}
+            className={`
+              w-10 h-10 rounded-apple flex items-center justify-center apple-caption font-bold transition-all duration-300
+              ${i + 1 <= currentStep 
+                ? 'bg-gradient-to-br from-apple-blue-500 to-apple-green-500 text-white shadow-apple' 
+                : 'bg-white/10 text-apple-gray-400 border border-white/20'
+              }
+            `}
+          >
             {i + 1}
-          </div>
+          </motion.div>
           {i < totalSteps - 1 && (
-            <div className={`
-              w-8 h-1 rounded transition-all duration-300
-              ${i + 1 < currentStep ? 'bg-gradient-to-r from-blue-500 to-cyan-400' : 'bg-white/10'}
-            `} />
+            <motion.div 
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: i + 1 < currentStep ? 1 : 0.3 }}
+              transition={{ duration: 0.5 }}
+              className={`
+                w-8 h-1 rounded-full transition-all duration-300 origin-left
+                ${i + 1 < currentStep ? 'bg-gradient-to-r from-apple-blue-500 to-apple-green-500' : 'bg-white/20'}
+              `} 
+            />
           )}
         </React.Fragment>
       ))}
     </div>
-  </div>
+  </motion.div>
 );
 
 const ScriptCard: React.FC<{
@@ -367,41 +384,51 @@ const ScriptCard: React.FC<{
   onCopy: (text: string, id: string) => void;
   isCopied: boolean;
 }> = ({ script, onCopy, isCopied }) => (
-  <div className={`${BRAND.cardBg} rounded-xl p-4 hover:bg-white/10 transition-all duration-300`}>
-    <div className="flex items-start justify-between mb-3">
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    whileHover={{ scale: 1.02 }}
+    className="glass-card hover:shadow-apple-lg transition-all duration-300"
+  >
+    <div className="flex items-start justify-between mb-4">
       <div className="flex-1">
-        <h4 className="font-semibold text-white text-sm mb-1">{script.title}</h4>
-        <p className="text-xs text-cyan-300 mb-2">{script.situation}</p>
+        <h4 className="apple-body font-semibold text-white mb-1">{script.title}</h4>
+        <p className="apple-caption text-apple-blue-300 mb-2">{script.situation}</p>
       </div>
-      <button
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => onCopy(script.content, script.id)}
         className={`
-          flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200
+          flex items-center gap-2 px-3 py-2 rounded-apple apple-caption font-medium transition-all duration-200
           ${isCopied 
-            ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
-            : 'bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30'
+            ? 'bg-apple-green-500/20 text-apple-green-300 border border-apple-green-500/30' 
+            : 'bg-apple-blue-500/20 text-apple-blue-300 border border-apple-blue-500/30 hover:bg-apple-blue-500/30'
           }
         `}
       >
-        {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        {isCopied ? <Check size={14} /> : <Copy size={14} />}
         {isCopied ? 'Copiado' : 'Copiar'}
-      </button>
+      </motion.button>
     </div>
     
-    <div className="bg-black/20 rounded-lg p-3 border border-white/5 mb-3">
-      <pre className="text-sm text-white/90 whitespace-pre-wrap leading-relaxed">
+    <div className="bg-black/30 rounded-apple p-4 border border-white/10 mb-4">
+      <pre className="apple-body text-white whitespace-pre-wrap leading-relaxed">
         {script.content}
       </pre>
     </div>
     
     {script.tips && (
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-2">
-        <p className="text-xs text-yellow-300">
-          💡 <strong>Tip:</strong> {script.tips}
-        </p>
+      <div className="bg-apple-orange-500/10 border border-apple-orange-500/30 rounded-apple p-3">
+        <div className="flex items-start gap-2">
+          <Lightbulb size={16} className="text-apple-orange-400 mt-0.5 flex-shrink-0" />
+          <p className="apple-caption text-apple-orange-300">
+            <strong>Tip:</strong> {script.tips}
+          </p>
+        </div>
       </div>
     )}
-  </div>
+  </motion.div>
 );
 
 const SalesStepSection: React.FC<{
@@ -413,41 +440,77 @@ const SalesStepSection: React.FC<{
 }> = ({ step, onCopy, copiedId, isActive, onActivate }) => {
   const Icon = step.icon;
   
+  const colorClasses = {
+    'apple-pink': 'from-apple-pink-500/20 to-apple-red-500/10 border-apple-pink-500/30 text-apple-pink-400',
+    'apple-blue': 'from-apple-blue-500/20 to-apple-blue-600/10 border-apple-blue-500/30 text-apple-blue-400',
+    'purple': 'from-purple-500/20 to-purple-600/10 border-purple-500/30 text-purple-400',
+    'apple-orange': 'from-apple-orange-500/20 to-apple-orange-600/10 border-apple-orange-500/30 text-apple-orange-400',
+    'apple-green': 'from-apple-green-500/20 to-apple-green-600/10 border-apple-green-500/30 text-apple-green-400',
+    'apple-teal': 'from-teal-500/20 to-cyan-500/10 border-teal-500/30 text-teal-400',
+  };
+
+  const colorClass = colorClasses[step.color as keyof typeof colorClasses] || colorClasses['apple-blue'];
+  
   return (
-    <div className={`
-      rounded-2xl p-6 transition-all duration-300 cursor-pointer
-      ${isActive ? `${BRAND.cardBg} ring-2 ring-blue-400/50` : 'bg-white/5 hover:bg-white/8'}
-    `} onClick={onActivate}>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.01 }}
+      className={`
+        glass-card cursor-pointer transition-all duration-300
+        ${isActive ? 'ring-2 ring-apple-blue-400/50 shadow-apple-lg' : 'hover:shadow-apple'}
+      `} 
+      onClick={onActivate}
+    >
       <div className="flex items-center gap-4 mb-4">
         <div className={`
-          w-12 h-12 rounded-xl flex items-center justify-center
-          bg-gradient-to-br ${step.color}
+          w-14 h-14 rounded-apple-lg flex items-center justify-center
+          bg-gradient-to-br ${colorClass} border
         `}>
-          <Icon className="w-6 h-6 text-white" />
+          <Icon size={24} />
         </div>
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold text-white/60">PASO {step.number}</span>
-            <ChevronRight className={`w-4 h-4 text-white/60 transition-transform ${isActive ? 'rotate-90' : ''}`} />
+          <div className="flex items-center gap-2 mb-2">
+            <span className="apple-caption2 font-bold text-apple-gray-400">PASO {step.number}</span>
+            <motion.div
+              animate={{ rotate: isActive ? 90 : 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ChevronRight size={16} className="text-apple-gray-400" />
+            </motion.div>
           </div>
-          <h3 className="text-lg font-bold text-white">{step.title}</h3>
-          <p className="text-sm text-white/70">{step.description}</p>
+          <h3 className="apple-h3 text-white mb-1">{step.title}</h3>
+          <p className="apple-body text-apple-gray-300">{step.description}</p>
         </div>
       </div>
       
-      {isActive && (
-        <div className="space-y-4 mt-6">
-          {step.scripts.map(script => (
-            <ScriptCard
-              key={script.id}
-              script={script}
-              onCopy={onCopy}
-              isCopied={copiedId === script.id}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      <AnimatePresence>
+        {isActive && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-4 mt-6 overflow-hidden"
+          >
+            {step.scripts.map((script, index) => (
+              <motion.div
+                key={script.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <ScriptCard
+                  script={script}
+                  onCopy={onCopy}
+                  isCopied={copiedId === script.id}
+                />
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
@@ -455,30 +518,51 @@ const QuickResponseButton: React.FC<{
   response: QuickResponse;
   onCopy: (text: string, id: string) => void;
   isCopied: boolean;
-}> = ({ response, onCopy, isCopied }) => (
-  <button
-    onClick={() => onCopy(response.response, response.id)}
-    className={`
-      relative overflow-hidden rounded-xl p-4 text-left transition-all duration-300 hover:scale-105
-      bg-gradient-to-br ${response.color} group w-full
-    `}
-  >
-    <div className="relative z-10">
-      <div className="text-2xl mb-2">{response.icon}</div>
-      <div className="text-white font-semibold text-sm mb-1">{response.label}</div>
-      <div className="text-white/80 text-xs">{response.situation}</div>
-      {isCopied && (
-        <div className="absolute top-2 right-2 bg-green-500/20 text-green-300 px-2 py-1 rounded text-xs">
-          ✅ Copiado
-        </div>
-      )}
-    </div>
-    <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-  </button>
-);
+}> = ({ response, onCopy, isCopied }) => {
+  const colorClasses = {
+    'apple-red': 'from-apple-red-500 to-apple-pink-500',
+    'apple-orange': 'from-apple-orange-500 to-apple-red-500',
+    'purple': 'from-purple-500 to-indigo-500',
+    'apple-blue': 'from-apple-blue-500 to-cyan-500',
+    'apple-green': 'from-apple-green-500 to-emerald-500',
+  };
+
+  const colorClass = colorClasses[response.color as keyof typeof colorClasses] || colorClasses['apple-blue'];
+
+  return (
+    <motion.button
+      whileHover={{ scale: 1.05, y: -2 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={() => onCopy(response.response, response.id)}
+      className={`
+        relative overflow-hidden rounded-apple-lg p-4 text-left transition-all duration-300 w-full
+        bg-gradient-to-br ${colorClass} shadow-apple hover:shadow-apple-lg
+      `}
+    >
+      <div className="relative z-10">
+        <div className="text-2xl mb-3">{response.icon}</div>
+        <div className="text-white apple-body font-semibold mb-1">{response.label}</div>
+        <div className="text-white/80 apple-caption">{response.situation}</div>
+        <AnimatePresence>
+          {isCopied && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute top-3 right-3 bg-apple-green-500/30 text-apple-green-200 px-2 py-1 rounded-apple apple-caption2 border border-apple-green-500/50"
+            >
+              ✅ Copiado
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity" />
+    </motion.button>
+  );
+};
 
 // -----------------------------------------------------
-// COMPONENTE PRINCIPAL
+// COMPONENTE PRINCIPAL REDISEÑADO
 // -----------------------------------------------------
 export default function WhatsAppPlaybookPage() {
   const { copiedId, copyText } = useCopyToClipboard();
@@ -486,117 +570,207 @@ export default function WhatsAppPlaybookPage() {
   const [activeStepId, setActiveStepId] = useState<string>('saludo');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 text-white">
+    <div className="min-h-screen bg-black">
       {/* Header */}
-      <header className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-cyan-500/20" />
-        <div className="relative z-10 max-w-6xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className={`text-4xl md:text-5xl font-bold bg-gradient-to-r ${BRAND.primaryColor} bg-clip-text text-transparent mb-4`}>
-              {BRAND.title}
-            </h1>
-            <p className="text-xl text-white/70 max-w-2xl mx-auto mb-8">
-              {BRAND.subtitle}
-            </p>
-            
-            {/* Progress Indicator */}
-            <ProgressIndicator currentStep={SALES_FLOW.findIndex(s => s.id === activeStepId) + 1} totalSteps={SALES_FLOW.length} />
+      <motion.header
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card mb-8"
+      >
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="p-3 bg-gradient-to-br from-apple-pink-500/20 to-apple-red-500/20 border border-apple-pink-500/30 rounded-apple-lg">
+              <Headphones size={28} className="text-apple-pink-400" />
+            </div>
+            <div className="p-3 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 border border-apple-blue-500/30 rounded-apple-lg">
+              <BookOpen size={28} className="text-apple-blue-400" />
+            </div>
           </div>
+          
+          <h1 className={`apple-h1 mb-4 bg-gradient-to-r ${BRAND.primaryColor} bg-clip-text text-transparent`}>
+            {BRAND.title}
+          </h1>
+          <p className="apple-h4 text-apple-gray-300 max-w-2xl mx-auto mb-8">
+            {BRAND.subtitle}
+          </p>
+          
+          {/* Progress Indicator */}
+          <ProgressIndicator 
+            currentStep={SALES_FLOW.findIndex(s => s.id === activeStepId) + 1} 
+            totalSteps={SALES_FLOW.length} 
+          />
         </div>
-      </header>
+      </motion.header>
 
-      <div className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+      <div className="max-w-6xl mx-auto px-6 space-y-8">
         {/* Search */}
-        <section>
-          <div className={`${BRAND.glassBg} rounded-2xl p-6`}>
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <div className="glass-card">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-apple-blue-500/20 border border-apple-blue-500/30 rounded-apple">
+                <Search size={18} className="text-apple-blue-400" />
+              </div>
+              <h2 className="apple-h3 text-white">Búsqueda Inteligente</h2>
+            </div>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/40" />
+              <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-apple-gray-500" />
               <input
                 type="text"
                 placeholder="Buscar scripts, situaciones o respuestas..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-white/10 border border-white/20 rounded-xl pl-10 pr-4 py-3 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-transparent"
+                className="field pl-12 apple-h4"
               />
             </div>
           </div>
-        </section>
+        </motion.section>
 
         {/* Quick Responses */}
-        <section>
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-            <Clock className="w-6 h-6 text-pink-400" />
-            Respuestas Rápidas
-          </h2>
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-apple-orange-500/20 border border-apple-orange-500/30 rounded-apple">
+              <Zap size={18} className="text-apple-orange-400" />
+            </div>
+            <h2 className="apple-h2 text-white">Respuestas Rápidas</h2>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {filteredQuickResponses.map(response => (
-              <QuickResponseButton
+            {filteredQuickResponses.map((response, index) => (
+              <motion.div
                 key={response.id}
-                response={response}
-                onCopy={copyText}
-                isCopied={copiedId === response.id}
-              />
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * index }}
+              >
+                <QuickResponseButton
+                  response={response}
+                  onCopy={copyText}
+                  isCopied={copiedId === response.id}
+                />
+              </motion.div>
             ))}
           </div>
-        </section>
+        </motion.section>
 
         {/* Sales Flow */}
-        <section>
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-            <ArrowRight className="w-6 h-6 text-cyan-400" />
-            Flujo de Atención Paso a Paso
-          </h2>
-          <div className="space-y-4">
-            {filteredSteps.map(step => (
-              <SalesStepSection
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-apple-green-500/20 border border-apple-green-500/30 rounded-apple">
+              <Target size={18} className="text-apple-green-400" />
+            </div>
+            <h2 className="apple-h2 text-white">Flujo de Atención Paso a Paso</h2>
+          </div>
+          <div className="space-y-6">
+            {filteredSteps.map((step, index) => (
+              <motion.div
                 key={step.id}
-                step={step}
-                onCopy={copyText}
-                copiedId={copiedId}
-                isActive={activeStepId === step.id}
-                onActivate={() => setActiveStepId(step.id)}
-              />
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * index }}
+              >
+                <SalesStepSection
+                  step={step}
+                  onCopy={copyText}
+                  copiedId={copiedId}
+                  isActive={activeStepId === step.id}
+                  onActivate={() => setActiveStepId(step.id)}
+                />
+              </motion.div>
             ))}
           </div>
-        </section>
+        </motion.section>
 
         {/* Tips Section */}
-        <section>
-          <div className={`${BRAND.cardBg} rounded-2xl p-6`}>
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <Heart className="w-5 h-5 text-pink-400" />
-              Recuerda Siempre
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-pink-500/10 border border-pink-500/30 rounded-lg p-4">
-                <h4 className="font-semibold text-pink-300 mb-2">Trato Respetuoso</h4>
-                <p className="text-sm text-white/80">Siempre usar "usted" y el nombre del cliente. Esto genera confianza inmediata.</p>
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <div className="glass-card">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-apple-pink-500/20 border border-apple-pink-500/30 rounded-apple">
+                <Heart size={18} className="text-apple-pink-400" />
               </div>
-              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                <h4 className="font-semibold text-blue-300 mb-2">Empatía Genuina</h4>
-                <p className="text-sm text-white/80">Usar frases como "entiendo", "es normal", "no se preocupe" para conectar emocionalmente.</p>
-              </div>
-              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                <h4 className="font-semibold text-green-300 mb-2">Beneficios sobre Características</h4>
-                <p className="text-sm text-white/80">Siempre explicar cómo el producto les ayuda en su vida diaria, no solo qué hace.</p>
-              </div>
-              <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
-                <h4 className="font-semibold text-purple-300 mb-2">Generar Seguridad</h4>
-                <p className="text-sm text-white/80">Ofrecer garantías, pago contra entrega y seguimiento para eliminar miedos.</p>
-              </div>
+              <h3 className="apple-h2 text-white">Recuerda Siempre</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                className="bg-apple-pink-500/10 border border-apple-pink-500/30 rounded-apple-lg p-6"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <Users size={20} className="text-apple-pink-400" />
+                  <h4 className="apple-h4 text-apple-pink-300">Trato Respetuoso</h4>
+                </div>
+                <p className="apple-body text-white">Siempre usar "usted" y el nombre del cliente. Esto genera confianza inmediata.</p>
+              </motion.div>
+              
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                className="bg-apple-blue-500/10 border border-apple-blue-500/30 rounded-apple-lg p-6"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <Heart size={20} className="text-apple-blue-400" />
+                  <h4 className="apple-h4 text-apple-blue-300">Empatía Genuina</h4>
+                </div>
+                <p className="apple-body text-white">Usar frases como "entiendo", "es normal", "no se preocupe" para conectar emocionalmente.</p>
+              </motion.div>
+              
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                className="bg-apple-green-500/10 border border-apple-green-500/30 rounded-apple-lg p-6"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <Star size={20} className="text-apple-green-400" />
+                  <h4 className="apple-h4 text-apple-green-300">Beneficios sobre Características</h4>
+                </div>
+                <p className="apple-body text-white">Siempre explicar cómo el producto les ayuda en su vida diaria, no solo qué hace.</p>
+              </motion.div>
+              
+              <motion.div
+                whileHover={{ scale: 1.02 }}
+                className="bg-purple-500/10 border border-purple-500/30 rounded-apple-lg p-6"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <CheckCircle size={20} className="text-purple-400" />
+                  <h4 className="apple-h4 text-purple-300">Generar Seguridad</h4>
+                </div>
+                <p className="apple-body text-white">Ofrecer garantías, pago contra entrega y seguimiento para eliminar miedos.</p>
+              </motion.div>
             </div>
           </div>
-        </section>
+        </motion.section>
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 mt-16">
-        <div className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          <div className="text-center text-white/50">
-            <p>Fénix • Guía de Atención • Diseñada con ❤️ para nuestras vendedoras</p>
+      <motion.footer
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="border-t border-white/10 mt-16"
+      >
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Heart size={16} className="text-apple-pink-400" />
+              <span className="apple-body text-apple-gray-400">Fénix • Guía de Atención</span>
+              <Heart size={16} className="text-apple-pink-400" />
+            </div>
+            <p className="apple-caption text-apple-gray-500">Diseñada con amor para nuestras vendedoras</p>
           </div>
         </div>
-      </footer>
+      </motion.footer>
     </div>
   );
 }

@@ -2,66 +2,183 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { normalizeRole, getRoleHomeRoute, type Role } from '@/lib/auth/roles';
 
-type Role = 'admin' | 'promotor' | 'coordinador' | 'lider' | 'asesor' | 'unknown';
-type Me = { ok: boolean; role?: Role; full_name?: string };
-
-const ROLE_TO_HOME: Record<Role, string> = {
-  admin: '/dashboard/admin/resumen',
-  coordinador: '/logistica',
-  lider: '/dashboard/vendedores',
-  asesor: '/dashboard/asesores/HOME',
-  promotor: '/dashboard/promotores',
-  unknown: '/portal',
+type UserInfo = {
+  ok: boolean;
+  role?: string;
+  full_name?: string;
+  id?: string;
 };
 
+/**
+ * Página de redirección post-login
+ * - Obtiene información del usuario autenticado
+ * - Redirige a la página apropiada según el rol
+ * - Maneja errores de sesión
+ */
 export default function PostLoginRouter() {
   const router = useRouter();
-  const [status, setStatus] = useState<'checking'|'redirecting'|'error'>('checking');
-  const [msg, setMsg] = useState('Verificando sesión…');
+  const [status, setStatus] = useState<'checking' | 'redirecting' | 'error'>('checking');
+  const [message, setMessage] = useState('Verificando sesión…');
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   useEffect(() => {
     let canceled = false;
-    (async () => {
+
+    const redirectUser = async () => {
       try {
-        const r = await fetch('/endpoints/me', { cache: 'no-store' });
-        const me: Me = await r.json();
-        if (!r.ok || !me?.ok) throw new Error('no_session');
-        const role = (me.role ?? 'unknown') as Role;
-        const href = ROLE_TO_HOME[role] ?? '/portal';
+        setStatus('checking');
+        setMessage('Verificando sesión…');
+
+        // Obtener información del usuario
+        const response = await fetch('/endpoints/me', { 
+          cache: 'no-store',
+          credentials: 'include',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
+
+        const userData: UserInfo = await response.json();
+
+        if (!response.ok || !userData?.ok) {
+          throw new Error('Sesión inválida');
+        }
+
         if (canceled) return;
+
+        // Guardar información del usuario
+        setUserInfo(userData);
+
+        // Normalizar rol y obtener ruta home
+        const normalizedRole = normalizeRole(userData.role) as Role;
+        const homeRoute = getRoleHomeRoute(normalizedRole);
+
+        if (!homeRoute || homeRoute === '/post-login') {
+          console.warn('[post-login] Ruta home inválida, usando /dashboard', {
+            role: userData.role,
+            normalizedRole,
+            homeRoute,
+          });
+        }
+
         setStatus('redirecting');
-        setMsg(`Bienvenido, redirigiendo a tu inicio (${role})…`);
-        router.replace(href);
-      } catch {
+        setMessage(`Bienvenido ${userData.full_name || 'Usuario'}, redirigiendo a tu inicio…`);
+
+        // Pequeño delay para mostrar el mensaje de bienvenida
+        setTimeout(() => {
+          router.replace(homeRoute || '/dashboard');
+        }, 1500);
+
+      } catch (error) {
+        console.error('Error en post-login:', error);
+        
         if (canceled) return;
+
         setStatus('error');
-        setMsg('No se pudo resolver tu inicio. Intenta desde el botón.');
+        setMessage('No se pudo resolver tu inicio. Usa los botones de acceso directo.');
       }
-    })();
-    return () => { canceled = true; };
+    };
+
+    redirectUser();
+
+    return () => {
+      canceled = true;
+    };
   }, [router]);
 
   return (
-    <main style={{minHeight:'100dvh',display:'grid',placeItems:'center',background:'#0D1117',color:'#C9D1D9'}}>
-      <div style={{padding:24,border:'1px solid #30363D',borderRadius:12,background:'rgba(22,27,34,.6)',maxWidth:460,width:'92%'}}>
-        <h1 style={{margin:'0 0 8px',fontSize:20}}>FENIX — Entrando…</h1>
-        <p style={{margin:'0 0 16px',opacity:.8}}>{msg}</p>
-        {status !== 'error' && (
-          <div style={{display:'flex',alignItems:'center',gap:10,opacity:.8}}>
-            <div style={{width:14,height:14,border:'2px solid rgba(255,255,255,.25)',borderTop:'2px solid #fff',borderRadius:'50%',animation:'spin 1s linear infinite'}} />
-            <small>Por favor espera…</small>
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="max-w-md w-full mx-4 p-8 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl shadow-2xl">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-green-500 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </div>
-        )}
+          <h1 className="text-2xl font-bold text-white mb-2">FENIX Store</h1>
+          <p className="text-gray-300">Sistema de Gestión Integral</p>
+        </div>
+
+        {/* Status Content */}
+        <div className="text-center mb-8">
+          <p className="text-gray-200 mb-4">{message}</p>
+          
+          {status !== 'error' && (
+            <div className="flex items-center justify-center gap-3 text-gray-400">
+              <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
+              <span className="text-sm">Por favor espera…</span>
+            </div>
+          )}
+
+          {userInfo && status === 'redirecting' && (
+            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+              <p className="text-green-400 text-sm">
+                Rol: {normalizeRole(userInfo.role)}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Error State - Quick Access Buttons */}
         {status === 'error' && (
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            <a href="/dashboard/admin/resumen" className="px-3 py-2 rounded-md" style={{background:'#0ea5e9',color:'#fff'}}>Admin</a>
-            <a href="/dashboard/asesores/HOME" className="px-3 py-2 rounded-md" style={{background:'#10b981',color:'#fff'}}>Asesores</a>
-            <a href="/dashboard/promotores" className="px-3 py-2 rounded-md" style={{background:'#8b5cf6',color:'#fff'}}>Promotores</a>
+          <div className="space-y-3">
+            <p className="text-center text-gray-400 text-sm mb-4">
+              Acceso directo por rol:
+            </p>
+            
+            <div className="grid grid-cols-1 gap-2">
+              <a
+                href="/dashboard"
+                className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-center transition-colors duration-200 text-sm font-medium"
+              >
+                🏢 Administración
+              </a>
+              
+              <a
+                href="/dashboard/asesores/HOME"
+                className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg text-center transition-colors duration-200 text-sm font-medium"
+              >
+                👥 Asesores / Vendedores
+              </a>
+              
+              <a
+                href="/dashboard/promotores"
+                className="px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-center transition-colors duration-200 text-sm font-medium"
+              >
+                📢 Promotores
+              </a>
+              
+              <a
+                href="/logistica"
+                className="px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-center transition-colors duration-200 text-sm font-medium"
+              >
+                🚚 Logística
+              </a>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-700">
+              <a
+                href="/login"
+                className="block w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-center transition-colors duration-200 text-sm"
+              >
+                ← Volver al Login
+              </a>
+            </div>
           </div>
         )}
       </div>
-      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* Loading Animation Styles */}
+      <style jsx>{`
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      `}</style>
     </main>
   );
 }

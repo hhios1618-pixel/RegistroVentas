@@ -1,7 +1,12 @@
-// src/app/(auth)/login/page.tsx
+// src/app/(auth)/login/page.tsx - PÁGINA CORREGIDA
 import { Suspense } from 'react';
 import { LoginClient, Spinner } from './LoginClient'; 
 
+/**
+ * Página de login del sistema
+ * - Usa Suspense para manejar la carga de SearchParams
+ * - Componente del servidor que renderiza el cliente de login
+ */
 export default function LoginPage() {
   return (
     <Suspense
@@ -20,3 +25,12 @@ export default function LoginPage() {
     </Suspense>
   );
 }
+
+/**
+ * Metadata para SEO y navegador
+ */
+export const metadata = {
+  title: 'Iniciar Sesión - Fenix Store',
+  description: 'Accede al sistema de gestión integral de Fenix Store',
+  robots: 'noindex, nofollow', // No indexar página de login
+};

@@ -23,6 +23,9 @@ if (!HERE_API_KEY) {
   console.warn('[traffic] Falta HERE_API_KEY en .env');
 }
 
+const CACHE_TTL_MS = 3 * 60 * 1000;
+let cache: { timestamp: number; payload: any } | null = null;
+
 // BBoxes aproximados (grandes a propósito para capturar perímetros de reparto)
 const CITY_BBOX: Record<CityKey, string> = {
   'Santa Cruz':   '-17.96,-63.32;-17.67,-62.95',
@@ -50,6 +53,10 @@ async function timed<T>(p: Promise<T>, ms = 8000): Promise<T> {
 
 export async function GET(req: Request) {
   try {
+    if (cache && Date.now() - cache.timestamp < CACHE_TTL_MS) {
+      return NextResponse.json(cache.payload, { status: 200 });
+    }
+
     const { searchParams } = new URL(req.url);
     const citiesParam = searchParams.get('cities') || '';
     const cities: CityKey[] = citiesParam
@@ -101,8 +108,10 @@ export async function GET(req: Request) {
           });
         }
       } catch (e) {
-        // fallo por ciudad → continuar con otras (no invento nada)
-        console.error(`[traffic] ${city}:`, (e as Error).message);
+        const message = (e as Error).message;
+        if (!message.includes('here 429')) {
+          console.error(`[traffic] ${city}:`, message);
+        }
       }
     }));
 
@@ -112,10 +121,10 @@ export async function GET(req: Request) {
       return rank(b.severity) - rank(a.severity);
     });
 
-    return NextResponse.json(
-      { incidents: results, provider: 'here', updatedAt: Date.now() },
-      { status: 200 }
-    );
+    const payload = { incidents: results, provider: 'here', updatedAt: Date.now() };
+    cache = { timestamp: Date.now(), payload };
+
+    return NextResponse.json(payload, { status: 200 });
   } catch (e:any) {
     console.error('[traffic] fatal:', e?.message);
     // Empresa: en error → entrego vacío (operativa normal), nunca datos fake

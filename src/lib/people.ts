@@ -1,4 +1,4 @@
-import supabase from './supabaseClient';
+import { supabaseClient as supabase } from '@/lib/supabase';
 
 export type Person = {
   full_name: string;

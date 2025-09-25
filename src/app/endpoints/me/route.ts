@@ -1,89 +1,117 @@
 // src/app/endpoints/me/route.ts
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin, withSupabaseRetry, isSupabaseTransientError } from '@/lib/supabase';
+import type { PostgrestSingleResponse } from '@supabase/supabase-js';
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const JWT_SECRET = process.env.JWT_SECRET!;
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'fenix_session';
 
-/** Mapea los valores de la DB a los códigos que usa el front */
-function normalizeRole(raw?: string) {
-  const r = (raw || '').toString().trim().toUpperCase();
-  if (['GERENCIA', 'GERENTE', 'ADMIN', 'ADMINISTRADOR'].includes(r)) return 'admin';
-  if (['PROMOTOR', 'PROMOTORA'].includes(r)) return 'promotor';
-  if (['COORDINADOR', 'COORDINADORA', 'COORDINACION'].includes(r)) return 'coordinador';
-  if (['LIDER', 'JEFE', 'SUPERVISOR'].includes(r)) return 'lider';
-  if (['ASESOR', 'VENDEDOR', 'VENDEDORA'].includes(r)) return 'asesor';
-  return 'asesor';
+type JwtPayloadMinimal = { sub: string };
+
+type PersonRow = {
+  id: string;
+  full_name: string | null;
+  role: string | null;
+  fenix_role: string | null;
+  privilege_level: number | null;
+  active: boolean | null;
+  email: string | null;
+  local: string | null;
+  username: string | null;
+};
+
+function normalizeRole(rawRole?: string): string {
+  const role = String(rawRole || '').trim().toUpperCase();
+  if (['GERENCIA', 'GERENTE', 'ADMIN', 'ADMINISTRADOR'].includes(role)) return 'ADMIN';
+  if (['PROMOTOR', 'PROMOTORA'].includes(role)) return 'PROMOTOR';
+  if (['COORDINADOR', 'COORDINADORA', 'COORDINACION'].includes(role)) return 'COORDINADOR';
+  if (['LIDER', 'JEFE', 'SUPERVISOR'].includes(role)) return 'LIDER';
+  if (['ASESOR', 'VENDEDOR', 'VENDEDORA'].includes(role)) return 'ASESOR';
+  if (['LOGISTICA', 'RUTAS', 'DELIVERY'].includes(role)) return 'LOGISTICA';
+  return 'ASESOR';
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    // Leer cookie
-    const sessionCookie = req.cookies.get(COOKIE_NAME);
+    const sessionCookie = request.cookies.get(COOKIE_NAME);
     if (!sessionCookie?.value) {
-      console.log('No se encontró cookie de sesión:', COOKIE_NAME);
       return NextResponse.json({ ok: false, error: 'no_session' }, { status: 401 });
     }
 
-    // Verificar JWT
-    let payload: any;
+    let payload: JwtPayloadMinimal;
     try {
-      payload = jwt.verify(sessionCookie.value, JWT_SECRET);
-      console.log('JWT decodificado exitosamente:', { sub: payload.sub, role: payload.role, email: payload.email });
-    } catch (jwtError) {
-      console.error('Error verificando JWT:', jwtError);
+      payload = jwt.verify(sessionCookie.value, JWT_SECRET) as JwtPayloadMinimal;
+    } catch (e) {
       return NextResponse.json({ ok: false, error: 'invalid_token' }, { status: 401 });
     }
 
-    // Supabase admin
-    const admin = createClient(URL, SERVICE, { auth: { persistSession: false } });
+    if (!payload?.sub) {
+      return NextResponse.json({ ok: false, error: 'invalid_token_payload' }, { status: 401 });
+    }
 
-    // Traer persona (⬅️ ahora incluye local e id explícito)
-    const { data: person, error } = await admin
-      .from('people')
-      .select('id, full_name, role, fenix_role, privilege_level, active, email, local')
-      .eq('id', payload.sub)
-      .maybeSingle();
+    const admin = supabaseAdmin();
+
+    // Sin genéricos en withSupabaseRetry ni en .from(); fijamos el tipo por la firma de retorno
+    const queryResult = await withSupabaseRetry(async (): Promise<PostgrestSingleResponse<PersonRow>> => {
+      const res = await admin
+        .from('people')
+        .select('id, full_name, role, fenix_role, privilege_level, active, email, local, username')
+        .eq('id', payload.sub)
+        .maybeSingle();
+      return res as PostgrestSingleResponse<PersonRow>;
+    });
+
+    const { data: person, error } = queryResult;
 
     if (error) {
-      console.error('Error consultando people:', error);
+      console.error('Error consultando usuario:', error);
       return NextResponse.json({ ok: false, error: 'db_error' }, { status: 500 });
     }
+
     if (!person) {
-      console.log('Persona no encontrada en DB para ID:', payload.sub);
       return NextResponse.json({ ok: false, error: 'person_not_found' }, { status: 404 });
     }
+
     if (person.active === false) {
-      console.log('Usuario deshabilitado:', person.id);
       return NextResponse.json({ ok: false, error: 'user_disabled' }, { status: 403 });
     }
 
-    // Rol normalizado
-    const rawRole = person.fenix_role || person.role;
-    const role = normalizeRole(rawRole);
+    const rawRole = person.fenix_role || person.role || undefined;
+    const normalizedRole = normalizeRole(rawRole);
 
-    const response = {
-      ok: true,
-      id: person.id,                        // ⬅️ agregado
-      full_name: person.full_name,
-      role,                                 // 'admin' | 'promotor' | 'coordinador' | 'lider' | 'asesor'
-      privilege_level: person.privilege_level ?? 1,
-      email: person.email,
-      raw_role: rawRole,
-      local: person.local ?? null,          // ⬅️ agregado (Sucursal declarada en people.local)
-    };
-
-    console.log('Respuesta exitosa para usuario:', response);
-
-    return NextResponse.json(response, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (err: any) {
-    console.error('Error en endpoint /me:', err);
     return NextResponse.json(
-      { ok: false, error: 'server_error', message: err?.message ?? 'error desconocido' },
-      { status: 500 },
+      {
+        ok: true,
+        id: person.id,
+        username: person.username,
+        full_name: person.full_name,
+        email: person.email,
+        role: normalizedRole,
+        raw_role: rawRole ?? null,
+        privilege_level: person.privilege_level ?? 1,
+        local: person.local ?? null,
+      },
+      { headers: { 'Cache-Control': 'no-store' } }
     );
+  } catch (error: any) {
+    if (isSupabaseTransientError?.(error)) {
+      console.error('[me] Supabase temporalmente no disponible:', error?.message);
+      return NextResponse.json({ ok: false, error: 'supabase_unavailable' }, { status: 503 });
+    }
+    console.error('Error en endpoint /me:', error);
+    return NextResponse.json({ ok: false, error: 'server_error' }, { status: 500 });
   }
+}
+
+export async function POST() {
+  return NextResponse.json({ ok: false, error: 'Método no permitido' }, { status: 405 });
+}
+export async function PUT() {
+  return NextResponse.json({ ok: false, error: 'Método no permitido' }, { status: 405 });
+}
+export async function DELETE() {
+  return NextResponse.json({ ok: false, error: 'Método no permitido' }, { status: 405 });
 }
