@@ -40,9 +40,9 @@ const ROLE_HOME: Record<string, string> = {
   ADMIN: '/dashboard',
   COORDINADOR: '/logistica',
   LIDER: '/dashboard/vendedores',
-  ASESOR: '/dashboard/asesores/HOME',
-  VENDEDOR: '/dashboard/asesores/HOME',
-  VENDEDORA: '/dashboard/asesores/HOME',
+  ASESOR: '/dashboard/asesores/home',
+  VENDEDOR: '/dashboard/asesores/home',
+  VENDEDORA: '/dashboard/asesores/home',
   PROMOTOR: '/dashboard/promotores',
   PROMOTORA: '/dashboard/promotores',
 };
@@ -68,22 +68,26 @@ function bytesToString(bytes: Uint8Array): string {
 }
 
 /** Verificación HS256 usando copias `Uint8Array` (evita problemas de BufferSource por realm) */
-async function verifyJWT_HS256(token: string | null | undefined): Promise<any | null> {
+type JwtPayload = Record<string, unknown>;
+
+async function verifyJWT_HS256(token: string | null | undefined): Promise<JwtPayload | null> {
   if (!token) return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
 
   const [h64, p64, s64] = parts;
 
-  let header: any;
-  let payload: any;
+  let header: JwtPayload | null;
+  let payload: JwtPayload | null;
   try {
-    header = JSON.parse(bytesToString(b64urlToBytes(h64)));
-    payload = JSON.parse(bytesToString(b64urlToBytes(p64)));
+    header = JSON.parse(bytesToString(b64urlToBytes(h64))) as JwtPayload;
+    payload = JSON.parse(bytesToString(b64urlToBytes(p64))) as JwtPayload;
   } catch {
     return null;
   }
-  if (!header || header.alg !== 'HS256' || header.typ !== 'JWT') return null;
+  const alg = typeof header?.alg === 'string' ? header.alg : null;
+  const typ = typeof header?.typ === 'string' ? header.typ : null;
+  if (alg !== 'HS256' || typ !== 'JWT') return null;
 
   try {
     const key = await crypto.subtle.importKey(
@@ -106,9 +110,10 @@ async function verifyJWT_HS256(token: string | null | undefined): Promise<any | 
     );
     if (!ok) return null;
 
-    if (typeof payload.exp === 'number') {
+    const exp = typeof payload?.exp === 'number' ? payload.exp : null;
+    if (exp !== null) {
       const nowSec = Math.floor(Date.now() / 1000);
-      if (nowSec >= payload.exp) return null;
+      if (nowSec >= exp) return null;
     }
 
     return payload;
@@ -177,24 +182,30 @@ export async function middleware(req: NextRequest) {
     return noStore(res);
   }
 
+  const payloadRole = typeof payload.role === 'string' ? payload.role : null;
+  const payloadSub = typeof payload.sub === 'string' ? payload.sub : null;
+
   if (pathname === '/') {
     const url = req.nextUrl.clone();
-    url.pathname = getRoleHome(payload.role);
+    url.pathname = getRoleHome(payloadRole);
     return noStore(NextResponse.redirect(url));
   }
 
   if (pathname.startsWith('/dashboard/financial-control')) {
-    const uid = payload.sub as string | undefined;
-    if (!uid || !FINANCIAL_ALLOW_IDS.has(uid)) {
+    if (!payloadSub || !FINANCIAL_ALLOW_IDS.has(payloadSub)) {
       const url = req.nextUrl.clone();
       url.pathname = '/dashboard';
       return noStore(NextResponse.redirect(url));
     }
   }
 
-  if (!isRouteAllowed(payload.role, pathname)) {
+  if (isApi) {
+    return noStore(NextResponse.next());
+  }
+
+  if (!isRouteAllowed(payloadRole, pathname)) {
     const url = req.nextUrl.clone();
-    url.pathname = getRoleHome(payload.role);
+    url.pathname = getRoleHome(payloadRole);
     url.searchParams.delete('redirectTo');
     return noStore(NextResponse.redirect(url));
   }
