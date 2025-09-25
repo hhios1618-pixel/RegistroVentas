@@ -1,16 +1,13 @@
-// src/middleware.ts — VERSIÓN FINAL (Edge-safe HS256 con DataView)
+// src/middleware.ts — HS256 portable para Node/Edge/Vercel (usa Uint8Array)
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { authEnv } from '@/lib/auth/env';
 
-/* ==========================
-   Config
-   ========================== */
 const { sessionCookieName: SESSION_COOKIE, jwtSecret: JWT_SECRET } = authEnv;
 
 const PUBLIC_PREFIXES = [
   '/login',
-  '/endpoints/auth', // login/logout
+  '/endpoints/auth',
   '/favicon.ico',
   '/icon.svg',
   '/1.mp4',
@@ -20,10 +17,8 @@ const PUBLIC_PREFIXES = [
   '/_next',
   '/public',
 ];
-
 const STATIC_FILE_REGEX = /\.(?:png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|txt|json)$/i;
 
-/** IDs autorizados para el panel financiero (mover a DB cuando quieras) */
 const FINANCIAL_ALLOW_IDS = new Set<string>([
   '32c53c5d-cf04-425c-a50d-4c016df61d7f',
   'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d',
@@ -31,7 +26,6 @@ const FINANCIAL_ALLOW_IDS = new Set<string>([
   '28b63f71-babb-4ee0-8c2a-8530007735b7',
 ]);
 
-/** Allowlist de prefijos por rol */
 const ROLE_ROUTES: Record<string, string[]> = {
   ADMIN: ['/dashboard'],
   COORDINADOR: ['/dashboard', '/logistica', '/asistencia'],
@@ -42,8 +36,6 @@ const ROLE_ROUTES: Record<string, string[]> = {
   PROMOTOR: ['/dashboard/promotores', '/mi/resumen'],
   PROMOTORA: ['/dashboard/promotores', '/mi/resumen'],
 };
-
-/** Ruta home por rol */
 const ROLE_HOME: Record<string, string> = {
   ADMIN: '/dashboard',
   COORDINADOR: '/logistica',
@@ -55,14 +47,11 @@ const ROLE_HOME: Record<string, string> = {
   PROMOTORA: '/dashboard/promotores',
 };
 
-/* ==========================
-   Helpers (Edge-safe)
-   ========================== */
 const enc = new TextEncoder();
 
 function isPublic(pathname: string): boolean {
   if (STATIC_FILE_REGEX.test(pathname)) return true;
-  return PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
 
 function b64urlToBytes(b64url: string): Uint8Array {
@@ -72,14 +61,13 @@ function b64urlToBytes(b64url: string): Uint8Array {
   for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
   return arr;
 }
-
 function bytesToString(bytes: Uint8Array): string {
   let out = '';
   for (let i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
   return out;
 }
 
-/** Verificación HS256 en Edge/Node (WebCrypto) */
+/** Verificación HS256 usando copias `Uint8Array` (evita problemas de BufferSource por realm) */
 async function verifyJWT_HS256(token: string | null | undefined): Promise<any | null> {
   if (!token) return null;
   const parts = token.split('.');
@@ -98,40 +86,26 @@ async function verifyJWT_HS256(token: string | null | undefined): Promise<any | 
   if (!header || header.alg !== 'HS256' || header.typ !== 'JWT') return null;
 
   try {
-    // 1) Importar clave HS256
     const key = await crypto.subtle.importKey(
       'raw',
       enc.encode(JWT_SECRET),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
-      ['verify'],
+      ['verify']
     );
 
-    // 2) Preparar BufferSource como DataView (válido en todos los runtimes webcrypto)
-    const dataBytes = enc.encode(`${h64}.${p64}`);
-    const sigBytes  = b64urlToBytes(s64);
+    // 👇 Copias nuevas de tipo Uint8Array (brand seguro)
+    const dataU8 = new Uint8Array(enc.encode(`${h64}.${p64}`));
+    const sigU8  = new Uint8Array(b64urlToBytes(s64));
 
-    const dataView = new DataView(
-      dataBytes.buffer,
-      dataBytes.byteOffset,
-      dataBytes.byteLength
-    );
-    const sigView = new DataView(
-      sigBytes.buffer,
-      sigBytes.byteOffset,
-      sigBytes.byteLength
-    );
-
-    // 3) Verificar firma
     const ok = await crypto.subtle.verify(
       { name: 'HMAC', hash: 'SHA-256' },
       key,
-      sigView,   // signature: BufferSource
-      dataView   // data: BufferSource
+      sigU8,   // signature: BufferSource
+      dataU8   // data: BufferSource
     );
     if (!ok) return null;
 
-    // 4) Expiración
     if (typeof payload.exp === 'number') {
       const nowSec = Math.floor(Date.now() / 1000);
       if (nowSec >= payload.exp) return null;
@@ -152,12 +126,10 @@ function isRouteAllowed(roleRaw: string | null | undefined, pathname: string): b
   const allow = ROLE_ROUTES[role] || [];
   return allow.some((prefix) => pathname.startsWith(prefix));
 }
-
 function getRoleHome(roleRaw: string | null | undefined): string {
   const role = String(roleRaw || '').toUpperCase();
   return ROLE_HOME[role] || '/dashboard';
 }
-
 function noStore(res: NextResponse) {
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.headers.set('Pragma', 'no-cache');
@@ -165,9 +137,6 @@ function noStore(res: NextResponse) {
   return res;
 }
 
-/* ==========================
-   Middleware
-   ========================== */
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const isApi = pathname.startsWith('/endpoints/');
@@ -234,6 +203,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher:
-    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.json).*)',
+  matcher: '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.json).*)',
 };
