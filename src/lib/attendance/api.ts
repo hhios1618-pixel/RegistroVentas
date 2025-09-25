@@ -39,9 +39,14 @@ export async function getQR(
   type: CheckType,
   ttlSec = 60
 ): Promise<{ code: string; exp_at: string }> {
-  assertEnv();
-  const url = `${FUNCTIONS_BASE}/qr?site_id=${encodeURIComponent(site_id)}&type=${encodeURIComponent(type)}&ttl=${ttlSec}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${ANON}` }, cache: 'no-store' });
+  const params = new URLSearchParams({
+    site_id,
+    type,
+    ttl: String(ttlSec),
+  });
+  const res = await fetch(`/endpoints/attendance/qr?${params.toString()}`, {
+    cache: 'no-store',
+  });
   if (!res.ok) throw await handleFetchError(res);
   return res.json();
 }
