@@ -2,11 +2,13 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { authEnv } from '@/lib/auth/env';
+import { normalizeRole, getRoleHomeRoute, canAccessRoute } from '@/lib/auth/roles';
 
 const { sessionCookieName: SESSION_COOKIE, jwtSecret: JWT_SECRET } = authEnv;
 
 const PUBLIC_PREFIXES = [
   '/login',
+  '/post-login',          // deja pública la página de transición post-login
   '/endpoints/auth',
   '/favicon.ico',
   '/icon.svg',
@@ -17,6 +19,7 @@ const PUBLIC_PREFIXES = [
   '/_next',
   '/public',
 ];
+
 const STATIC_FILE_REGEX = /\.(?:png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|txt|json)$/i;
 
 const FINANCIAL_ALLOW_IDS = new Set<string>([
@@ -25,27 +28,6 @@ const FINANCIAL_ALLOW_IDS = new Set<string>([
   '07b93705-f631-4b67-b52a-f7c30bc2ba5b',
   '28b63f71-babb-4ee0-8c2a-8530007735b7',
 ]);
-
-const ROLE_ROUTES: Record<string, string[]> = {
-  ADMIN: ['/dashboard'],
-  COORDINADOR: ['/dashboard', '/logistica', '/asistencia'],
-  LIDER: ['/dashboard', '/asistencia'],
-  ASESOR: ['/dashboard/asesores', '/asistencia', '/mi/resumen'],
-  VENDEDOR: ['/dashboard/asesores', '/asistencia', '/mi/resumen'],
-  VENDEDORA: ['/dashboard/asesores', '/asistencia', '/mi/resumen'],
-  PROMOTOR: ['/dashboard/promotores', '/mi/resumen'],
-  PROMOTORA: ['/dashboard/promotores', '/mi/resumen'],
-};
-const ROLE_HOME: Record<string, string> = {
-  ADMIN: '/dashboard',
-  COORDINADOR: '/logistica',
-  LIDER: '/dashboard/vendedores',
-  ASESOR: '/dashboard/asesores/home',
-  VENDEDOR: '/dashboard/asesores/home',
-  VENDEDORA: '/dashboard/asesores/home',
-  PROMOTOR: '/dashboard/promotores',
-  PROMOTORA: '/dashboard/promotores',
-};
 
 const enc = new TextEncoder();
 
@@ -125,16 +107,6 @@ async function verifyJWT_HS256(token: string | null | undefined): Promise<JwtPay
   }
 }
 
-function isRouteAllowed(roleRaw: string | null | undefined, pathname: string): boolean {
-  const role = String(roleRaw || '').toUpperCase();
-  if (role === 'ADMIN') return true;
-  const allow = ROLE_ROUTES[role] || [];
-  return allow.some((prefix) => pathname.startsWith(prefix));
-}
-function getRoleHome(roleRaw: string | null | undefined): string {
-  const role = String(roleRaw || '').toUpperCase();
-  return ROLE_HOME[role] || '/dashboard';
-}
 function noStore(res: NextResponse) {
   res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.headers.set('Pragma', 'no-cache');
@@ -187,7 +159,7 @@ export async function middleware(req: NextRequest) {
 
   if (pathname === '/') {
     const url = req.nextUrl.clone();
-    url.pathname = getRoleHome(payloadRole);
+    url.pathname = getRoleHomeRoute(normalizeRole(payloadRole));
     return noStore(NextResponse.redirect(url));
   }
 
@@ -203,9 +175,10 @@ export async function middleware(req: NextRequest) {
     return noStore(NextResponse.next());
   }
 
-  if (!isRouteAllowed(payloadRole, pathname)) {
+  const role = normalizeRole(payloadRole);
+  if (!canAccessRoute(role, pathname)) {
     const url = req.nextUrl.clone();
-    url.pathname = getRoleHome(payloadRole);
+    url.pathname = getRoleHomeRoute(role);
     url.searchParams.delete('redirectTo');
     return noStore(NextResponse.redirect(url));
   }

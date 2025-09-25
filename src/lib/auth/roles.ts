@@ -15,9 +15,10 @@
     // Operación
     REGISTRO_ASESORES: '/dashboard/asesores/registro',
     REGISTRO_PROMOTORES: '/dashboard/promotores/registro',
-    DEVOLUCIONES: '/dashboard/asesores/devoluciones',
-    ASISTENCIA: '/asistencia',
-    LOGISTICA: '/logistica',
+   DEVOLUCIONES: '/dashboard/asesores/devoluciones',
+   ASISTENCIA: '/asistencia',
+   LOGISTICA: '/logistica',
+    INVENTARIO: '/dashboard/inventario',
     MI_RESUMEN: '/mi/resumen',
     PLAYBOOK: '/dashboard/asesores/playbook-whatsapp',
     USERS_ADMIN: '/dashboard/admin/usuarios',
@@ -42,6 +43,7 @@
     | 'view:resumen-promotores'
     | 'view:reporte-asistencia'
     | 'view:logistica'
+    | 'view:inventario'
     | 'view:registro-asesores'
     | 'view:registro-promotores'
     | 'view:devoluciones'
@@ -56,11 +58,11 @@
   const ROLE_CAPS: Record<Role, Cap[]> = {
     admin: [
       'view:kpis','view:sales-report','view:resumen-asesores','view:resumen-promotores','view:reporte-asistencia',
-      'view:logistica','view:registro-asesores','view:registro-promotores','view:devoluciones','view:asistencia',
+      'view:logistica','view:inventario','view:registro-asesores','view:registro-promotores','view:devoluciones','view:asistencia',
       'view:playbook','view:users-admin','view:mi-resumen'
     ],
     coordinador: [
-      'view:kpis','view:logistica','view:asistencia','view:reporte-asistencia','view:resumen-asesores','view:playbook'
+      'view:kpis','view:logistica','view:inventario','view:asistencia','view:reporte-asistencia','view:resumen-asesores','view:playbook'
     ],
     lider: [
       'view:kpis','view:resumen-asesores','view:resumen-promotores','view:reporte-asistencia','view:logistica',
@@ -126,6 +128,7 @@
         { pattern: /^\/dashboard\/asesores\/registro(?:\/.*)?$/, cap: 'view:registro-asesores' },
         { pattern: /^\/dashboard\/promotores\/registro(?:\/.*)?$/, cap: 'view:registro-promotores' },
         { pattern: /^\/dashboard\/asesores\/devoluciones(?:\/.*)?$/, cap: 'view:devoluciones' },
+        { pattern: /^\/dashboard\/inventario(?:\/.*)?$/, cap: 'view:inventario' },
         { pattern: /^\/asistencia(?:\/.*)?$/, cap: 'view:asistencia' },
         { pattern: /^\/dashboard\/asesores\/playbook-whatsapp(?:\/.*)?$/, cap: 'view:playbook' },
         { pattern: /^\/dashboard\/admin\/usuarios(?:\/.*)?$/, cap: 'view:users-admin' },
