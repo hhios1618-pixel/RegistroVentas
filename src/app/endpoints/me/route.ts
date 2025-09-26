@@ -3,13 +3,20 @@ export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { supabaseAdmin, withSupabaseRetry, isSupabaseTransientError } from '@/lib/supabase';
+import { supabaseAdmin, withSupabaseRetry, isSupabaseTransientError, SUPABASE_CONFIG } from '@/lib/supabase';
+import { authEnv } from '@/lib/auth/env';
 import type { PostgrestSingleResponse } from '@supabase/supabase-js';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'fenix_session';
+const { jwtSecret: JWT_SECRET, sessionCookieName: COOKIE_NAME } = authEnv;
 
-type JwtPayloadMinimal = { sub: string };
+type JwtPayloadMinimal = {
+  sub: string;
+  usr?: string | null;
+  email?: string | null;
+  name?: string | null;
+  role?: string | null;
+  lvl?: number | null;
+};
 
 type PersonRow = {
   id: string;
@@ -50,6 +57,24 @@ export async function GET(request: NextRequest) {
 
     if (!payload?.sub) {
       return NextResponse.json({ ok: false, error: 'invalid_token_payload' }, { status: 401 });
+    }
+
+    if (!SUPABASE_CONFIG.isConfigured) {
+      const normalizedRole = normalizeRole(payload.role || undefined);
+      return NextResponse.json(
+        {
+          ok: true,
+          id: payload.sub,
+          username: payload.usr ?? null,
+          full_name: payload.name ?? payload.usr ?? 'Usuario Fenix',
+          email: payload.email ?? null,
+          role: normalizedRole,
+          raw_role: payload.role ?? null,
+          privilege_level: typeof payload.lvl === 'number' ? payload.lvl : 1,
+          local: null,
+        },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
     }
 
     const admin = supabaseAdmin();

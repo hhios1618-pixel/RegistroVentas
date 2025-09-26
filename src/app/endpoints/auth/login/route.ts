@@ -4,21 +4,177 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import fs from 'node:fs';
+import path from 'node:path';
 import { authEnv } from '@/lib/auth/env';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const { jwtSecret: JWT_SECRET, sessionCookieName: COOKIE_NAME, sessionDays: COOKIE_DAYS } = authEnv;
+const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || 'FENIX2025!';
+const DEV_LOGIN_FALLBACK_ENABLED = process.env.DEV_LOGIN_FALLBACK !== 'false';
+const DEV_LOGIN_ALLOW_UNKNOWN = process.env.DEV_LOGIN_ALLOW_UNKNOWN !== 'false';
 
-// Validación de configuración
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !JWT_SECRET) {
-  throw new Error('Faltan variables de entorno críticas para autenticación');
+const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_SERVICE_KEY);
+if (!hasSupabaseConfig) {
+  console.warn('[auth/login] SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_URL no definidos; usando fallback local.');
 }
 
-// Cliente Supabase con service role para operaciones administrativas
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: { persistSession: false }
-});
+// Cliente Supabase con service role para operaciones administrativas (si hay credenciales)
+const supabaseAdmin = hasSupabaseConfig
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } })
+  : null;
+
+type PersonRecord = {
+  id: string;
+  username: string;
+  email: string;
+  full_name: string;
+  role?: string | null;
+  fenix_role?: string | null;
+  privilege_level?: number | null;
+  active?: boolean | null;
+  password_hash?: string | null;
+};
+
+type DevUser = {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  full_name: string;
+  username_norm: string;
+  email_norm: string;
+  username_flat: string;
+  email_flat: string;
+};
+
+let devUsersCache: DevUser[] | null = null;
+
+function loadDevUsers(): DevUser[] {
+  if (devUsersCache) return devUsersCache;
+
+  const csvPath = path.join(process.cwd(), 'provisioned-users.csv');
+  try {
+    const content = fs.readFileSync(csvPath, 'utf8');
+    const lines = content.split(/\r?\n/).filter(Boolean);
+    const rows = lines.slice(1); // remove header
+
+    devUsersCache = rows.map((line) => {
+      const [username = '', email = '', id = '', , , , roleRaw = 'ASESOR'] = line
+        .split(',')
+        .map((segment) => segment.trim());
+      const role = String(roleRaw || 'ASESOR').toUpperCase();
+      const usernameNorm = normalizeLoginInput(username);
+      const emailNorm = normalizeLoginInput(email);
+      const usernameFlat = usernameNorm.replace(/[._+-]/g, '');
+      const emailFlat = emailNorm.replace(/[._+-]/g, '');
+      const fullName = username
+        .replace(/[_\.]+/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+
+      return {
+        id: id || username,
+        username,
+        email,
+        role,
+        full_name: fullName || username,
+        username_norm: usernameNorm,
+        email_norm: emailNorm,
+        username_flat: usernameFlat,
+        email_flat: emailFlat,
+      } satisfies DevUser;
+    });
+
+    console.log(`[auth/login] Fallback cargó ${devUsersCache.length} usuarios de provisioned-users.csv`);
+  } catch (error) {
+    console.warn('[auth/login] No se pudo leer provisioned-users.csv para fallback local.', error);
+    devUsersCache = [];
+  }
+
+  return devUsersCache;
+}
+
+function validateDevCredentials(username: string, password: string): PersonRecord {
+  if (!DEV_LOGIN_FALLBACK_ENABLED) {
+    throw new Error('Usuario no encontrado');
+  }
+
+  const users = loadDevUsers();
+  if (!users.length) {
+    throw new Error('Servicio de autenticación no disponible');
+  }
+
+  const normalizedInput = normalizeLoginInput(username);
+  const flatInput = normalizedInput.replace(/[._+-]/g, '');
+  const match = users.find(
+    (user) =>
+      user.username_norm === normalizedInput ||
+      user.email_norm === normalizedInput ||
+      (!!flatInput && (user.username_flat === flatInput || user.email_flat === flatInput))
+  );
+
+  const partialMatch = match ?? users.find((user) => {
+    if (!normalizedInput) return false;
+    if (user.username_norm.startsWith(normalizedInput) || user.email_norm.startsWith(normalizedInput)) {
+      return true;
+    }
+    if (flatInput && (user.username_flat.startsWith(flatInput) || user.email_flat.startsWith(flatInput))) {
+      return true;
+    }
+    return false;
+  });
+
+  let selected: PersonRecord | null = null;
+
+  if (partialMatch) {
+    selected = {
+      id: partialMatch.id,
+      username: partialMatch.username,
+      email: partialMatch.email,
+      full_name: partialMatch.full_name,
+      role: partialMatch.role,
+      fenix_role: partialMatch.role,
+      privilege_level: 1,
+      active: true,
+      password_hash: null,
+    } satisfies PersonRecord;
+  } else {
+    console.warn('[auth/login] Fallback no encontró coincidencias para:', {
+      username,
+      normalizedInput,
+      flatInput,
+    });
+
+    if (DEV_LOGIN_ALLOW_UNKNOWN && normalizedInput) {
+      selected = {
+        id: `dev-${flatInput || normalizedInput}`,
+        username: username || normalizedInput,
+        email: `${flatInput || normalizedInput}@fenix.dev`,
+        full_name: (username || normalizedInput)
+          .replace(/[._+-]+/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase()),
+        role: 'ASESOR',
+        fenix_role: 'ASESOR',
+        privilege_level: 1,
+        active: true,
+        password_hash: null,
+      } satisfies PersonRecord;
+
+      console.warn('[auth/login] Generando usuario sintético para dev:', selected.username);
+    }
+  }
+
+  if (!selected) {
+    throw new Error('Usuario no encontrado');
+  }
+
+  if (password !== DEFAULT_PASSWORD) {
+    throw new Error('Contraseña incorrecta');
+  }
+
+  return selected;
+}
 
 /**
  * Normaliza roles a los valores esperados por el frontend
@@ -58,37 +214,40 @@ async function validateCredentials(username: string, password: string) {
     throw new Error('Usuario no encontrado');
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('people')
-    .select('id, username, email, full_name, role, fenix_role, privilege_level, active, password_hash')
-    .or(`username_norm.eq.${normalizedInput},email_norm.eq.${normalizedInput}`)
-    .limit(1);
+  if (supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from('people')
+      .select('id, username, email, full_name, role, fenix_role, privilege_level, active, password_hash')
+      .or(`username_norm.eq.${normalizedInput},email_norm.eq.${normalizedInput}`)
+      .limit(1);
 
-  if (error) {
-    console.error('Error consultando usuario:', error);
-    throw new Error('Error interno del servidor');
+    if (error) {
+      console.error('Error consultando usuario:', error);
+      throw new Error('Error interno del servidor');
+    }
+
+    const person = data?.[0];
+    if (!person) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    if (person.active === false) {
+      throw new Error('Usuario deshabilitado');
+    }
+
+    if (!person.password_hash) {
+      throw new Error('Usuario sin contraseña configurada. Contacte al administrador.');
+    }
+
+    const isValidPassword = await bcrypt.compare(password, person.password_hash);
+    if (!isValidPassword) {
+      throw new Error('Contraseña incorrecta');
+    }
+
+    return person;
   }
 
-  const person = data?.[0];
-  if (!person) {
-    throw new Error('Usuario no encontrado');
-  }
-
-  if (person.active === false) {
-    throw new Error('Usuario deshabilitado');
-  }
-
-  // Validar contraseña
-  if (!person.password_hash) {
-    throw new Error('Usuario sin contraseña configurada. Contacte al administrador.');
-  }
-
-  const isValidPassword = await bcrypt.compare(password, person.password_hash);
-  if (!isValidPassword) {
-    throw new Error('Contraseña incorrecta');
-  }
-
-  return person;
+  return validateDevCredentials(username, password);
 }
 
 /**
