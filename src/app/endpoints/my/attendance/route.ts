@@ -1,7 +1,7 @@
 // src/app/endpoints/my/attendance/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { supabaseAdmin, withSupabaseRetry, isSupabaseTransientError } from '@/lib/supabase';
+import { supabaseAdmin, withSupabaseRetry, isSupabaseTransientError, SUPABASE_CONFIG } from '@/lib/supabase';
 import type { PostgrestResponse } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
@@ -13,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const TZ = 'America/La_Paz';
 
 /* ================= Tipos ================= */
-type JwtPayloadMinimal = { sub: string };
+type JwtPayloadMinimal = { sub: string; role?: string | null; name?: string | null };
 
 type AttendanceRow = {
   id: string;
@@ -69,6 +69,17 @@ export async function GET(req: NextRequest) {
     const personId = payload.sub;
     if (!personId) {
       return NextResponse.json({ ok: false, error: 'invalid_sub' }, { status: 401 });
+    }
+
+    if (!SUPABASE_CONFIG.isConfigured) {
+      return NextResponse.json(
+        {
+          ok: true,
+          kpis: { dias_con_marca: 0, entradas: 0, salidas: 0, pct_geocerca_ok: 0 },
+          days: [],
+        },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } }
+      );
     }
 
     // === rango mensual (UTC) ===

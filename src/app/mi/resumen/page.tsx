@@ -4,7 +4,8 @@ import { useMemo, useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { CalendarDays, User2, Activity, ListChecks, ShoppingCart, CircleDollarSign, ShieldCheck } from 'lucide-react';
+import { CalendarDays, User2, Activity, ListChecks, ShoppingCart, CircleDollarSign, ShieldCheck, LogIn, LogOut } from 'lucide-react';
+import LogoutButton from '@/components/LogoutButton';
 
 const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then(r => r.json());
 
@@ -39,6 +40,7 @@ export default function MiResumenPage() {
 
   const canReviewPerms = role === 'admin' || role === 'coordinador' || role === 'lider';
   const goPermisos = () => router.push(canReviewPerms ? '/dashboard/permisos' : '/permisos/solicitar');
+  const goAsistencia = () => router.push('/asistencia');
 
   return (
     <div
@@ -68,6 +70,16 @@ export default function MiResumenPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {role !== 'promotor' && (
+              <button
+                onClick={goAsistencia}
+                className="btn-primary btn-sm"
+                title="Ir a marcar asistencia"
+              >
+                <span className="pill"><LogIn size={16} /></span>
+                <span className="font-medium">Marcar asistencia</span>
+              </button>
+            )}
             {/* Botón Gestión de permisos (pill de tu sistema) */}
             <button
               onClick={goPermisos}
@@ -77,6 +89,15 @@ export default function MiResumenPage() {
               <span className="pill"><ShieldCheck size={16} /></span>
               <span className="font-medium">Gestión de permisos</span>
             </button>
+
+            <LogoutButton
+              type="button"
+              className="btn-ghost btn-sm"
+              title="Cerrar sesión"
+            >
+              <span className="pill"><LogOut size={16} /></span>
+              <span className="font-medium">Salir</span>
+            </LogoutButton>
 
             <div className="hidden md:flex items-center gap-2 text-app-muted">
               <CalendarDays size={18} />
@@ -93,13 +114,32 @@ export default function MiResumenPage() {
       </header>
 
       {/* CTA móvil coherente con tus botones */}
-      <button
-        onClick={goPermisos}
-        className="md:hidden fixed right-4 bottom-4 z-fixed btn-secondary btn-sm shadow-apple"
-      >
-        <ShieldCheck size={16} />
-        <span className="font-medium">Permisos</span>
-      </button>
+      <div className="md:hidden fixed right-4 bottom-4 z-fixed flex flex-col gap-3">
+        {role !== 'promotor' && (
+          <button
+            onClick={goAsistencia}
+            className="btn-primary btn-sm shadow-apple"
+          >
+            <LogIn size={16} />
+            <span className="font-medium">Marcar asistencia</span>
+          </button>
+        )}
+        <LogoutButton
+          type="button"
+          className="btn-ghost btn-sm shadow-apple"
+          title="Cerrar sesión"
+        >
+          <LogOut size={16} />
+          <span className="font-medium">Salir</span>
+        </LogoutButton>
+        <button
+          onClick={goPermisos}
+          className="btn-secondary btn-sm shadow-apple"
+        >
+          <ShieldCheck size={16} />
+          <span className="font-medium">Permisos</span>
+        </button>
+      </div>
 
       <main className="apple-container py-8 space-y-8">
         {/* Identidad */}
