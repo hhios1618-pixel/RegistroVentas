@@ -1,0 +1,38 @@
+fecha,sucursal,monto_total,cantidad_productos,descripcion
+2025-01-01,La Paz,61981.0,0,Ventas Consolidadas La Paz - Enero
+2025-01-01,Santa Cruz,200152.5,0,Ventas Consolidadas Santa Cruz - Enero
+2025-01-01,Cochabamba,110111.0,0,Ventas Consolidadas Cochabamba - Enero
+2025-02-01,La Paz,29106.0,0,Ventas Consolidadas La Paz - Febrero
+2025-02-01,Santa Cruz,119800.0,0,Ventas Consolidadas Santa Cruz - Febrero
+2025-02-01,Cochabamba,160514.0,0,Ventas Consolidadas Cochabamba - Febrero
+2025-03-01,La Paz,27955.0,629,Ventas Consolidadas La Paz - Marzo
+2025-03-01,El Alto,1171.0,46,Ventas Consolidadas El Alto - Marzo
+2025-03-01,Santa Cruz,162070.0,3350,Ventas Consolidadas Santa Cruz - Marzo
+2025-03-01,Cochabamba,154200.0,3462,Ventas Consolidadas Cochabamba - Marzo
+2025-03-01,Sucre,3524.0,13,Ventas Consolidadas Sucre - Marzo
+2025-04-01,La Paz,32780.0,838,Ventas Consolidadas La Paz - Abril
+2025-04-01,El Alto,29623.0,614,Ventas Consolidadas El Alto - Abril
+2025-04-01,Santa Cruz,153145.0,3511,Ventas Consolidadas Santa Cruz - Abril
+2025-04-01,Cochabamba,124504.0,2708,Ventas Consolidadas Cochabamba - Abril
+2025-04-01,Sucre,13985.0,287,Ventas Consolidadas Sucre - Abril
+2025-05-01,La Paz,32925.0,644,Ventas Consolidadas La Paz - Mayo
+2025-05-01,El Alto,36990.0,648,Ventas Consolidadas El Alto - Mayo
+2025-05-01,Santa Cruz,183977.0,3814,Ventas Consolidadas Santa Cruz - Mayo
+2025-05-01,Cochabamba,187105.0,3254,Ventas Consolidadas Cochabamba - Mayo
+2025-05-01,Sucre,40240.0,778,Ventas Consolidadas Sucre - Mayo
+2025-06-01,La Paz,23751.0,425,Ventas Consolidadas Junio
+2025-06-01,El Alto,49444.0,600,Ventas Consolidadas El Alto - Junio
+2025-06-01,Santa Cruz,135355.0,2180,Ventas Consolidadas Junio
+2025-06-01,Cochabamba,114393.0,1890,Ventas Consolidadas Junio
+2025-06-01,Sucre,65736.0,927,Ventas Consolidadas Junio
+2025-07-01,La Paz,21263.0,361,Ventas Consolidadas Julio
+2025-07-01,El Alto,56675.0,681,Ventas Consolidadas El Alto - Julio
+2025-07-01,Santa Cruz,123286.0,1836,Ventas Consolidadas Julio
+2025-07-01,Cochabamba,199990.0,2911,Ventas Consolidadas Julio
+2025-07-01,Sucre,53145.0,1405,Ventas Consolidadas Julio
+2025-08-01,La Paz,7320.0,106,Ventas Consolidadas Agosto
+2025-08-01,El Alto,15300.0,277,Ventas Consolidadas Agosto
+2025-08-01,Santa Cruz,63557.0,1273,Ventas Consolidadas Agosto
+2025-08-01,Cochabamba,28918.0,610,Ventas Consolidadas Agosto
+2025-08-01,Sucre,16606.0,181,Ventas Consolidadas Agosto
+2025-09-01,Santa Cruz,8215.0,91,Ventas Consolidadas Septiembre
