@@ -1,8 +1,7 @@
 // src/app/endpoints/sites/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { supabaseAdmin, withSupabaseRetry, isSupabaseTransientError } from '@/lib/supabase';
-import type { PostgrestResponse, PostgrestSingleResponse } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,70 +10,6 @@ export const revalidate = 0;
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'fenix_session';
 const JWT_SECRET  = process.env.JWT_SECRET || 'dev-secret';
 
-/* ========== Tipos de filas ========== */
-type SiteRow = {
-  id: string;
-  name: string | null;
-  lat: number | null;
-  lng: number | null;
-  radius_m: number | null;
-  is_active: boolean | null;
-};
-
-type PersonSite = {
-  site_id: string | null;
-};
-
-/* ========== Helpers de normalización ========== */
-const normalize = (value?: string | null) =>
-  (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-
-const canonicalSite = (raw?: string | null): string | null => {
-  const n = normalize(raw);
-  if (!n) return null;
-  if (n.includes('magdalena 2140')) return 'santa cruz';
-  if (n.includes('santa cruz')) return 'santa cruz';
-  if (n.includes('calle santa lucia')) return 'sucre';
-  if (n.includes('sucre')) return 'sucre';
-  if (n.includes('fortin conchita')) return 'cochabamba';
-  if (n.includes('cochabamba')) return 'cochabamba';
-  if (n.includes('la paz')) return 'la paz';
-  if (n.includes('el alto')) return 'el alto';
-  return raw ? n : null;
-};
-
-function sanitizeSites(list: SiteRow[] = []) {
-  const byCanon = new Map<string, SiteRow>();
-
-  for (const site of list) {
-    const name = String(site?.name || '').trim();
-    if (!name) continue;
-    if (name.toLowerCase().includes('test')) continue;
-
-    const key = canonicalSite(name) || normalize(name);
-    const current = byCanon.get(key);
-    if (!current) {
-      byCanon.set(key, site);
-      continue;
-    }
-
-    const currentLen = String(current.name || '').length;
-    const candidateLen = name.length;
-    if (candidateLen > currentLen) {
-      byCanon.set(key, site);
-    }
-  }
-
-  return Array.from(byCanon.values()).sort((a, b) =>
-    String(a.name || '').localeCompare(String(b.name || ''))
-  );
-}
-
-/* ========== Handler ========== */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -83,153 +18,112 @@ export async function GET(req: NextRequest) {
 
     const sb = supabaseAdmin();
 
-    // ──────────────────────────────────
-    // 1) BÚSQUEDA LIBRE POR NOMBRE
-    // ──────────────────────────────────
+    // 1) Búsqueda libre por nombre (solo activos)
     if (name && !assignedTo) {
-      const resp: PostgrestResponse<SiteRow> = await withSupabaseRetry(
-        async (): Promise<PostgrestResponse<SiteRow>> => {
-          const r = await sb
-            .from('sites')
-            .select('id, name, lat, lng, radius_m, is_active')
-            .ilike('name', `%${name}%`)
-            .eq('is_active', true)
-            .order('name');
-          return r as PostgrestResponse<SiteRow>;
-        }
-      );
+      const { data, error } = await sb
+        .from('sites')
+        .select('id, name, lat, lng, radius_m, is_active')
+        .ilike('name', `%${name}%`)
+        .eq('is_active', true)
+        .order('name');
 
-      const { data, error } = resp;
       if (error) {
         console.error('[sites] name search error:', error);
-        return NextResponse.json(
-          { ok: false, error: 'sites_fetch_failed', data: [], results: [] },
-          { status: 500 }
-        );
+        return NextResponse.json({ ok: false, error: 'sites_fetch_failed' }, { status: 500 });
       }
 
-      const sanitized = sanitizeSites((data ?? []) as SiteRow[]);
       return NextResponse.json(
-        { ok: true, data: sanitized, results: sanitized },
+        { ok: true, results: data ?? [] },
         { headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
-    // ──────────────────────────────────
-    // 2) RESOLVER SEDE DEL USUARIO (assigned_to=me)
-    // ──────────────────────────────────
+    // 2) Sede del usuario (assigned_to=me) → usar auth.users.id (JWT.sub) → people.user_id
     if (assignedTo === 'me') {
       const rawCookie = req.cookies.get(COOKIE_NAME)?.value;
       if (!rawCookie) {
-        return NextResponse.json(
-          { ok: true, data: [], results: [] },
-          { headers: { 'Cache-Control': 'no-store' } }
-        );
+        return NextResponse.json({ ok: true, results: [] }, { headers: { 'Cache-Control': 'no-store' } });
       }
 
       let payload: any;
       try {
         payload = jwt.verify(rawCookie, JWT_SECRET);
       } catch {
-        return NextResponse.json(
-          { ok: true, data: [], results: [] },
-          { headers: { 'Cache-Control': 'no-store' } }
-        );
+        return NextResponse.json({ ok: true, results: [] }, { headers: { 'Cache-Control': 'no-store' } });
       }
 
-      const personId = String(payload?.sub || '').trim();
-      if (!personId) {
-        return NextResponse.json(
-          { ok: true, data: [], results: [] },
-          { headers: { 'Cache-Control': 'no-store' } }
-        );
+      const authSub = String(payload?.sub || '').trim(); // auth.users.id
+      if (!authSub) {
+        return NextResponse.json({ ok: true, results: [] }, { headers: { 'Cache-Control': 'no-store' } });
       }
 
-      // 2.1 Obtener el site_id del usuario
-      const personResp: PostgrestSingleResponse<PersonSite> = await withSupabaseRetry(
-        async (): Promise<PostgrestSingleResponse<PersonSite>> => {
-          const r = await sb
-            .from('people')
-            .select('site_id')
-            .eq('id', personId)
-            .maybeSingle();
-          return r as PostgrestSingleResponse<PersonSite>;
-        }
-      );
+      // Buscar persona por user_id y, como fallback legado, por id
+      const { data: person, error: perr } = await sb
+        .from('people')
+        .select('id, site_id, local')
+        .or(`user_id.eq.${authSub},id.eq.${authSub}`)
+        .maybeSingle();
 
-      const { data: person, error: personError } = personResp;
-      if (personError || !person?.site_id) {
-        return NextResponse.json(
-          { ok: true, data: [], results: [] },
-          { headers: { 'Cache-Control': 'no-store' } }
-        );
+      if (perr || !person) {
+        return NextResponse.json({ ok: true, results: [] }, { headers: { 'Cache-Control': 'no-store' } });
       }
 
-      // 2.2 Buscar la sucursal por su ID y que esté activa
-      const siteResp: PostgrestSingleResponse<SiteRow> = await withSupabaseRetry(
-        async (): Promise<PostgrestSingleResponse<SiteRow>> => {
-          const r = await sb
-            .from('sites')
-            .select('id, name, lat, lng, radius_m, is_active')
-            .eq('id', person.site_id)
-            .eq('is_active', true)
-            .maybeSingle();
-          return r as PostgrestSingleResponse<SiteRow>;
-        }
-      );
-
-      const { data: site, error: siteError } = siteResp;
-      if (siteError || !site) {
-        return NextResponse.json(
-          { ok: true, data: [], results: [] },
-          { headers: { 'Cache-Control': 'no-store' } }
-        );
-      }
-
-      const sanitized = sanitizeSites([site]);
-      return NextResponse.json(
-        { ok: true, data: sanitized, results: sanitized },
-        { headers: { 'Cache-Control': 'no-store' } }
-      );
-    }
-
-    // ──────────────────────────────────
-    // 3) LISTADO GENERAL (ACTIVOS)
-    // ──────────────────────────────────
-    const listResp: PostgrestResponse<SiteRow> = await withSupabaseRetry(
-      async (): Promise<PostgrestResponse<SiteRow>> => {
-        const r = await sb
+      // Si tiene site_id → traer el site activo
+      if (person.site_id) {
+        const { data: site } = await sb
           .from('sites')
           .select('id, name, lat, lng, radius_m, is_active')
+          .eq('id', person.site_id)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (site) {
+          return NextResponse.json(
+            { ok: true, results: [site] },
+            { headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+      }
+
+      // Fallback: intentar match por people.local
+      const localName = String(person.local ?? '').trim();
+      if (localName) {
+        const { data: candidates } = await sb
+          .from('sites')
+          .select('id, name, lat, lng, radius_m, is_active')
+          .ilike('name', `%${localName}%`)
           .eq('is_active', true)
           .order('name');
-        return r as PostgrestResponse<SiteRow>;
-      }
-    );
 
-    const { data, error } = listResp;
+        if (candidates?.length) {
+          return NextResponse.json(
+            { ok: true, results: candidates },
+            { headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+      }
+
+      return NextResponse.json({ ok: true, results: [] }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    // 3) Listado general (activos)
+    const { data, error } = await sb
+      .from('sites')
+      .select('id, name, lat, lng, radius_m, is_active')
+      .eq('is_active', true)
+      .order('name');
+
     if (error) {
       console.error('[sites] list error:', error);
       return NextResponse.json({ ok: false, error: 'sites_fetch_failed' }, { status: 500 });
     }
 
-    const sanitized = sanitizeSites((data ?? []) as SiteRow[]);
     return NextResponse.json(
-      { ok: true, data: sanitized, results: sanitized },
+      { ok: true, results: data ?? [] },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (e: any) {
-    if (isSupabaseTransientError(e)) {
-      console.error('[sites] Supabase temporalmente no disponible:', e.message);
-      return NextResponse.json(
-        { ok: false, error: 'supabase_unavailable', data: [], results: [] },
-        { status: 503 }
-      );
-    }
     console.error('[sites] fatal:', e);
-    return NextResponse.json(
-      { ok: false, error: 'fatal', message: e?.message, data: [], results: [] },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: 'fatal', message: e?.message }, { status: 500 });
   }
 }
