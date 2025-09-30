@@ -59,6 +59,12 @@ function isOperativeRole(r?: string | null) {
   return s === 'delivery' || s === 'repartidor';
 }
 
+function normalizeSalesRole(role: string | null | undefined): 'ASESOR' | 'PROMOTOR' | null {
+  if (!role) return null;
+  const upper = role.trim().toUpperCase();
+  return upper === 'ASESOR' || upper === 'PROMOTOR' ? upper : null;
+}
+
 async function resolveSalesRole(
   sales_user_id: string | null | undefined,
   seller_role: string | null | undefined,
@@ -165,13 +171,15 @@ export async function POST(req: NextRequest) {
     const items_summary = items.map(it => `${it.quantity} ${it.product_name}`).join('\n');
 
     // --- Resolver rol comercial final ---
-    // Si vino sales_role y NO es operativo, úsalo; si no, trata de resolver.
-    const sales_role_final =
-      (sales_role && !isOperativeRole(sales_role) ? sales_role : null) ||
-      (await resolveSalesRole(sales_user_id, seller_role, seller));
+    const seller_role_clean = normalizeSalesRole(seller_role);
+    const is_promoter = seller_role_clean === 'PROMOTOR';
 
-    // Mantener is_promoter por compat (derivado de seller_role del body, NO del comercial)
-    const is_promoter = (seller_role ?? '').toUpperCase() === 'PROMOTOR';
+    // Si vino sales_role y NO es operativo, úsalo; si no, trata de resolver.
+    const raw_sales_role =
+      (sales_role && !isOperativeRole(sales_role) ? sales_role : null) ||
+      (await resolveSalesRole(sales_user_id, seller_role_clean, seller));
+
+    const sales_role_final = normalizeSalesRole(raw_sales_role);
 
     // 1) ORDER
     const { data: orderIns, error: orderErr } = await supabase
@@ -182,12 +190,12 @@ export async function POST(req: NextRequest) {
 
         // Compat (operativo):
         seller: seller.trim(),
-        seller_role: seller_role ?? null,
+        seller_role: seller_role_clean,
         is_promoter,
 
         // NUEVO (comercial):
         sales_user_id: sales_user_id ?? null,
-        sales_role: sales_role_final ?? null,
+        sales_role: sales_role_final,
 
         destino,
         customer_id,
@@ -210,7 +218,15 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (orderErr || !orderIns) {
-      return NextResponse.json({ error: orderErr?.message || 'No se pudo crear la orden' }, { status: 500 });
+      console.error('Failed to insert order', orderErr);
+      return NextResponse.json(
+        {
+          error: orderErr?.message || 'No se pudo crear la orden',
+          details: orderErr?.details || null,
+          hint: orderErr?.hint || null,
+        },
+        { status: 500 }
+      );
     }
 
     const orderId = orderIns.id as string;
@@ -230,7 +246,15 @@ export async function POST(req: NextRequest) {
       // Rollback manual
       await supabase.from('order_items').delete().eq('order_id', orderId);
       await supabase.from('orders').delete().eq('id', orderId);
-      return NextResponse.json({ error: itemsErr.message }, { status: 500 });
+      console.error('Failed to insert order items', itemsErr);
+      return NextResponse.json(
+        {
+          error: itemsErr.message,
+          details: itemsErr.details || null,
+          hint: itemsErr.hint || null,
+        },
+        { status: 500 }
+      );
     }
 
     // 3) GEO-CODIFICACIÓN AUTOMÁTICA (no bloqueante)

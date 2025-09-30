@@ -2,6 +2,24 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import DevOverlayKiller from '@/components/DevOverlayKiller';
 import { FontPreloader } from '@/components/FontPreloader'; // <-- 1. Importa el nuevo componente
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { cn } from '@/lib/utils/cn';
+
+const THEME_INIT_SCRIPT = `(function() {
+  try {
+    var storageKey = 'fenix-os-theme';
+    var stored = localStorage.getItem(storageKey);
+    var prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+    var theme = stored === 'light' || stored === 'dark' ? stored : (prefersLight ? 'light' : 'dark');
+    var root = document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+    root.style.colorScheme = theme;
+    root.setAttribute('data-theme', theme);
+  } catch (error) {
+    console.warn('Theme init failed', error);
+  }
+})();`;
 
 export const metadata: Metadata = {
   title: 'Fenix Store | Sistema de Gestión',
@@ -14,8 +32,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#000000',
-  colorScheme: 'dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+    { media: '(prefers-color-scheme: light)', color: '#f5f5f7' },
+  ],
+  colorScheme: 'dark light',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -28,8 +49,9 @@ export default function RootLayout({
   children: React.ReactNode 
 }) {
   return (
-    <html lang="es" className="dark" suppressHydrationWarning>
+    <html lang="es" className="dark" data-theme="dark" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {/* 2. Usa el componente aquí, reemplazando las antiguas etiquetas <link> */}
         <FontPreloader />
         
@@ -45,30 +67,32 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
       
-      <body 
-        className={[
-          'font-sans antialiased',
-          'bg-black text-white',
-          'selection:bg-apple-blue-500/30 selection:text-apple-blue-100',
-          'subpixel-antialiased',
-          'touch-manipulation',
-        ].join(' ')}
+      <body
+        className={cn(
+          'font-sans antialiased min-h-screen subpixel-antialiased touch-manipulation transition-colors duration-500 ease-apple',
+          'bg-[color:var(--app-bg)] text-[color:var(--app-foreground)]',
+          'selection:bg-[color:var(--selection-bg)] selection:text-[color:var(--selection-fg)]'
+        )}
         suppressHydrationWarning
       >
         {/* Gradiente de fondo sutil */}
-        <div className="fixed inset-0 bg-gradient-to-br from-black via-apple-gray-950 to-black pointer-events-none" />
-        
+        <div className="fixed inset-0 pointer-events-none transition-colors duration-700 ease-apple">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#eef3ff] via-[#f6f7fb] to-[#fbfbfd] opacity-95 dark:from-black dark:via-apple-gray-950 dark:to-black" />
+        </div>
+
         {/* Efectos de luz ambiental */}
         <div className="fixed inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-apple-blue-600/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-apple-green-600/5 rounded-full blur-3xl" />
+          <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full blur-3xl bg-apple-blue-300/20 dark:bg-apple-blue-600/5" />
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full blur-3xl bg-apple-green-300/20 dark:bg-apple-green-600/5" />
         </div>
-        
+
         {/* Contenido principal */}
-        <div className="relative z-10">
-          <DevOverlayKiller />
-          {children}
-        </div>
+        <ThemeProvider>
+          <div className="relative z-10">
+            <DevOverlayKiller />
+            {children}
+          </div>
+        </ThemeProvider>
         
         {/* Scripts de optimización */}
         <script

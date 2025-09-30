@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import {
   Users, ShieldCheck, CheckCircle2, XCircle, CircleDollarSign, Search, Filter, CalendarDays, Image as ImageIcon,
 } from 'lucide-react';
+import { hasFinancialAccess } from '@/lib/auth/financial';
 
 const fetcher = (u: string) => fetch(u, { cache: 'no-store' }).then(r => r.json());
 
@@ -49,11 +50,11 @@ export default function DashboardPermisosPage() {
   const { data: me } = useSWR('/endpoints/me', fetcher);
   const role: Role = useMemo(() => norm(me?.role), [me?.role]);
 
-  const allowed = (me?.full_name || '').toLowerCase().trim();
-  const hasAccess =
-    allowed === 'daniela vasquez' ||
-    allowed === 'hugo hormazabal' ||
-    role === 'admin';
+  const hasAccess = useMemo(() => {
+    if (!me) return false;
+    if (role === 'admin') return true;
+    return hasFinancialAccess(me);
+  }, [me, role]);
 
   useEffect(() => {
     if (me && !hasAccess) router.replace('/mi/resumen');
@@ -62,10 +63,11 @@ export default function DashboardPermisosPage() {
   const [month, setMonth] = useState<string>(new Date().toISOString().slice(0,7)); // YYYY-MM
   const [branch, setBranch] = useState<string>('Todas');
   const [q, setQ] = useState<string>('');
+  const shouldFetch = hasAccess ? `/endpoints/permissions?month=${month}&branch=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}` : null;
   const { data, mutate, isLoading } = useSWR<{
     list: Permission[];
     branches: string[];
-  }>(`/endpoints/permissions?month=${month}&branch=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}`, fetcher);
+  }>(shouldFetch, fetcher);
 
   const list = data?.list || [];
   const branches = ['Todas', ...(data?.branches || [])];

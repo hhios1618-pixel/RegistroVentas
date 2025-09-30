@@ -86,9 +86,9 @@ export default function CoordinadoresHome() {
               kbd="V"
             />
             <Tile
-              href="/playbook-whatsapp"
-              title="Playbook WhatsApp"
-              desc="Guiones y mejores prácticas."
+              href="/dashboard/asesores/playbook-whatsapp"
+              title="Central Operativa"
+              desc="Procesos y guías críticas para la operación."
               kbd="P"
             />
           </section>

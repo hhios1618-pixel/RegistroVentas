@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type PostgrestError } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 function getAdmin() {
@@ -14,6 +14,12 @@ function randomPassword(length = 10) {
   return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
+const errorMessage = (err: unknown, fallback: string) => {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string' && err.trim()) return err;
+  return fallback;
+};
+
 // GET /endpoints/users
 export async function GET(req: Request) {
   try {
@@ -22,6 +28,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get('q') || '').trim();
     const role = (searchParams.get('role') || '').trim().toUpperCase();
+    const branch = (searchParams.get('branch') || '').trim();
     const activeParam = searchParams.get('active');
     const page = Math.max(1, Number(searchParams.get('page') || 1));
     const pageSize = Math.min(100, Math.max(1, Number(searchParams.get('pageSize') || 20)));
@@ -55,15 +62,20 @@ export async function GET(req: Request) {
       );
     }
     if (role) query = query.eq('fenix_role', role);
+    if (branch === '__none__') {
+      query = query.is('local', null);
+    } else if (branch) {
+      query = query.eq('local', branch);
+    }
     if (activeParam === 'true' || activeParam === 'false') query = query.eq('active', activeParam === 'true');
 
     const { data, error, count } = await query.range(from, to);
     if (error) throw error;
 
     return NextResponse.json({ ok: true, data, page, pageSize, total: count ?? 0 });
-  } catch (err: any) {
+  } catch (err) {
     console.error('GET /endpoints/users error:', err);
-    return NextResponse.json({ ok: false, error: err?.message || 'List users failed' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(err, 'List users failed') }, { status: 500 });
   }
 }
 
@@ -71,14 +83,18 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const supabase = getAdmin();
-    const body = await req.json();
+    const body = (await req.json()) as Record<string, unknown>;
 
-    const full_name: string = (body.full_name || '').trim();
-    const fenix_role: string = (body.fenix_role || 'USER').toString().trim().toUpperCase();
+    const full_name: string = String(body.full_name ?? '').trim();
+    const fenix_role: string = String(body.fenix_role ?? 'USER').trim().toUpperCase();
     const privilege_level: number = Number(body.privilege_level ?? 1);
-    const local: string | null = body.branch_id ?? null; // ← mapea branch_id → local
-    const phone: string | null = body.phone ?? null;
-    const vehicle_type: string | null = body.vehicle_type ?? null;
+    const local: string | null = typeof body.branch_id === 'string' && body.branch_id.trim()
+      ? body.branch_id.trim()
+      : null; // ← mapea branch_id → local
+    const phone: string | null = typeof body.phone === 'string' ? body.phone.trim() || null : null;
+    const vehicle_type: string | null = typeof body.vehicle_type === 'string'
+      ? body.vehicle_type.trim() || null
+      : null;
 
     if (!full_name) return NextResponse.json({ ok: false, error: 'full_name es requerido' }, { status: 400 });
 
@@ -91,12 +107,18 @@ export async function POST(req: Request) {
       .replace(/^\./, '')
       .replace(/\.$/, '');
     const suffix = Math.random().toString(16).slice(2, 6);
-    const username: string = (body.username || `${base}_${suffix}`).toLowerCase();
+    const username: string = (typeof body.username === 'string' && body.username.trim()
+      ? body.username
+      : `${base}_${suffix}`).toLowerCase();
 
     const domain = (process.env.LOGIN_DOMAIN || 'fenix.local').trim();
-    const email: string = (body.email || `${username}@${domain}`).toLowerCase();
+    const email: string = (typeof body.email === 'string' && body.email.trim()
+      ? body.email
+      : `${username}@${domain}`).toLowerCase();
 
-    const plain = typeof body.password === 'string' && body.password.length >= 6 ? body.password : randomPassword(10);
+    const plain = typeof body.password === 'string' && body.password.length >= 6
+      ? body.password
+      : randomPassword(10);
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(plain, salt);
 
@@ -116,13 +138,14 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase.from('people').insert(insertPayload).select('*').single();
     if (error) {
-      const msg = (error as any)?.code === '23505' ? 'Username o email ya existen' : error.message;
-      throw new Error(msg);
+      const pgError = error as PostgrestError;
+      const msg = pgError?.code === '23505' ? 'Username o email ya existen' : pgError?.message;
+      throw new Error(msg || 'Create user failed');
     }
 
     return NextResponse.json({ ok: true, data });
-  } catch (err: any) {
+  } catch (err) {
     console.error('POST /endpoints/users error:', err);
-    return NextResponse.json({ ok: false, error: err?.message || 'Create user failed' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: errorMessage(err, 'Create user failed') }, { status: 500 });
   }
 }

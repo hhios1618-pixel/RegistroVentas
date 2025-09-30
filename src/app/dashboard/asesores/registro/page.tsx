@@ -12,7 +12,8 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Loader2, Plus, Trash2, Search, CheckCircle, XCircle,
-  AlertTriangle, ArrowRight, Upload, User, CreditCard, Truck, ClipboardPaste, PackageSearch, Check
+  AlertTriangle, ArrowRight, Upload, User, CreditCard, Truck, ClipboardPaste, PackageSearch, Check,
+  MapPin, ExternalLink, Copy
 } from 'lucide-react';
 
 type ProductSearchResult = { name: string; code: string; image_url?: string | null };
@@ -36,6 +37,19 @@ type PartialOrder = {
   is_encomienda: boolean;
   address: string;
   normalized_address: string | null;
+  normalized_details?: {
+    street?: string;
+    neighbourhood?: string;
+    suburb?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+    county?: string;
+    postcode?: string;
+    country?: string;
+  } | null;
+  normalized_confidence?: number | null;
+  normalized_source?: 'opencage' | 'nominatim' | 'fallback' | null;
   address_url: string;
   lat?: number;
   lng?: number;
@@ -62,6 +76,9 @@ const getInitialOrderState = (sellerName = 'Vendedor'): PartialOrder => {
     is_encomienda: false,
     address: '',
     normalized_address: null,
+    normalized_details: null,
+    normalized_confidence: null,
+    normalized_source: null,
     address_url: '',
     destino: '',
     delivery_date: formatDate(now),
@@ -69,7 +86,7 @@ const getInitialOrderState = (sellerName = 'Vendedor'): PartialOrder => {
     delivery_to: formatTime(oneHour),
     notes: '',
     customer_name: '',
-    customer_id: '',
+    customer_id: 'S/N',
     customer_phone: '',
     payments: [],
     seller_name: sellerName,
@@ -174,15 +191,41 @@ export default function CapturaPage() {
 
   const isStep4Valid = useMemo(() =>
     !!order.customer_name.trim() &&
-    !!order.customer_id.trim() &&
     !!order.customer_phone.trim()
-  , [order.customer_name, order.customer_id, order.customer_phone]);
+  , [order.customer_name, order.customer_phone]);
 
   // ---- TOTAL ----
   const total = useMemo(
     () => order.items.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.unit_price || 0), 0),
     [order.items]
   );
+
+  const normalizedDetailEntries = useMemo(() => {
+    const details = order.normalized_details || {};
+    const entries = [
+      { label: 'Calle', value: details?.street },
+      { label: 'Barrio / Zona', value: details?.neighbourhood || details?.suburb },
+      { label: 'Distrito', value: details?.district },
+      { label: 'Ciudad', value: details?.city },
+      { label: 'Departamento', value: details?.state || details?.county },
+      { label: 'Código Postal', value: details?.postcode },
+      { label: 'País', value: details?.country },
+    ].filter(entry => entry.value);
+
+    if (order.lat !== undefined && order.lng !== undefined) {
+      entries.push({ label: 'Coordenadas', value: `${order.lat.toFixed(6)}, ${order.lng.toFixed(6)}` });
+    }
+
+    return entries;
+  }, [order.normalized_details, order.lat, order.lng]);
+
+  const mapUrl = useMemo(() => {
+    if (order.address_url) return order.address_url;
+    if (order.lat !== undefined && order.lng !== undefined) {
+      return `https://www.google.com/maps/?q=${order.lat},${order.lng}`;
+    }
+    return '';
+  }, [order.address_url, order.lat, order.lng]);
 
   // ---- ITEM HELPERS ----
   const updateItem = (index: number, patch: Partial<DisplayOrderItem>) => {
@@ -195,6 +238,16 @@ export default function CapturaPage() {
   const removeItem = (index: number) => {
     setOrder(p => ({ ...p, items: p.items.filter((_, i) => i !== index) }));
   };
+
+  const handleCopyToClipboard = useCallback(async (value: string, successMessage: string) => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard) throw new Error('Clipboard API no disponible');
+      await navigator.clipboard.writeText(value);
+      toast.success(successMessage);
+    } catch {
+      toast.error('No se pudo copiar al portapapeles');
+    }
+  }, []);
 
   // ---- INTERPRETACIÓN (paso 1) ----
   const interpretFullOrder = async () => {
@@ -263,21 +316,58 @@ export default function CapturaPage() {
       let formatted: string | null = null;
       let lat: number | undefined;
       let lng: number | undefined;
+      let details: PartialOrder['normalized_details'] = null;
+      let confidence: number | null = null;
+      let source: PartialOrder['normalized_source'] = null;
 
       if (d?.formatted) {
         formatted = d.formatted;
         lat = d.lat;
         lng = d.lng;
+        details = d.components || null;
+        confidence = typeof d.confidence === 'number' ? d.confidence : null;
+        source = d.source || null;
       } else if (Array.isArray(d?.results) && d.results[0]) {
         formatted = d.results[0].formatted || null;
         lat = d.results[0].geometry?.lat;
         lng = d.results[0].geometry?.lng;
+        details = d.results[0].components || null;
+        confidence = typeof d.results[0].confidence === 'number' ? d.results[0].confidence : null;
+        source = (d.results[0].source as PartialOrder['normalized_source']) || null;
       }
 
       if (!formatted) throw new Error('Sin resultados');
 
-      setOrder(p => ({ ...p, normalized_address: formatted, lat, lng }));
-      setGeocodeMsg({ ok: true, msg: `✓ ${formatted}` });
+      const maybeUrl = /^https?:\/\//i.test(text) ? text : '';
+      const fallbackMapUrl = lat !== undefined && lng !== undefined
+        ? `https://www.google.com/maps/?q=${lat},${lng}`
+        : '';
+
+      setOrder(p => {
+        const next: PartialOrder = {
+          ...p,
+          normalized_address: formatted,
+          normalized_details: details,
+          normalized_confidence: confidence,
+          normalized_source: source,
+          lat,
+          lng,
+          address_url: maybeUrl || fallbackMapUrl || p.address_url,
+        };
+
+        const suggestedDestino = [
+          details?.neighbourhood || details?.suburb || details?.district,
+          details?.city,
+        ].filter(Boolean).join(', ');
+
+        if (!p.destino.trim() && suggestedDestino) {
+          next.destino = suggestedDestino;
+        }
+
+        return next;
+      });
+
+      setGeocodeMsg({ ok: true, msg: formatted });
       toast.success('Dirección verificada');
     } catch (e: any) {
       setGeocodeMsg({ ok: false, msg: e?.message || 'Error' });
@@ -305,7 +395,7 @@ export default function CapturaPage() {
     if (order.items.length === 0) return toast.error('Agrega al menos 1 producto.');
     if (!order.destino?.trim()) return toast.error('Falta el destino (ciudad/zona).');
     if (!(order.normalized_address || order.address?.trim())) return toast.error('Falta dirección.');
-    if (!order.customer_name?.trim() || !order.customer_id?.trim() || !order.customer_phone?.trim()) {
+    if (!order.customer_name?.trim() || !order.customer_phone?.trim()) {
       return toast.error('Faltan datos del cliente.');
     }
     const invalidItem = order.items.find(it =>
@@ -332,9 +422,9 @@ export default function CapturaPage() {
         seller: order.seller_name,
         seller_role: null as string | null,
         sale_type: saleTypeOrder,
-        local: null as any,
+        local: 'Santa Cruz' as const, // default sucursal
         destino: order.destino || null,
-        customer_id: order.customer_id.trim(),
+        customer_id: order.customer_id.trim() || 'S/N',
         customer_phone: normalizePhone(order.customer_phone),
         customer_name: order.customer_name.trim(),
         numero: null as string | null,
@@ -386,16 +476,14 @@ export default function CapturaPage() {
 
   // ---- Estado local para inputs del PASO 4 ----
   const [localName, setLocalName] = useState('');
-  const [localCI, setLocalCI] = useState('');
   const [localPhone, setLocalPhone] = useState('');
 
   useEffect(() => {
     if (currentStep === 4) {
       setLocalName(order.customer_name || '');
-      setLocalCI(order.customer_id || '');
       setLocalPhone(order.customer_phone || '');
     }
-  }, [currentStep, order.customer_id, order.customer_name, order.customer_phone]);
+  }, [currentStep, order.customer_name, order.customer_phone]);
 
   // ---- UI ----
   return (
@@ -897,6 +985,86 @@ export default function CapturaPage() {
                     </motion.div>
                   )}
 
+                  {order.normalized_address && (
+                    <motion.div
+                      className="p-5 rounded-xl bg-white/5 border border-white/15 backdrop-blur-sm text-white/90"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                    >
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-green-500/20 border border-green-500/30 rounded-lg">
+                              <MapPin className="w-5 h-5 text-green-300" />
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-white font-semibold">Dirección normalizada</span>
+                                {order.normalized_source && (
+                                  <span className="px-2 py-0.5 text-xs uppercase tracking-wide rounded-full bg-white/10 border border-white/20 text-white/70">
+                                    {order.normalized_source === 'opencage' ? 'OpenCage' : order.normalized_source === 'nominatim' ? 'OpenStreetMap' : 'Coordenadas'}
+                                  </span>
+                                )}
+                                {typeof order.normalized_confidence === 'number' && (
+                                  <span className="text-xs text-white/60">
+                                    Confianza {Math.round(order.normalized_confidence)}/10
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-white/80 leading-relaxed break-words">
+                                {order.normalized_address}
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                                  onClick={() => handleCopyToClipboard(order.normalized_address || '', 'Dirección copiada')}
+                                >
+                                  <Copy className="w-4 h-4 mr-2" /> Copiar dirección
+                                </Button>
+                                {mapUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                                    onClick={() => window.open(mapUrl, '_blank', 'noopener,noreferrer')}
+                                  >
+                                    <ExternalLink className="w-4 h-4 mr-2" /> Abrir en Maps
+                                  </Button>
+                                )}
+                                {order.lat !== undefined && order.lng !== undefined && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                                    onClick={() => handleCopyToClipboard(`${order.lat},${order.lng}`, 'Coordenadas copiadas')}
+                                  >
+                                    <ClipboardPaste className="w-4 h-4 mr-2" /> Copiar coordenadas
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {normalizedDetailEntries.length > 0 && (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {normalizedDetailEntries.map(detail => (
+                              <div
+                                key={`${detail.label}-${detail.value}`}
+                                className="bg-white/5 border border-white/10 rounded-lg px-3 py-2"
+                              >
+                                <span className="block text-xs uppercase tracking-wide text-white/50">{detail.label}</span>
+                                <span className="block text-sm text-white font-medium leading-tight">{detail.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+
                   <div>
                     <Label className="text-white/70 font-medium mb-2 block">Destino (Ciudad/Zona)</Label>
                     <Input 
@@ -1021,16 +1189,7 @@ export default function CapturaPage() {
                       className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all" 
                       defaultValue={localName}
                       onChange={e => setLocalName(e.target.value)}
-                      onBlur={() => setOrder(p => ({ ...p, customer_name: localName }))}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-white/70 font-medium mb-2 block">CI/NIT del Cliente</Label>
-                    <input 
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all" 
-                      defaultValue={localCI}
-                      onChange={e => setLocalCI(e.target.value)}
-                      onBlur={() => setOrder(p => ({ ...p, customer_id: localCI }))}
+                      onBlur={e => setOrder(p => ({ ...p, customer_name: e.target.value.trim() }))}
                     />
                   </div>
                   <div>
@@ -1039,7 +1198,7 @@ export default function CapturaPage() {
                       className="w-full px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400/50 transition-all" 
                       defaultValue={localPhone}
                       onChange={e => setLocalPhone(e.target.value)}
-                      onBlur={() => setOrder(p => ({ ...p, customer_phone: normalizePhone(localPhone) }))}
+                      onBlur={e => setOrder(p => ({ ...p, customer_phone: normalizePhone(e.target.value) }))}
                     />
                   </div>
 
@@ -1183,7 +1342,7 @@ export default function CapturaPage() {
                     animate={{ opacity: 1 }}
                   >
                     <p><strong>Vendedor:</strong> {order.seller_name}</p>
-                    <p><strong>Cliente:</strong> {order.customer_name} — {order.customer_id} — {order.customer_phone}</p>
+                    <p><strong>Cliente:</strong> {order.customer_name} — {order.customer_phone}</p>
                     <p><strong>Productos:</strong></p>
                     <ul className="list-disc list-inside ml-4 space-y-1">
                       {order.items.map((i, ix) => (

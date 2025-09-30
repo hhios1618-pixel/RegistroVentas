@@ -309,11 +309,11 @@ export default function DashboardHome() {
               </div>
               <h2 className="apple-h2">Acciones rápidas</h2>
             </div>
-            <Link 
-              href="/dashboard/asesores/playbook-whatsapp" 
+            <Link
+              href="/dashboard/asesores/playbook-whatsapp"
               className="text-apple-gray-400 hover:text-white transition-colors text-apple-body"
             >
-              Ver playbook →
+              Ver Central Operativa →
             </Link>
           </div>
           

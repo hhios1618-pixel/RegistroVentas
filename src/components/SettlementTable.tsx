@@ -142,76 +142,124 @@ export function SettlementTable() {
   };
 
   return (
-    <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl shadow-xl p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-white">Reporte de Liquidación Diaria</h2>
-        <div className="relative flex items-center gap-2">
-            <CalendarIcon className="h-4 w-4 text-slate-400" />
-            <input
-                type="date"
-                value={dateToInputValue(date)}
-                onChange={handleDateChange}
-                className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+    <div className="glass-card transition-colors duration-500 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="apple-h3 text-[color:var(--app-foreground)] dark:text-white">
+          Reporte de Liquidación Diaria
+        </h2>
+        <div className="flex items-center gap-2 text-[color:var(--app-muted)]">
+          <CalendarIcon className="w-4 h-4" />
+          <input
+            type="date"
+            value={dateToInputValue(date)}
+            onChange={handleDateChange}
+            className="field-sm w-[160px] bg-[color:var(--app-bg-strong)] text-[color:var(--app-foreground)] border border-[color:var(--app-border)] focus:ring-apple-blue-500/40 dark:bg-white/10 dark:text-white dark:border-white/15"
+          />
         </div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left text-slate-400">
-          <thead className="text-xs text-slate-300 uppercase bg-slate-800/50">
-            <tr>
-              <th scope="col" className="px-4 py-3 rounded-l-lg w-1/4">Transportista</th>
-              {[...Array(maxTrips)].map((_, i) => (
-                <th key={i} scope="col" colSpan={2} className="px-4 py-3 text-center border-l border-slate-700">Viaje {i + 1}</th>
+        <div className="min-w-full rounded-apple border border-[color:var(--app-border)] bg-[color:var(--app-bg-strong)]/85 shadow-[0_12px_30px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-black/20">
+          <table className="w-full text-sm text-left text-[color:var(--app-muted)] dark:text-apple-gray-400">
+            <thead className="text-xs uppercase tracking-wide">
+              <tr className="bg-[color:var(--hover-surface)]/60 dark:bg-white/10">
+                <th scope="col" className="px-4 py-3 font-semibold text-[color:var(--app-foreground)] dark:text-white rounded-l-apple">Transportista</th>
+                {[...Array(maxTrips)].map((_, i) => (
+                  <th
+                    key={i}
+                    scope="col"
+                    colSpan={2}
+                    className="px-4 py-3 text-center font-semibold text-[color:var(--app-foreground)] dark:text-white border-l border-[color:var(--app-border)] dark:border-white/10"
+                  >
+                    Viaje {i + 1}
+                  </th>
+                ))}
+                <th
+                  scope="col"
+                  colSpan={3}
+                  className="px-4 py-3 text-center font-semibold text-[color:var(--app-foreground)] dark:text-white border-l border-[color:var(--app-border)] dark:border-white/10 rounded-r-apple"
+                >
+                  Resumen
+                </th>
+              </tr>
+              <tr className="bg-[color:var(--hover-surface)]/30 dark:bg-white/5">
+                <th scope="col" className="px-4 py-2" />
+                {[...Array(maxTrips)].map((_, i) => (
+                  <React.Fragment key={i}>
+                    <th scope="col" className="px-2 py-2 text-center font-medium text-[color:var(--app-muted)] border-l border-[color:var(--app-border)] dark:border-white/10">Ida</th>
+                    <th scope="col" className="px-2 py-2 text-center font-medium text-[color:var(--app-muted)]">Vuelta</th>
+                  </React.Fragment>
+                ))}
+                <th scope="col" className="px-2 py-2 text-center font-medium text-[color:var(--app-muted)] border-l border-[color:var(--app-border)] dark:border-white/10">Entregados</th>
+                <th scope="col" className="px-2 py-2 text-center font-medium text-[color:var(--app-muted)]">Devueltos</th>
+                <th scope="col" className="px-2 py-2 text-center font-medium text-[color:var(--app-muted)]">Tasa Éxito</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={1 + maxTrips * 2 + 3} className="text-center py-10">
+                    <Loader2 className="w-6 h-6 text-[color:var(--app-muted)] animate-spin inline-block" />
+                  </td>
+                </tr>
+              )}
+              {error && (
+                <tr>
+                  <td colSpan={1 + maxTrips * 2 + 3} className="text-center py-10">
+                    <div className="flex items-center justify-center gap-2 text-apple-red-500">
+                      <AlertTriangle className="w-5 h-5" /> {error}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!loading && !error && data.length === 0 && (
+                <tr>
+                  <td colSpan={1 + maxTrips * 2 + 3} className="text-center py-10 text-[color:var(--app-muted)]">
+                    No hay datos para la fecha seleccionada.
+                  </td>
+                </tr>
+              )}
+              {!loading && !error && data.map((delivery) => (
+                <motion.tr
+                  key={delivery.delivery_name}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="border-t border-[color:var(--app-border)] dark:border-white/10 hover:bg-[color:var(--hover-surface)]/50 dark:hover:bg-white/5 transition-colors"
+                >
+                  <td className="px-4 py-3 font-medium text-[color:var(--app-foreground)] dark:text-white whitespace-nowrap">
+                    {delivery.delivery_name}
+                  </td>
+                  {[...Array(maxTrips)].map((_, i) => {
+                    const trip = delivery.trips[i];
+                    return (
+                      <React.Fragment key={i}>
+                        <td className="text-center py-3 border-l border-[color:var(--app-border)] dark:border-white/10 text-[color:var(--app-foreground)] dark:text-white">
+                          {trip ? trip.ida : ''}
+                        </td>
+                        <td className="text-center py-3 text-[color:var(--app-foreground)] dark:text-white">
+                          {trip && (trip.vuelta > 0 ? (
+                            <span className="text-apple-red-500 font-semibold">{trip.vuelta}</span>
+                          ) : (trip.ida > 0 ? <Check className="w-4 h-4 text-apple-green-500 inline-block" /> : ''))}
+                        </td>
+                      </React.Fragment>
+                    );
+                  })}
+                  <td className="text-center py-3 border-l border-[color:var(--app-border)] dark:border-white/10 text-[color:var(--app-foreground)] dark:text-white">
+                    {delivery.total_ida - delivery.total_vuelta}
+                  </td>
+                  <td className="text-center py-3 text-[color:var(--app-foreground)] dark:text-white">
+                    {delivery.total_vuelta > 0 ? (
+                      <span className="text-apple-red-500 font-semibold">{delivery.total_vuelta}</span>
+                    ) : 0}
+                  </td>
+                  <td className="text-center py-3 font-semibold text-[color:var(--app-foreground)] dark:text-white">
+                    {delivery.total_ida > 0 ? `${Math.round(((delivery.total_ida - delivery.total_vuelta) / delivery.total_ida) * 100)}%` : '---'}
+                  </td>
+                </motion.tr>
               ))}
-              <th scope="col" colSpan={3} className="px-4 py-3 text-center border-l border-slate-700 rounded-r-lg">Resumen</th>
-            </tr>
-            <tr>
-              <th scope="col" className="px-4 py-2"></th>
-              {[...Array(maxTrips)].map((_, i) => (
-                <React.Fragment key={i}>
-                  <th scope="col" className="px-2 py-2 text-center font-medium border-l border-slate-700">Ida</th>
-                  <th scope="col" className="px-2 py-2 text-center font-medium">Vuelta</th>
-                </React.Fragment>
-              ))}
-              <th scope="col" className="px-2 py-2 text-center font-medium border-l border-slate-700">Entregados</th>
-              <th scope="col" className="px-2 py-2 text-center font-medium">Devueltos</th>
-              <th scope="col" className="px-2 py-2 text-center font-medium">Tasa Éxito</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={1 + maxTrips * 2 + 3} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin inline-block" /></td></tr>
-            )}
-            {error && (
-              <tr><td colSpan={1 + maxTrips * 2 + 3} className="text-center py-10"><div className="flex items-center justify-center gap-2 text-red-400"><AlertTriangle className="w-5 h-5" /> {error}</div></td></tr>
-            )}
-            {!loading && !error && data.length === 0 && (
-              <tr><td colSpan={1 + maxTrips * 2 + 3} className="text-center py-10">No hay datos para la fecha seleccionada.</td></tr>
-            )}
-            {!loading && !error && data.map((delivery) => (
-              <motion.tr key={delivery.delivery_name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b border-slate-800 hover:bg-slate-800/40">
-                <td className="px-4 py-3 font-medium text-white whitespace-nowrap">{delivery.delivery_name}</td>
-                {[...Array(maxTrips)].map((_, i) => {
-                  const trip = delivery.trips[i];
-                  return (
-                    <React.Fragment key={i}>
-                      <td className="text-center py-3 border-l border-slate-700">{trip ? trip.ida : ''}</td>
-                      <td className="text-center py-3">
-                        {trip && (trip.vuelta > 0 ? <span className="text-red-400 font-bold">{trip.vuelta}</span> : (trip.ida > 0 ? <Check className="w-4 h-4 text-green-400 inline-block" /> : ''))}
-                      </td>
-                    </React.Fragment>
-                  );
-                })}
-                <td className="text-center py-3 border-l border-slate-700">{delivery.total_ida - delivery.total_vuelta}</td>
-                <td className="text-center py-3">{delivery.total_vuelta > 0 ? <span className="text-red-400 font-bold">{delivery.total_vuelta}</span> : 0}</td>
-                <td className="text-center py-3 font-semibold text-white">
-                  {delivery.total_ida > 0 ? `${Math.round(((delivery.total_ida - delivery.total_vuelta) / delivery.total_ida) * 100)}%` : '---'}
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

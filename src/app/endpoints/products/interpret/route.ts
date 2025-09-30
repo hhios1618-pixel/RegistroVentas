@@ -23,29 +23,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Texto requerido' }, { status: 400 });
     }
 
-    const prompt = `Eres un asistente que interpreta pedidos de productos. Analiza el siguiente texto y extrae los productos mencionados.
+    const prompt = `Eres un asistente que interpreta pedidos de productos escritos por vendedoras en Bolivia. Analiza el texto y devuelve todos los productos individuales mencionados.
 
 TEXTO: "${text}"
 
-Responde ÚNICAMENTE con un JSON válido en este formato exacto:
+Debes responder ÚNICAMENTE con un JSON válido con el formato exacto:
 {
   "items": [
     {
       "product_name": "nombre del producto",
-      "quantity": número,
-      "unit_price": precio_estimado,
-      "type": "BASE"
+      "quantity": numero_entero,
+      "unit_price": precio_unitario_en_bs,
+      "type": "BASE" | "PROMO"
     }
   ]
 }
 
-REGLAS:
-- Extrae todos los productos mencionados
-- Si no se especifica cantidad, usa 1
-- Estima precios razonables en bolivianos para productos comunes
-- Usa "type": "BASE" para todos los productos
-- NO agregues texto adicional, solo el JSON
-- Si hay emojis, úsalos para identificar productos (🍎 = manzana, 🥛 = leche, etc.)`;
+REGLAS IMPORTANTES:
+- Identifica cada producto individual, aunque aparezcan dentro de un combo o promoción.
+- Si la vendedora indica un combo (por ejemplo, usa la palabra "combo", "pack" o similar) y lista varios productos, agrega un item por cada producto componente. El campo "type" debe ser "PROMO" para esos items.
+- Cuando el texto indica un precio total para el combo (ejemplo: "Cobrar 140 bs"), divide ese monto entre los productos del combo de la forma más equitativa posible, redondeando a dos decimales y ajustando el último producto para que la suma coincida con el total. Si no existe precio conocido para el combo, deja el precio en 0.
+- Si se especifica cantidad para un producto, úsala. Si no se especifica, usa 1.
+- Usa los emojis como pistas del producto (🍎 = manzana, 🥛 = leche, etc.).
+- Nunca inventes productos que no estén mencionados.
+- No agregues texto adicional, solo el JSON final.
+
+EJEMPLO:
+Texto: "\ncombo\nCojín de silicona\nEspaldar\nCobrar 140 bs\n"
+Respuesta esperada:
+{
+  "items": [
+    { "product_name": "Cojín de silicona", "quantity": 1, "unit_price": 70, "type": "PROMO" },
+    { "product_name": "Espaldar", "quantity": 1, "unit_price": 70, "type": "PROMO" }
+  ]
+}`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
@@ -90,12 +101,12 @@ REGLAS:
 
     // Validar y limpiar items
     const validItems: ProductItem[] = parsedResponse.items
-      .filter((item: any) => item.product_name && item.quantity && item.unit_price)
+      .filter((item: any) => item?.product_name && (item?.quantity ?? null) !== null && item?.quantity !== undefined)
       .map((item: any) => ({
         product_name: String(item.product_name).trim(),
-        quantity: Math.max(1, parseInt(item.quantity) || 1),
-        unit_price: Math.max(0, parseFloat(item.unit_price) || 0),
-        type: 'BASE' as const,
+        quantity: Math.max(1, parseInt(item.quantity, 10) || 1),
+        unit_price: Math.max(0, Number.parseFloat(item.unit_price) || 0),
+        type: item.type === 'PROMO' ? 'PROMO' : 'BASE',
         product_code: item.product_code || null
       }));
 
@@ -109,16 +120,27 @@ REGLAS:
 
   } catch (error: any) {
     console.error('Error en interpretación de productos:', error);
-    
-    if (error.message?.includes('API key')) {
-      return NextResponse.json({ 
-        error: 'Error de configuración de OpenAI' 
-      }, { status: 500 });
+
+    const statusCode = error?.status ?? error?.response?.status;
+    const errorCode = error?.code ?? error?.error?.code;
+
+    if (statusCode === 429 || errorCode === 'insufficient_quota') {
+      return NextResponse.json(
+        { error: 'Se alcanzó el límite de uso de OpenAI. Intenta nuevamente más tarde o revisa el plan de facturación.' },
+        { status: 429 }
+      );
     }
-    
-    return NextResponse.json({ 
-      error: error.message || 'Error al interpretar productos' 
-    }, { status: 500 });
+
+    if (error?.message?.includes('API key')) {
+      return NextResponse.json(
+        { error: 'Error de configuración de OpenAI' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: error?.message || 'Error al interpretar productos' },
+      { status: 500 }
+    );
   }
 }
-

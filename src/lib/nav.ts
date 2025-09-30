@@ -103,7 +103,7 @@ export const NAV_SECTIONS: Section[] = [
   {
     title: 'Administración',
     links: [
-      { cap: 'view:playbook',                     href: '/playbook',                     label: 'Playbook', shortcut: '5' },
+      { cap: 'view:playbook',                     href: '/dashboard/asesores/playbook-whatsapp', label: 'Central Operativa', shortcut: '5' },
       { cap: 'view:admin:asistencia:resumen',     href: '/admin/asistencia/resumen',     label: 'Resumen Asistencia (Gerencia)' },
       { cap: 'view:admin:usuarios',               href: '/admin/usuarios',               label: 'Usuarios', shortcut: '8' },
       { cap: 'view:admin:sucursales',             href: '/admin/sucursales',             label: 'Sucursales' },

@@ -22,6 +22,7 @@
     MI_RESUMEN: '/mi/resumen',
     PLAYBOOK: '/dashboard/asesores/playbook-whatsapp',
     USERS_ADMIN: '/dashboard/admin/usuarios',
+    PERMISOS_ADMIN: '/dashboard/permisos',
   } as const;
   
   /* =========================

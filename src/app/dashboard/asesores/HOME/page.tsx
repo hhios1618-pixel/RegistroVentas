@@ -29,8 +29,8 @@ export default function AsesoresHomePage() {
           href="/dashboard/asesores/devoluciones"
         />
         <Card
-          title="Playbook WhatsApp"
-          desc="Guías y scripts para contacto."
+          title="Central Operativa"
+          desc="Procesos, guías y scripts clave."
           href="/dashboard/asesores/playbook-whatsapp"
         />
       </div>

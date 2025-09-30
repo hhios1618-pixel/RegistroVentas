@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { Button } from '@/components/Button';
 import MapOverviewModal from '@/components/MapOverviewModal';
 import { SettlementTable } from '@/components/SettlementTable';
+import { cn } from '@/lib/utils/cn';
 
 // Iconos (sin cambios)
 import {
@@ -72,9 +73,9 @@ const KpiCard = ({ title, value, icon: Icon, color, description, trend, delay = 
       </div>
       
       <div className="space-y-2">
-        <p className="apple-caption text-apple-gray-400">{title}</p>
-        <p className="apple-h2 text-white font-semibold">{value}</p>
-        <p className="apple-caption2 text-apple-gray-500">{description}</p>
+        <p className="apple-caption text-[color:var(--app-muted)] dark:text-apple-gray-400">{title}</p>
+        <p className="apple-h2 font-semibold text-[color:var(--app-foreground)] dark:text-white">{value}</p>
+        <p className="apple-caption2 text-[color:var(--app-muted)] dark:text-apple-gray-500">{description}</p>
       </div>
     </motion.div>
   );
@@ -110,11 +111,12 @@ const StatusFilter = ({ currentStatus, onStatusChange }: {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => onStatusChange(option.value)}
-          className={`px-4 py-2.5 rounded-apple text-apple-caption font-medium transition-all flex items-center gap-2 ${
+          className={cn(
+            'px-4 py-2.5 rounded-apple text-apple-caption font-medium transition-all flex items-center gap-2',
             currentStatus === option.value
               ? `bg-${option.color}-500/20 text-${option.color}-300 border border-${option.color}-500/30 shadow-apple`
-              : 'bg-white/5 text-apple-gray-300 border border-white/10 hover:bg-white/10'
-          }`}
+              : 'bg-[color:var(--hover-surface)] text-[color:var(--app-muted)] border border-[color:var(--app-border)] hover:bg-[color:var(--hover-surface-strong)] dark:bg-white/5 dark:text-apple-gray-300 dark:border-white/10 dark:hover:bg-white/10'
+          )}
         >
           <option.icon size={16} />
           {option.label}
@@ -144,11 +146,11 @@ const CollapsibleOrderSection = ({ city, orders, onRowClick }: { city: string, o
     >
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-left p-4 hover:bg-white/5 transition-colors flex justify-between items-center border-b border-white/10"
+        className="w-full text-left p-4 transition-colors flex justify-between items-center border-b border-[color:var(--app-border)] hover:bg-[color:var(--hover-surface)] dark:border-white/10 dark:hover:bg-white/5"
       >
         <div className="flex items-center gap-3">
           {cityIcons[city as keyof typeof cityIcons] || <MapPin size={18} className="text-apple-gray-400" />}
-          <h3 className="apple-h4 text-white">{city}</h3>
+          <h3 className="apple-h4 text-[color:var(--app-foreground)] dark:text-white">{city}</h3>
           <div className="badge badge-primary">{orders.length}</div>
         </div>
         <motion.div
@@ -187,6 +189,18 @@ const getBranchForOrder = (order: OrderRow): string => {
   }
   return 'Santa Cruz';
 };
+
+const PageSurface = ({ children }: { children: React.ReactNode }) => (
+  <div className="relative min-h-screen overflow-hidden bg-[color:var(--app-bg)] text-[color:var(--app-foreground)] transition-colors duration-500 ease-apple">
+    <div className="pointer-events-none absolute inset-0">
+      <div className="absolute inset-0 bg-[radial-gradient(1350px_700px_at_12%_-10%,rgba(124,142,255,0.22),transparent_72%)] opacity-80 dark:bg-[radial-gradient(1200px_620px_at_12%_-12%,rgba(64,112,255,0.2),transparent_60%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(1100px_640px_at_92%_-10%,rgba(255,182,193,0.18),transparent_68%)] opacity-70 dark:bg-[radial-gradient(920px_540px_at_92%_-18%,rgba(168,85,247,0.14),transparent_55%)]" />
+    </div>
+    <div className="relative z-10 min-h-screen flex flex-col">
+      {children}
+    </div>
+  </div>
+);
 
 export default function LogisticaPage() {
   // ===================================================================================
@@ -282,65 +296,69 @@ export default function LogisticaPage() {
 
   if (loading && orders.length === 0) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          className="glass-card text-center max-w-md"
-        >
-          <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 border border-apple-blue-500/30 rounded-apple-lg flex items-center justify-center">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-            >
-              <Truck size={24} className="text-apple-blue-400" />
-            </motion.div>
-          </div>
-          <h2 className="apple-h2 text-white mb-3">Centro de Operaciones</h2>
-          <p className="apple-body text-apple-gray-300 mb-4">Conectando con el sistema de gestión logística</p>
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" />
-            <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-            <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
-          </div>
-        </motion.div>
-      </div>
+      <PageSurface>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card text-center max-w-md transition-colors duration-500"
+          >
+            <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 border border-apple-blue-500/30 rounded-apple-lg flex items-center justify-center">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+              >
+                <Truck size={24} className="text-apple-blue-400" />
+              </motion.div>
+            </div>
+            <h2 className="apple-h2 text-[color:var(--app-foreground)] dark:text-white mb-3">Centro de Operaciones</h2>
+            <p className="apple-body text-[color:var(--app-muted)] dark:text-apple-gray-300 mb-4">Conectando con el sistema de gestión logística</p>
+            <div className="flex items-center justify-center gap-2">
+              <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" />
+              <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+              <div className="w-2 h-2 bg-apple-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+            </div>
+          </motion.div>
+        </div>
+      </PageSurface>
     );
   }
-  
+
   if (error && !selectedOrder) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-6">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }} 
-          animate={{ opacity: 1, scale: 1 }} 
-          className="glass-card border-apple-red-500/30 bg-apple-red-500/10 text-center max-w-md"
-        >
-          <div className="w-16 h-16 mx-auto mb-6 bg-apple-red-500/20 border border-apple-red-500/30 rounded-apple-lg flex items-center justify-center">
-            <AlertTriangle size={24} className="text-apple-red-400" />
-          </div>
-          <h2 className="apple-h2 text-white mb-3">Error de Conexión</h2>
-          <p className="apple-body text-apple-red-300 mb-6">{error}</p>
-          <button
-            onClick={() => { clearError(); loadData(true); }}
-            className="btn-primary w-full"
+      <PageSurface>
+        <div className="flex flex-1 items-center justify-center p-6">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card text-center max-w-md border border-apple-red-500/30 bg-apple-red-500/10 transition-colors duration-500"
           >
-            <RefreshCw size={16} />
-            Reintentar Conexión
-          </button>
-        </motion.div>
-      </div>
+            <div className="w-16 h-16 mx-auto mb-6 bg-apple-red-500/20 border border-apple-red-500/30 rounded-apple-lg flex items-center justify-center">
+              <AlertTriangle size={24} className="text-apple-red-400" />
+            </div>
+            <h2 className="apple-h2 text-[color:var(--app-foreground)] dark:text-white mb-3">Error de Conexión</h2>
+            <p className="apple-body text-apple-red-300 dark:text-apple-red-300 mb-6">{error}</p>
+            <button
+              onClick={() => { clearError(); loadData(true); }}
+              className="btn-primary w-full"
+            >
+              <RefreshCw size={16} />
+              Reintentar Conexión
+            </button>
+          </motion.div>
+        </div>
+      </PageSurface>
     );
   }
 
   return (
     <>
-      <div className="min-h-screen bg-black">
+      <PageSurface>
         {/* Header */}
         <motion.header
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card mb-8"
+          className="glass-card mb-8 transition-colors duration-500"
         >
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -351,7 +369,7 @@ export default function LogisticaPage() {
                 <h1 className="apple-h1 mb-2">Centro de Logística</h1>
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-apple-green-400 animate-pulse' : 'bg-apple-orange-400'}`} />
-                  <span className="apple-caption text-apple-gray-400">
+                  <span className="apple-caption text-[color:var(--app-muted)] dark:text-apple-gray-400">
                     {isLive ? 'Sistema en línea' : 'Reconectando...'}
                   </span>
                 </div>
@@ -442,14 +460,14 @@ export default function LogisticaPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="glass-card"
+            className="glass-card transition-colors duration-500"
           >
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-apple-blue-500/20 border border-apple-blue-500/30 rounded-apple">
                   <Filter size={18} className="text-apple-blue-400" />
                 </div>
-                <h3 className="apple-h3 text-white">Filtrar por Estado</h3>
+                <h3 className="apple-h3 text-[color:var(--app-foreground)] dark:text-white">Filtrar por Estado</h3>
               </div>
               <div className="badge badge-primary">{filteredOrders.length} pedidos</div>
             </div>
@@ -468,26 +486,26 @@ export default function LogisticaPage() {
               className="lg:col-span-8 xl:col-span-9 space-y-8"
             >
               {/* Tabla de eficiencia */}
-              <div className="glass-card">
+              <div className="glass-card transition-colors duration-500">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-2 bg-apple-green-500/20 border border-apple-green-500/30 rounded-apple">
                     <TrendingUp size={18} className="text-apple-green-400" />
                   </div>
-                  <h3 className="apple-h3 text-white">Eficiencia de Entregas por Horario</h3>
+                  <h3 className="apple-h3 text-[color:var(--app-foreground)] dark:text-white">Eficiencia de Entregas por Horario</h3>
                 </div>
                 <SettlementTable />
               </div>
 
               {/* Lista de pedidos */}
-              <div className="glass-card">
+              <div className="glass-card transition-colors duration-500">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-purple-500/20 border border-purple-500/30 rounded-apple">
                       <Route size={18} className="text-purple-400" />
                     </div>
                     <div>
-                      <h3 className="apple-h3 text-white">Lista de Pedidos</h3>
-                      <p className="apple-caption text-apple-gray-400">{filteredOrders.length} pedidos encontrados</p>
+                      <h3 className="apple-h3 text-[color:var(--app-foreground)] dark:text-white">Lista de Pedidos</h3>
+                      <p className="apple-caption text-[color:var(--app-muted)] dark:text-apple-gray-400">{filteredOrders.length} pedidos encontrados</p>
                     </div>
                   </div>
                   
@@ -523,8 +541,8 @@ export default function LogisticaPage() {
                       <div className="w-16 h-16 mx-auto mb-4 bg-apple-gray-500/20 border border-apple-gray-500/30 rounded-apple-lg flex items-center justify-center">
                         <Package size={24} className="text-apple-gray-400" />
                       </div>
-                      <h4 className="apple-h3 text-white mb-2">Sin pedidos</h4>
-                      <p className="apple-body text-apple-gray-400">No se encontraron pedidos que coincidan con los filtros.</p>
+                      <h4 className="apple-h3 text-[color:var(--app-foreground)] dark:text-white mb-2">Sin pedidos</h4>
+                      <p className="apple-body text-[color:var(--app-muted)] dark:text-apple-gray-400">No se encontraron pedidos que coincidan con los filtros.</p>
                     </div>
                   )}
                 </div>
@@ -539,13 +557,13 @@ export default function LogisticaPage() {
               className="lg:col-span-4 xl:col-span-3 space-y-6 sticky top-6"
             >
               {/* Unidades activas */}
-              <div className="glass-card">
+              <div className="glass-card transition-colors duration-500">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-apple-orange-500/20 border border-apple-orange-500/30 rounded-apple">
                       <Truck size={18} className="text-apple-orange-400" />
                     </div>
-                    <h3 className="apple-h3 text-white">Unidades Activas</h3>
+                    <h3 className="apple-h3 text-[color:var(--app-foreground)] dark:text-white">Unidades Activas</h3>
                   </div>
                   <div className="badge badge-primary">{deliveries.length}</div>
                 </div>
@@ -585,12 +603,12 @@ export default function LogisticaPage() {
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="text-center py-12 border-2 border-dashed border-white/10 rounded-apple"
+                        className="text-center py-12 border-2 border-dashed border-[color:var(--app-border)] rounded-apple dark:border-white/10"
                       >
                         <div className="w-12 h-12 mx-auto mb-3 bg-apple-gray-500/20 border border-apple-gray-500/30 rounded-apple flex items-center justify-center">
                           <Users size={20} className="text-apple-gray-400" />
                         </div>
-                        <p className="apple-body text-apple-gray-400">No hay unidades activas</p>
+                        <p className="apple-body text-[color:var(--app-muted)] dark:text-apple-gray-400">No hay unidades activas</p>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -598,12 +616,12 @@ export default function LogisticaPage() {
               </div>
 
               {/* Acciones rápidas */}
-              <div className="glass-card">
+              <div className="glass-card transition-colors duration-500">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="p-2 bg-apple-green-500/20 border border-apple-green-500/30 rounded-apple">
                     <Zap size={18} className="text-apple-green-400" />
                   </div>
-                  <h3 className="apple-h4 text-white">Acciones Rápidas</h3>
+                  <h3 className="apple-h4 text-[color:var(--app-foreground)] dark:text-white">Acciones Rápidas</h3>
                 </div>
                 
                 <div className="space-y-3">
@@ -647,7 +665,7 @@ export default function LogisticaPage() {
             </motion.div>
           </div>
         </div>
-      </div>
+      </PageSurface>
       
       {/* Modales - SIN CAMBIOS */}
       <AnimatePresence>

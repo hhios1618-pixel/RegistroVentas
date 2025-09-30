@@ -12,6 +12,12 @@ function getAdmin() {
   return createClient(url, key);
 }
 
+const errorMessage = (err: unknown, fallback: string) => {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string' && err.trim()) return err;
+  return fallback;
+};
+
 /* ========== GET /endpoints/users/:id ========== */
 export async function GET(
   _req: Request,
@@ -32,10 +38,10 @@ export async function GET(
 
     if (error) throw error;
     return NextResponse.json({ ok: true, data });
-  } catch (err: any) {
+  } catch (err) {
     console.error('GET /users/:id error:', err);
     return NextResponse.json(
-      { ok: false, error: err?.message || 'Fetch user failed' },
+      { ok: false, error: errorMessage(err, 'Fetch user failed') },
       { status: 500 }
     );
   }
@@ -48,11 +54,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await ctx.params;
-    const body = await req.json();
+    const body = (await req.json()) as Record<string, unknown>;
     const supabase = getAdmin();
 
     // Solo campos que existen en "people"
-    const payload: Record<string, any> = {};
+    const payload: Record<string, unknown> = {};
 
     if (typeof body.full_name === 'string') {
       payload.full_name = body.full_name;
@@ -63,9 +69,9 @@ export async function PATCH(
     }
 
     // role / fenix_role
-    let fenix_role: string | undefined = body.fenix_role ?? body.role;
-    if (typeof fenix_role === 'string' && fenix_role.trim()) {
-      payload.fenix_role = fenix_role.toUpperCase();
+    const fenixRoleRaw = body.fenix_role ?? body.role;
+    if (typeof fenixRoleRaw === 'string' && fenixRoleRaw.trim()) {
+      payload.fenix_role = fenixRoleRaw.toUpperCase();
     }
 
     // privilege_level (solo si es número finito)
@@ -78,7 +84,23 @@ export async function PATCH(
       payload.active = body.active;
     }
 
-    // NO enviar campos que no existan (branch_id, phone, vehicle_type, etc.)
+    if (body.branch_id !== undefined || body.local !== undefined) {
+      const raw = body.branch_id ?? body.local;
+      const normalized = typeof raw === 'string' ? raw.trim() : raw;
+      payload.local = normalized ? String(normalized) : null;
+    }
+
+    if (body.phone !== undefined) {
+      const phone = typeof body.phone === 'string' ? body.phone.trim() : body.phone;
+      payload.phone = phone ? String(phone) : null;
+    }
+
+    if (body.vehicle_type !== undefined) {
+      const vehicle = typeof body.vehicle_type === 'string' ? body.vehicle_type.trim() : body.vehicle_type;
+      payload.vehicle_type = vehicle ? String(vehicle) : null;
+    }
+
+    // Si no hay cambios, devolver success vacío para evitar UPDATE innecesario
     if (Object.keys(payload).length === 0) {
       return NextResponse.json({ ok: true, data: null });
     }
@@ -92,10 +114,10 @@ export async function PATCH(
 
     if (error) throw error;
     return NextResponse.json({ ok: true, data });
-  } catch (err: any) {
+  } catch (err) {
     console.error('PATCH /users/:id error:', err);
     return NextResponse.json(
-      { ok: false, error: err?.message || 'Update failed' },
+      { ok: false, error: errorMessage(err, 'Update failed') },
       { status: 500 }
     );
   }
@@ -108,7 +130,7 @@ export async function POST(
 ) {
   try {
     const { id } = await ctx.params;
-    const body = await req.json();
+    const body = (await req.json()) as Record<string, unknown>;
     const supabase = getAdmin();
 
     if (body.action === 'toggle') {
@@ -130,7 +152,7 @@ export async function POST(
     }
 
     if (body.action === 'reset-password') {
-      const newPassword: string = (body.newPassword || '').trim();
+      const newPassword = typeof body.newPassword === 'string' ? body.newPassword.trim() : '';
       if (!newPassword || newPassword.length < 6) {
         return NextResponse.json(
           { ok: false, error: 'La contraseña debe tener al menos 6 caracteres' },
@@ -156,10 +178,10 @@ export async function POST(
       { ok: false, error: 'Acción no soportada' },
       { status: 400 }
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error('POST /users/:id error:', err);
     return NextResponse.json(
-      { ok: false, error: err?.message || 'Action failed' },
+      { ok: false, error: errorMessage(err, 'Action failed') },
       { status: 500 }
     );
   }
@@ -178,10 +200,10 @@ export async function DELETE(
     if (error) throw error;
 
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
+  } catch (err) {
     console.error('DELETE /users/:id error:', err);
     return NextResponse.json(
-      { ok: false, error: err?.message || 'Delete failed' },
+      { ok: false, error: errorMessage(err, 'Delete failed') },
       { status: 500 }
     );
   }

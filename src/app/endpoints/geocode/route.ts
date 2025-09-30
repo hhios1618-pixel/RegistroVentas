@@ -5,11 +5,68 @@ const KEY = process.env.OPENCAGE_API_KEY || process.env.NEXT_PUBLIC_OPENCAGE_API
 const NOMINATIM_UA =
   process.env.NOMINATIM_USER_AGENT || 'fenix-store/1.0 (contacto: soporte@fenix.local)';
 
-type GeoOut = { formatted: string; lat: number; lng: number };
+type GeoComponents = {
+  street?: string;
+  neighbourhood?: string;
+  suburb?: string;
+  district?: string;
+  city?: string;
+  state?: string;
+  county?: string;
+  postcode?: string;
+  country?: string;
+};
 
-function pickQuery(body: any): string {
-  if (!body) return '';
-  return (body.query ?? body.text ?? body.address ?? body.q ?? '').toString().trim();
+type GeoOut = {
+  formatted: string;
+  lat: number;
+  lng: number;
+  components?: GeoComponents;
+  confidence?: number;
+  source: 'opencage' | 'nominatim' | 'fallback';
+};
+
+const normalizeComponents = (
+  input: Record<string, unknown> | null | undefined,
+): GeoComponents | undefined => {
+  if (!input) return undefined;
+  const source = input as Record<string, unknown>;
+  const pick = (keys: string[]) => {
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return undefined;
+  };
+
+  const street = pick(['road', 'street', 'pedestrian', 'path', 'residential', 'highway']);
+  const neighbourhood = pick(['neighbourhood', 'neighborhood', 'barrio']);
+  const suburb = pick(['suburb', 'quarter']);
+  const district = pick(['district', 'city_district']);
+  const city = pick(['city', 'town', 'village', 'municipality']);
+  const state = pick(['state', 'state_district', 'region', 'province']);
+  const county = pick(['county', 'departamento']);
+  const postcode = pick(['postcode', 'postal_code']);
+  const country = pick(['country']);
+
+  return {
+    ...(street ? { street } : {}),
+    ...(neighbourhood ? { neighbourhood } : {}),
+    ...(suburb ? { suburb } : {}),
+    ...(district ? { district } : {}),
+    ...(city ? { city } : {}),
+    ...(state ? { state } : {}),
+    ...(county ? { county } : {}),
+    ...(postcode ? { postcode } : {}),
+    ...(country ? { country } : {}),
+  };
+};
+
+function pickQuery(body: unknown): string {
+  if (!body || typeof body !== 'object') return '';
+  const bag = body as Record<string, unknown>;
+  const candidate = bag.query ?? bag.text ?? bag.address ?? bag.q;
+  return candidate ? String(candidate).trim() : '';
 }
 
 function parseLatLngLiteral(input: string): { lat: number; lng: number } | null {
@@ -61,7 +118,14 @@ async function opencageForward(q: string): Promise<GeoOut | null> {
   const data = await res.json();
   if (!res.ok || !data?.results?.[0]) return null;
   const r = data.results[0];
-  return { formatted: r.formatted, lat: r.geometry.lat, lng: r.geometry.lng };
+  return {
+    formatted: r.formatted,
+    lat: r.geometry.lat,
+    lng: r.geometry.lng,
+    components: normalizeComponents(r.components),
+    confidence: r.confidence,
+    source: 'opencage',
+  };
 }
 
 async function opencageReverse(lat: number, lng: number): Promise<GeoOut | null> {
@@ -77,7 +141,14 @@ async function opencageReverse(lat: number, lng: number): Promise<GeoOut | null>
   const data = await res.json();
   if (!res.ok || !data?.results?.[0]) return null;
   const r = data.results[0];
-  return { formatted: r.formatted, lat: r.geometry.lat, lng: r.geometry.lng };
+  return {
+    formatted: r.formatted,
+    lat: r.geometry.lat,
+    lng: r.geometry.lng,
+    components: normalizeComponents(r.components),
+    confidence: r.confidence,
+    source: 'opencage',
+  };
 }
 
 async function nominatimForward(q: string): Promise<GeoOut | null> {
@@ -85,7 +156,7 @@ async function nominatimForward(q: string): Promise<GeoOut | null> {
   url.searchParams.set('q', q);
   url.searchParams.set('format', 'json');
   url.searchParams.set('limit', '1');
-  url.searchParams.set('addressdetails', '0');
+  url.searchParams.set('addressdetails', '1');
 
   const res = await fetch(url.toString(), {
     headers: { 'User-Agent': NOMINATIM_UA },
@@ -94,7 +165,13 @@ async function nominatimForward(q: string): Promise<GeoOut | null> {
   const data = await res.json();
   const r = Array.isArray(data) && data[0];
   if (!res.ok || !r) return null;
-  return { formatted: r.display_name, lat: Number(r.lat), lng: Number(r.lon) };
+  return {
+    formatted: r.display_name,
+    lat: Number(r.lat),
+    lng: Number(r.lon),
+    components: normalizeComponents(r.address),
+    source: 'nominatim',
+  };
 }
 
 async function nominatimReverse(lat: number, lng: number): Promise<GeoOut | null> {
@@ -103,7 +180,7 @@ async function nominatimReverse(lat: number, lng: number): Promise<GeoOut | null
   url.searchParams.set('lon', String(lng));
   url.searchParams.set('format', 'json');
   url.searchParams.set('zoom', '18');
-  url.searchParams.set('addressdetails', '0');
+  url.searchParams.set('addressdetails', '1');
 
   const res = await fetch(url.toString(), {
     headers: { 'User-Agent': NOMINATIM_UA },
@@ -112,7 +189,13 @@ async function nominatimReverse(lat: number, lng: number): Promise<GeoOut | null
   const data = await res.json();
   if (!res.ok || !data) return null;
   const formatted = data.display_name || `${lat}, ${lng}`;
-  return { formatted, lat, lng };
+  return {
+    formatted,
+    lat,
+    lng,
+    components: normalizeComponents(data.address),
+    source: 'nominatim',
+  };
 }
 
 export async function POST(request: Request) {
@@ -129,7 +212,7 @@ export async function POST(request: Request) {
       const rev = (await opencageReverse(fromUrl.lat, fromUrl.lng)) ||
                   (await nominatimReverse(fromUrl.lat, fromUrl.lng));
       if (rev) return NextResponse.json(rev);
-      return NextResponse.json({ formatted: `${fromUrl.lat}, ${fromUrl.lng}`, lat: fromUrl.lat, lng: fromUrl.lng });
+      return NextResponse.json({ formatted: `${fromUrl.lat}, ${fromUrl.lng}`, lat: fromUrl.lat, lng: fromUrl.lng, source: 'fallback' });
     }
 
     // b) ¿"lat,lng" literal?
@@ -138,7 +221,7 @@ export async function POST(request: Request) {
       const rev = (await opencageReverse(literal.lat, literal.lng)) ||
                   (await nominatimReverse(literal.lat, literal.lng));
       if (rev) return NextResponse.json(rev);
-      return NextResponse.json({ formatted: `${literal.lat}, ${literal.lng}`, lat: literal.lat, lng: literal.lng });
+      return NextResponse.json({ formatted: `${literal.lat}, ${literal.lng}`, lat: literal.lat, lng: literal.lng, source: 'fallback' });
     }
 
     // c) texto → forward geocoding
@@ -146,10 +229,11 @@ export async function POST(request: Request) {
     if (fwd) return NextResponse.json(fwd);
 
     return NextResponse.json({ error: 'No se encontraron resultados.' }, { status: 404 });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error /endpoints/geocode:', err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: 'An internal server error occurred.', details: err?.message || String(err) },
+      { error: 'An internal server error occurred.', details: message },
       { status: 500 }
     );
   }

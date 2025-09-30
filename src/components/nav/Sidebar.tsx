@@ -7,14 +7,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home, BarChart3, Users, UserPlus, Package,
   RotateCcw, Calendar, FileText, Settings,
-  LogOut, ChevronRight, Sparkles, Activity
+  LogOut, ChevronRight, Sparkles, Activity, ShieldCheck
 } from 'lucide-react';
 import type { FC, ReactNode } from 'react';
 import { useState, useEffect } from 'react';
 import LogoutButton from '@/components/LogoutButton';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 // Importa roles SOLO desde lib/auth/roles
 import { can, ROUTES, type Role } from '@/lib/auth/roles';
+import { FINANCIAL_CONTROL_IDS } from '@/lib/auth/financial';
 
 type NavLinkItem = {
   href: string;
@@ -47,13 +49,6 @@ type MeResponse = {
 const isActive = (pathname: string, href: string) =>
   pathname === href || pathname.startsWith(href + '/');
 
-const FINANCIAL_CONTROL_IDS = [
-  '32c53c5d-cf04-425c-a50d-4c016df61d7f',
-  'c23ba0b8-d289-4a0e-94f1-fc4b7a7fb88d',
-  '07b93705-f631-4b67-b52a-f7c30bc2ba5b',
-  '28b63f71-babb-4ee0-8c2a-8530007735b7',
-];
-
 const NavLink: FC<{ item: NavLinkItem; active?: boolean; onClick?: () => void }> = 
 ({ item, active, onClick }) => (
   <motion.div
@@ -68,10 +63,10 @@ const NavLink: FC<{ item: NavLinkItem; active?: boolean; onClick?: () => void }>
       className={[
         'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-apple-body font-medium',
         'transition-all duration-300 ease-apple',
-        'hover:bg-white/10 hover:backdrop-blur-sm',
+        'hover:bg-[color:var(--hover-surface)] hover:backdrop-blur-sm dark:hover:bg-white/10',
         active
-          ? 'text-white bg-gradient-to-r from-apple-blue-600/20 to-apple-blue-500/10 border border-apple-blue-500/30 shadow-primary'
-          : 'text-apple-gray-300 hover:text-white',
+          ? 'text-[color:var(--app-foreground)] dark:text-white bg-gradient-to-r from-apple-blue-500/10 to-apple-green-500/10 dark:from-apple-blue-600/20 dark:to-apple-blue-500/10 border border-[color:var(--app-border-strong)] dark:border-apple-blue-500/30 shadow-[0_8px_24px_rgba(36,99,235,0.18)] dark:shadow-primary'
+          : 'text-apple-gray-600 hover:text-[color:var(--app-foreground)] dark:text-apple-gray-300 dark:hover:text-white',
       ].join(' ')}
     >
       {active && (
@@ -150,7 +145,13 @@ export const Sidebar: FC<SidebarProps> = ({
           icon: <Activity size={18} />,
           label: 'Control Financiero',
           shortcut: 'F',
-          requiresPersonId: FINANCIAL_CONTROL_IDS,
+          requiresPersonId: [...FINANCIAL_CONTROL_IDS],
+        },
+        {
+          href: ROUTES.PERMISOS_ADMIN,
+          icon: <ShieldCheck size={18} />,
+          label: 'Autorizaciones',
+          requiresPersonId: [...FINANCIAL_CONTROL_IDS],
         },
       ],
     },
@@ -181,7 +182,7 @@ export const Sidebar: FC<SidebarProps> = ({
       title: 'Administración',
       icon: <Settings size={12} />,
       items: [
-        { href: ROUTES.PLAYBOOK, icon: <FileText size={18} />, label: 'Playbook', shortcut: '5', req: 'view:playbook' },
+        { href: ROUTES.PLAYBOOK, icon: <FileText size={18} />, label: 'Central Operativa', shortcut: '5', req: 'view:playbook' },
         { href: ROUTES.USERS_ADMIN, icon: <Settings size={18} />, label: 'Usuarios', shortcut: '8', req: 'view:users-admin' },
       ],
     },
@@ -194,9 +195,9 @@ export const Sidebar: FC<SidebarProps> = ({
         animate={{ x: isOpen || typeof window === 'undefined' || window.innerWidth >= 1024 ? 0 : -288 }}
         exit={{ x: -288 }}
         transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-        className="fixed left-0 top-0 h-screen w-72 z-50 flex flex-col glass backdrop-blur-apple-lg border-r border-white/10 lg:translate-x-0 lg:static lg:z-30"
+        className="fixed left-0 top-0 h-screen w-72 z-50 flex flex-col glass backdrop-blur-apple-lg border-r border-[color:var(--app-border)] dark:border-white/10 transition-colors duration-500 lg:translate-x-0 lg:static lg:z-30"
       >
-        <div className="p-6 border-b border-white/10">
+        <div className="p-6 border-b border-[color:var(--app-border)] dark:border-white/10 transition-colors duration-500">
           <Link href={ROUTES.DASH} className="group flex items-center gap-3" onClick={onClose}>
             <div className="relative w-10 h-10">
               <div className="absolute inset-0 bg-gradient-to-br from-apple-blue-500/20 to-apple-green-500/20 rounded-xl border border-white/20" />
@@ -212,7 +213,7 @@ export const Sidebar: FC<SidebarProps> = ({
           </Link>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto scrollbar-thin">
+        <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto scrollbar-thin transition-colors duration-500">
           {SECTIONS.map((section) => {
             const items = section.items.filter((item) => {
               if (item.requiresPersonId) {
@@ -248,19 +249,21 @@ export const Sidebar: FC<SidebarProps> = ({
           })}
         </nav>
 
-        <div className="p-4 border-t border-white/10">
+        <div className="p-4 mt-auto space-y-3 border-t border-[color:var(--app-border)] dark:border-white/10">
+          <ThemeToggle />
+
           <motion.div
             whileHover={{ scale: 1.02 }}
-            className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all duration-300 mb-3"
+            className="flex items-center gap-3 p-3 rounded-xl transition-all duration-300 bg-[color:var(--glass-card-bg,rgba(255,255,255,0.7))] hover:bg-[color:var(--hover-surface)] dark:bg-white/5 dark:hover:bg-white/10"
           >
             <div className="relative">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-apple-blue-500/30 to-apple-green-500/30 flex items-center justify-center text-apple-body font-semibold text-white border border-white/20">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-apple-blue-500/30 to-apple-green-500/30 flex items-center justify-center text-apple-body font-semibold text-[color:var(--app-foreground)] dark:text-white border border-[color:var(--app-border)] dark:border-white/20">
                 {userName?.charAt(0)?.toUpperCase() || 'U'}
               </div>
-              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-apple-green-500 rounded-full border-2 border-black" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-apple-green-500 rounded-full border-2 border-[color:var(--app-bg)] dark:border-black" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-apple-body font-medium text-white truncate">{userName || 'Usuario'}</div>
+              <div className="text-apple-body font-medium text-[color:var(--app-foreground)] dark:text-white truncate">{userName || 'Usuario'}</div>
               <div className="text-apple-caption text-apple-gray-500 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-apple-green-400 animate-pulse" />
                 En línea
@@ -268,7 +271,7 @@ export const Sidebar: FC<SidebarProps> = ({
             </div>
           </motion.div>
 
-          <LogoutButton className="w-full btn-ghost justify-start gap-3 text-apple-gray-300 hover:text-white hover:bg-apple-red-600/10 hover:border-apple-red-500/30">
+          <LogoutButton className="w-full btn-ghost justify-start gap-3 text-apple-gray-500 hover:text-[color:var(--app-foreground)] dark:hover:text-white hover:bg-[color:var(--hover-surface)] dark:hover:bg-apple-red-600/10 hover:border-[color:var(--app-border-strong)] dark:hover:border-apple-red-500/30">
             <LogOut size={18} />
             <span>Cerrar sesión</span>
           </LogoutButton>
